@@ -8,10 +8,14 @@
 // API configuration
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const API_KEY = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY;
-const DEFAULT_MODEL = 'openai/gpt-3.5-turbo';
+const DEFAULT_MODEL = 'google/gemini-2.0-flash-thinking-exp:free';
 
 // Available models - these can be expanded as OpenRouter adds more
 export const AVAILABLE_MODELS = [
+  { id: 'google/gemini-2.0-flash-thinking-exp:free', name: 'Gemini 2.0 Flash Thinking', provider: 'Google' },
+  { id: 'anthropic/claude-3.7-sonnet:beta', name: 'Claude 3.7 Sonnet', provider: 'Anthropic' },
+  { id: 'google/gemma-3-27b-it:free', name: 'Gemma 3 27B', provider: 'Google' },
+  { id: 'deepseek/deepseek-r1:free', name: 'DeepSeek R1', provider: 'DeepSeek' },
   { id: 'openai/gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'OpenAI' },
   { id: 'openai/gpt-4', name: 'GPT-4', provider: 'OpenAI' },
   { id: 'anthropic/claude-3-opus', name: 'Claude 3 Opus', provider: 'Anthropic' },

@@ -34,7 +34,7 @@ export function ChatContainer() {
   const [messages, setMessages] = React.useState<ChatMessageType[]>([welcomeMessage])
   const [isLoading, setIsLoading] = React.useState(false)
   const [isInitialized, setIsInitialized] = React.useState(false)
-  const [selectedModel, setSelectedModel] = React.useState("openai/gpt-3.5-turbo")
+  const [selectedModel, setSelectedModel] = React.useState("google/gemini-2.0-flash-thinking-exp:free")
   const [temperature, setTemperature] = React.useState(0.7)
   const [maxTokens, setMaxTokens] = React.useState(1000)
   const chatEndRef = React.useRef<HTMLDivElement>(null)

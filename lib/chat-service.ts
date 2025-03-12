@@ -85,7 +85,7 @@ export const getAvailableModels = (): ModelOption[] => {
 // Process a user message and get AI response
 export const processUserMessage = async (
   userContent: string, 
-  modelId = 'openai/gpt-3.5-turbo',
+  modelId = 'google/gemini-2.0-flash-thinking-exp:free',
   temperature = 0.7,
   maxTokens = 1000
 ): Promise<ChatMessage> => {
