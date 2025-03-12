@@ -1,0 +1,94 @@
+# Firebase MCP Server Integration
+
+This guide covers how to integrate the Firebase MCP Server with AI assistants like Claude, GPT, or others that support the Model Context Protocol.
+
+## What is the Firebase MCP Server?
+
+The Firebase MCP Server is a specialized server that allows AI tools to interact directly with Firebase services, including:
+
+- **Firestore**: Query and modify database collections
+- **Authentication**: Verify user identities and manage sessions
+- **Storage**: Access and retrieve files
+
+## Why Use Firebase MCP Server?
+
+Using the Firebase MCP Server gives AI assistants powerful abilities:
+
+1. **Direct Database Access**: AI can retrieve real user data from your Firestore collections
+2. **User Context**: AI can understand who the user is through authentication
+3. **File Operations**: AI can interact with files stored in Firebase Storage
+
+## Setting Up Firebase MCP Server
+
+### Prerequisites
+
+- Firebase project with Firestore and Authentication enabled
+- Service account with appropriate permissions
+- Node.js environment
+
+### Installation Steps
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/gemini-dk/mcp-server-firebase
+   cd mcp-server-firebase
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   npm run build
+   ```
+
+3. Configure Firebase credentials:
+   - Download your service account key from Firebase Console
+   - Save it as `serviceAccountKey.json` in a secure location
+   - Update `mcp_settings.json` with the correct path
+
+4. Start the server:
+   ```bash
+   node dist/index.js
+   ```
+
+## Using with AI Assistants
+
+Here are some examples of prompts that utilize the Firebase MCP Server:
+
+### Querying Firestore Data
+
+```
+Please use the Firebase MCP Server to check the latest chat messages in the 'messages' collection. Show me the last 5 messages.
+```
+
+### Checking User Information
+
+```
+Use Firebase Authentication via MCP to check if the email 'user@example.com' is registered in our system.
+```
+
+### Accessing Files
+
+```
+Can you use the Firebase Storage MCP to list all PDF files in the 'course-materials' folder?
+```
+
+## Security Considerations
+
+When using the Firebase MCP Server:
+
+- Ensure your service account has only the necessary permissions
+- Configure Firebase security rules appropriately
+- Don't expose sensitive information in your prompts
+- Consider running the MCP server in a separate environment from your main application
+
+## Advanced Configuration
+
+For more detailed configuration options and advanced usage scenarios, refer to the [official documentation](https://github.com/gemini-dk/mcp-server-firebase).
+
+## Integration with our Platform
+
+The AI-Dev Education Platform uses the Firebase MCP Server to enhance our chat functionality with:
+
+- User-specific chat history retrieval
+- Educational content personalization
+- Progress tracking across learning modules 

@@ -129,3 +129,33 @@ To implement the generated documentation from CodeGuide:
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Firebase MCP Server
+
+This project includes a Firebase MCP (Model Context Protocol) server that allows AI tools to interact with our Firebase services.
+
+### Setting Up the MCP Server
+
+1. **Get Firebase Service Account Key:**
+   - Go to [Firebase Console](https://console.firebase.google.com/)
+   - Navigate to Project Settings > Service accounts
+   - Click "Generate new private key"
+   - Save the JSON file as `serviceAccountKey.json` in the `mcp-servers/mcp-server-firebase/config` directory
+
+2. **Start the MCP Server:**
+   ```bash
+   npm run mcp:firebase
+   ```
+
+3. **Connect to the MCP Server:**
+   The server will be available at: http://localhost:8080
+
+### Using the MCP Server with AI Tools
+
+AI tools that support the Model Context Protocol (like Claude, GPT with plugins) can use this server to:
+
+- Query your Firestore database
+- Access user authentication information
+- Retrieve files from Firebase Storage
+
+For more details, see [app/integration/mcp-firebase.mdx](app/integration/mcp-firebase.mdx)

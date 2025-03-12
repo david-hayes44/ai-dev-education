@@ -1,0 +1,11 @@
+{
+  "firebase-mcp": {
+    "command": "node",
+    "args": [
+      "./dist/index.js"
+    ],
+    "env": {
+      "SERVICE_ACCOUNT_KEY_PATH": "./config/serviceAccountKey.json"
+    }
+  }
+} 
