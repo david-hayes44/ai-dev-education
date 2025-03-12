@@ -2,63 +2,85 @@
 
 import * as React from "react"
 import { ChatInput } from "@/components/chat/chat-input"
-import { ChatMessage, MessageType } from "@/components/chat/chat-message"
+import { ChatMessage } from "@/components/chat/chat-message"
+import { getRecentMessages, processUserMessage, ChatMessage as ChatMessageType } from "@/lib/chat-service"
 
-interface Message {
-  id: string
-  type: MessageType
-  content: string
+// Sample initial welcome message
+const welcomeMessage: ChatMessageType = {
+  id: "welcome",
+  type: "assistant",
+  content: "👋 Hello! I'm your AI assistant for AI-Dev Education. How can I help you learn about AI-assisted development and MCP today?",
+  timestamp: new Date()
 }
 
-// Sample initial messages for demonstration
-const initialMessages: Message[] = [
-  {
-    id: "1",
-    type: "assistant",
-    content: "👋 Hello! I'm your AI assistant for AI-Dev Education. How can I help you learn about AI-assisted development and MCP today?"
-  }
-]
-
 export function ChatContainer() {
-  const [messages, setMessages] = React.useState<Message[]>(initialMessages)
+  const [messages, setMessages] = React.useState<ChatMessageType[]>([welcomeMessage])
   const [isLoading, setIsLoading] = React.useState(false)
+  const [isInitialized, setIsInitialized] = React.useState(false)
   const chatEndRef = React.useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
 
+  // Load messages from Firestore on component mount
   React.useEffect(() => {
-    scrollToBottom()
-  }, [messages])
-
-  const handleSubmit = async (content: string) => {
-    // Add user message
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      type: "user",
-      content
+    const loadMessages = async () => {
+      try {
+        const recentMessages = await getRecentMessages()
+        
+        // If we have messages from Firestore, use those instead of the welcome message
+        if (recentMessages.length > 0) {
+          setMessages(recentMessages)
+        }
+        
+        setIsInitialized(true)
+      } catch (error) {
+        console.error("Error loading messages:", error)
+        setIsInitialized(true)
+      }
     }
     
-    setMessages(prev => [...prev, userMessage])
+    loadMessages()
+  }, [])
+
+  React.useEffect(() => {
+    if (isInitialized) {
+      scrollToBottom()
+    }
+  }, [messages, isInitialized])
+
+  const handleSubmit = async (content: string) => {
+    // Add user message to UI immediately for better UX
+    const tempUserMessage: ChatMessageType = {
+      id: Date.now().toString(),
+      type: "user",
+      content,
+      timestamp: new Date()
+    }
+    
+    setMessages(prev => [...prev, tempUserMessage])
     setIsLoading(true)
     
     try {
-      // Simulating AI response with a timeout
-      setTimeout(() => {
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          type: "assistant",
-          content: "This is a placeholder response. In the future, this will be integrated with the OpenRouter API to provide actual AI responses."
-        }
-        
-        setMessages(prev => [...prev, assistantMessage])
-        setIsLoading(false)
-      }, 1000)
+      // Process the message with our chat service
+      const assistantMessage = await processUserMessage(content)
       
-      // Here we would integrate with OpenRouter API in the future
+      // Update messages with the response
+      setMessages(prev => [...prev, assistantMessage])
     } catch (error) {
       console.error("Error sending message:", error)
+      
+      // Add error message
+      const errorMessage: ChatMessageType = {
+        id: (Date.now() + 1).toString(),
+        type: "assistant",
+        content: "I'm sorry, I encountered an error processing your request. Please try again later.",
+        timestamp: new Date()
+      }
+      
+      setMessages(prev => [...prev, errorMessage])
+    } finally {
       setIsLoading(false)
     }
   }
@@ -80,6 +102,11 @@ export function ChatContainer() {
               content={message.content}
             />
           ))}
+          {isLoading && (
+            <div className="p-4 text-sm text-muted-foreground italic">
+              AI assistant is thinking...
+            </div>
+          )}
           <div ref={chatEndRef} />
         </div>
       </div>
