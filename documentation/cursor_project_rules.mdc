@@ -1,0 +1,112 @@
+---
+description: Apply these rules when creating the project
+globs:
+alwaysApply: true
+---
+## Project Overview
+
+* **Type:** cursor_project_rules
+* **Description:** The AI-Dev Education Platform is a modern, interactive learning environment built with Next.js. It combines structured educational content with an AI-driven chat assistant to educate senior developers on AI-assisted development and the Model Context Protocol (MCP). The platform employs modular components, static content pages, and future-ready API integrations to provide a comprehensive educational experience.
+* **Primary Goal:** Educate developers on integrating AI into modern development workflows by demonstrating AI-assisted techniques and MCP principles, while laying the groundwork for future dynamic, API-driven chat enhancements.
+
+---
+
+## Project Structure
+
+### Framework-Specific Routing
+
+* **Directory Rules:**
+
+    * **Next.js 14:** Enforce the App Router by using the `app/[route]/page.tsx` convention for all page components.
+    * Example 1: "Next.js 14 (App Router)" → `app/[route]/page.tsx` conventions
+    * Example 2: "Next.js (Pages Router)" → Not applicable; the project mandates the App Router structure.
+    * Example 3: "React Router 6" → For other projects, follow `src/routes/` with `createBrowserRouter`.
+
+### Core Directories
+
+* **Versioned Structure:**
+
+    * **app:** Contains pages, layouts, and API routes tailored for Next.js 14 with App Router. 
+    * Example 1: `app/api` → Hosts Next.js 14 API routes implemented with Route Handlers.
+    * Example 2: `src/views` → For frameworks like Vue 3, corresponding directories would use composition API components.
+
+### Key Files
+
+* **Stack-Versioned Patterns:**
+
+    * **app/dashboard/layout.tsx:** Defines the root layout for Next.js 14 projects using the App Router.
+    * **pages/_app.js:** Not applicable in this project due to the exclusive use of the App Router.
+
+---
+
+## Tech Stack Rules
+
+* **Version Enforcement:**
+
+    * **next@14:** Must utilize the App Router structure along with modern server components.
+    * **tailwindcss (latest):** Apply custom theming following the specified color schemes (charcoal, blue, purple, orange).
+    * **typescript:** All code must be written with TypeScript for enhanced type safety and maintainability.
+    * **openrouter_api:** Prepare for API integration using a dedicated library file that validates API key presence and supports future enhancements.
+    * **react_markdown:** Use to safely render markdown content, especially within chat messages.
+    * **lucide_react:** Implement for consistent iconography across the UI, ensuring responsive and accessible icons.
+
+---
+
+## PRD Compliance
+
+* **Non-Negotiable:**
+
+    * "The AI-Dev Education Platform is a modern, interactive learning environment built with Next.js that aims to educate developers on AI-assisted development and the Model Context Protocol (MCP)." – The architecture must support both comprehensive educational content and a modular AI chat assistant built with Next.js 14 using the App Router.
+
+---
+
+## App Flow Integration
+
+* **Stack-Aligned Flow:**
+
+    * Example: Next.js 14 Auth Flow → Although not currently implementing authentication, the structural guideline is to use differentiated route folders (e.g., `app/auth/login/page.tsx`) for potential future implementation.
+    * Floating Chat Widget: Implemented as `components/chat/FloatingChat.tsx` within the App Router, featuring a toggleable state for immediate user access.
+
+---
+
+## Best Practices
+
+* **next.js**
+    * Use the App Router and server components for optimal performance and modern server-side rendering capabilities.
+    * Leverage automatic code splitting and SSR to reduce load times and improve user experience.
+    * Ensure strict separation of client and server components to maintain modularity.
+
+* **tailwindcss**
+    * Follow responsive design practices and employ custom theming to adhere to the project’s color schemes.
+    * Maintain consistent use of utility classes to ensure a modular and maintainable style structure.
+    * Utilize configuration files (e.g., tailwind.config.js) to enforce design tokens and color standards.
+
+* **typescript**
+    * Enforce strong type safety and utilize strict mode to capture potential errors at compile time.
+    * Define clear interfaces and types for React components and API responses.
+    * Adopt consistent naming conventions, and configure project-wide linting to maintain code quality.
+
+* **openrouter_api**
+    * Prepare a dedicated library file (e.g., `lib/openrouter.ts`) to manage API integration and future enhancements.
+    * Check for the presence of the API key and handle errors gracefully if it is missing or invalid.
+    * Allow room for expanding functionality with robust error handling and integration support for real-time interactions.
+
+* **react_markdown**
+    * Use react_markdown to render markdown content within the chat components efficiently.
+    * Sanitize input content to prevent security vulnerabilities such as XSS attacks.
+    * Maintain consistency in styling markdown output to match the overall UI design.
+
+* **lucide_react**
+    * Use for consistent and responsive iconography across the application.
+    * Ensure accessibility by providing proper ARIA attributes and alt text where necessary.
+    * Integrate with dark/light mode theming for a unified visual experience.
+
+---
+
+## Rules
+
+* Derive folder/file patterns directly from the prescribed tech stack versions and project guidelines.
+* If using Next.js 14 with the App Router, enforce the `app/` directory structure with nested route folders, completely avoiding the legacy `pages/` folder.
+* For projects using the Pages Router (if applicable), use a `pages/*.tsx` flat structure.
+* Mirror this routing and structuring logic for other frameworks such as React Router or SvelteKit.
+* Never mix version patterns (e.g., avoid using `pages/` when the App Router is mandated).

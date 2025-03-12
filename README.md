@@ -1,120 +1,90 @@
 [![CodeGuide](/codeguide-backdrop.svg)](https://codeguide.dev)
 
-# CodeGuide Next.js Firebase Starter
+# AI-Dev Education Platform
 
-A modern web application starter template built with Next.js 14, featuring authentication and database integration.
-
-## Tech Stack
-
-- **Framework:** [Next.js 14](https://nextjs.org/) (App Router)
-- **Authentication:** [Clerk](https://clerk.com/)
-- **Database:** [Firebase](https://firebase.google.com/)
-- **Styling:** [Tailwind CSS](https://tailwindcss.com/)
-- **UI Components:** [shadcn/ui](https://ui.shadcn.com/)
-
-## Prerequisites
-
-Before you begin, ensure you have the following:
-
-- Node.js 18+ installed
-- A [Clerk](https://clerk.com/) account for authentication
-- A [Firebase](https://firebase.google.com/) project for database and backend services
-- Generated project documents from [CodeGuide](https://codeguide.dev/) for best development experience
-
-## Getting Started
-
-1. **Clone the repository**
-
-   ```bash
-   git clone <repository-url>
-   cd codeguide-starter-pro
-   ```
-
-2. **Install dependencies**
-
-   ```bash
-   npm install
-   # or
-   yarn install
-   # or
-   pnpm install
-   ```
-
-3. **Environment Variables Setup**
-
-   - Copy the `.env.example` file to `.env`:
-     ```bash
-     cp .env.example .env
-     ```
-   - Fill in the environment variables in `.env` (see Configuration section below)
-
-4. **Start the development server**
-
-   ```bash
-   npm run dev
-   # or
-   yarn dev
-   # or
-   pnpm dev
-   ```
-
-5. **Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.**
-
-## Configuration
-
-### Clerk Setup
-
-1. Go to [Clerk Dashboard](https://dashboard.clerk.com/)
-2. Create a new application
-3. Go to API Keys
-4. Copy the `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY`
-
-### Firebase Setup
-
-1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Create a new project
-3. Add a web app to your project
-4. Copy the Firebase configuration object
-5. Set up the necessary Firebase services (Authentication, Firestore, etc.)
-
-## Environment Variables
-
-Create a `.env` file in the root directory with the following variables:
-
-```env
-# Clerk Authentication
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_publishable_key
-CLERK_SECRET_KEY=your_secret_key
-
-# Firebase
-NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_firebase_auth_domain
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_firebase_project_id
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_firebase_storage_bucket
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_firebase_messaging_sender_id
-NEXT_PUBLIC_FIREBASE_APP_ID=your_firebase_app_id
-```
+A modern, interactive learning environment built with Next.js that aims to educate developers on AI-assisted development and the Model Context Protocol (MCP).
 
 ## Features
 
-- 🔐 Authentication with Clerk
-- 📦 Firebase Database
-- 🎨 Modern UI with Tailwind CSS
-- 🚀 App Router Ready
-- 🔄 Real-time Updates
-- 📱 Responsive Design
+- **Educational Content**: Structured learning paths on AI-assisted development and MCP
+- **Interactive Chat**: AI assistant to help answer questions about AI-Dev and MCP concepts
+- **Modern UI**: Responsive design with dark/light mode support
+- **Firebase Integration**: Ready for future dynamic content and chat persistence
+
+## Tech Stack
+
+- **Frontend**: Next.js 14+ with App Router, React, TypeScript
+- **Styling**: Tailwind CSS with custom theming
+- **Backend**: Firebase (Firestore)
+- **AI Integration**: OpenRouter API (planned)
+- **Content Rendering**: react-markdown for formatted content
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+ and npm
+- Firebase account (for future integration)
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/ai-dev-education-platform.git
+   cd ai-dev-education-platform
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Create a `.env.local` file based on `.env.example`:
+   ```bash
+   cp .env.example .env.local
+   ```
+
+4. Update the environment variables in `.env.local` with your Firebase and OpenRouter credentials.
+
+5. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+6. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Project Structure
 
-```
-codeguide-starter/
-├── app/                # Next.js app router pages
-├── components/         # React components
-├── utils/             # Utility functions
-├── public/            # Static assets
-├── styles/            # Global styles
-└── documentation/     # Generated documentation from CodeGuide
-```
+- `app/`: Next.js App Router pages and layouts
+- `components/`: Reusable React components
+  - `chat/`: Chat-related components
+  - `layout/`: Layout components (header, footer, etc.)
+  - `ui/`: UI components (buttons, inputs, etc.)
+- `hooks/`: Custom React hooks
+- `lib/`: Utility functions and API clients
+- `public/`: Static assets
+- `styles/`: Global styles
+
+## Educational Content
+
+The platform covers the following topics:
+
+- **AI-Dev Concepts**: Introduction to AI-assisted development
+- **MCP Guides**: Understanding the Model Context Protocol
+- **Integration**: Integrating AI tools into development workflows
+- **Building MCP Servers**: Creating servers that implement MCP
+- **Best Practices**: Guidelines for effective AI-assisted development
+
+## Future Enhancements
+
+- Full OpenRouter API integration for dynamic chat responses
+- User authentication and personalized learning paths
+- Advanced state management for persistent chat history
+- Interactive code playgrounds for hands-on learning
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Documentation Setup
 

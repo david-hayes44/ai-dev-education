@@ -1,6 +1,9 @@
-import { FirebaseOptions, initializeApp } from 'firebase/app'
+// Import the functions you need from the SDKs you need
+import { initializeApp, getApps } from "firebase/app"
+import { getFirestore } from "firebase/firestore"
 
-// TODO: Replace the following with your app's Firebase project configuration
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -8,8 +11,16 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-} satisfies FirebaseOptions
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+}
 
-const app = initializeApp(firebaseConfig)
+// Initialize Firebase
+let firebaseApp
+if (!getApps().length) {
+  firebaseApp = initializeApp(firebaseConfig)
+}
 
-export default app
+// Initialize Firestore
+const db = getFirestore(firebaseApp)
+
+export { db }

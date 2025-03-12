@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import localFont from 'next/font/local'
 import './globals.css'
 import TanstackClientProvider from '@/components/providers/tanstack-client-provider'
+import { ThemeProvider } from '@/components/providers/theme-provider'
 
 const geistSans = localFont({
   src: './fonts/GeistVF.woff',
@@ -15,8 +16,8 @@ const geistMono = localFont({
 })
 
 export const metadata: Metadata = {
-  title: 'CodeGuide Starter Pro',
-  description: 'Starter kit from codeguide.dev',
+  title: 'AI-Dev Education Platform',
+  description: 'Learn AI-assisted development and Model Context Protocol (MCP)',
 }
 
 export default function RootLayout({
@@ -25,9 +26,11 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <TanstackClientProvider>{children}</TanstackClientProvider>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <TanstackClientProvider>{children}</TanstackClientProvider>
+        </ThemeProvider>
       </body>
     </html>
   )
