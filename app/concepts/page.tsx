@@ -23,7 +23,7 @@ export default function ConceptsPage() {
             </p>
             <p className="mb-4 text-gray-600 dark:text-gray-400">
               At its core, AI-Dev is about creating a collaborative workflow between human developers 
-              and AI systems. The goal is not to replace human ingenuity but to augment it with AI's 
+              and AI systems. The goal is not to replace human ingenuity but to augment it with AI&apos;s 
               capabilities for pattern recognition, knowledge retrieval, and code generation.
             </p>
           </section>

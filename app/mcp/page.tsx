@@ -34,7 +34,7 @@ export default function McpPage() {
             <ol>
               <li>Context managers that maintain state across interactions</li>
               <li>Protocol handlers that format requests and responses</li>
-              <li>Intent classifiers that help the AI understand the human's goals</li>
+              <li>Intent classifiers that help the AI understand the human&apos;s goals</li>
               <li>Context augmentation systems that enrich the conversation with relevant information</li>
             </ol>
             
