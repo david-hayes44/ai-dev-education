@@ -86,6 +86,23 @@ The platform covers the following topics:
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
+## Git Workflow
+
+This project follows a structured Git workflow:
+
+- **Main Branch**: Production-ready code
+- **Develop Branch**: Integration branch for feature testing
+- **Feature Branches**: Individual features branched from develop
+
+### Branch Naming Convention
+
+- Feature branches: `feature/feature-name`
+- Bug fixes: `bugfix/issue-description`
+- Documentation: `docs/documentation-update`
+- Hotfixes: `hotfix/critical-fix`
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed workflow instructions.
+
 ## Documentation Setup
 
 To implement the generated documentation from CodeGuide:
