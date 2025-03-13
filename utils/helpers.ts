@@ -1,6 +1,20 @@
-import type { Tables } from '@/types/database.types';
+// Remove dependency on external types
+// import type { Tables } from '@/types/database.types';
 
-type Price = Tables<'prices'>;
+// Define a simple price type directly
+type Price = {
+  id: string;
+  product_id?: string;
+  active?: boolean;
+  description?: string;
+  unit_amount?: number;
+  currency?: string;
+  type?: string;
+  interval?: string;
+  interval_count?: number;
+  trial_period_days?: number | null;
+  metadata?: Record<string, string>;
+};
 
 export const getURL = (path: string = '') => {
   // Check if NEXT_PUBLIC_SITE_URL is set and non-empty. Set this to your site URL in production env.
@@ -44,7 +58,7 @@ export const postData = async ({
 };
 
 export const toDateTime = (secs: number) => {
-  var t = new Date(+0); // Unix epoch start.
+  const t = new Date(+0); // Unix epoch start.
   t.setSeconds(secs);
   return t;
 };
