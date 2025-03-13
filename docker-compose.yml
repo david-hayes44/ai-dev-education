@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+  puppeteer-mcp:
+    image: mcp/puppeteer
+    init: true
+    environment:
+      - DOCKER_CONTAINER=true
+    ports:
+      - "5004:5004"
+    volumes:
+      - ./mcp-servers/configs/puppeteer-config.json:/app/config.json 

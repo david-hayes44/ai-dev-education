@@ -6,6 +6,8 @@
     "width": 1280,
     "height": 800
   },
+  "headless": false,
+  "timeout": 30000,
   "closePages": false,
   "enableCdp": true,
   "maxRetries": 3,

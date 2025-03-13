@@ -133,6 +133,35 @@ npm run mcp:puppeteer
 
 This will start the Puppeteer MCP server on port 5004 (configurable in `mcp-servers/configs/puppeteer-config.json`).
 
+Alternatively, you can install and run the Puppeteer MCP server directly:
+
+```bash
+# Using npx (recommended)
+npx -y @modelcontextprotocol/server-puppeteer
+
+# Or install globally
+npm install -g @modelcontextprotocol/server-puppeteer
+```
+
+#### Docker Setup
+
+You can also run the Puppeteer MCP server using Docker:
+
+1. Build the Docker image (first time only):
+   ```bash
+   docker build -t mcp/puppeteer -f https://raw.githubusercontent.com/modelcontextprotocol/servers/main/src/puppeteer/Dockerfile .
+   ```
+
+2. Run the Docker container:
+   ```bash
+   docker run -i --rm --init -e DOCKER_CONTAINER=true -p 5004:5004 mcp/puppeteer
+   ```
+
+Or use the provided docker-compose.yml file:
+```bash
+docker-compose up puppeteer-mcp
+```
+
 Available browser automation features:
 - Navigate to URLs
 - Click elements

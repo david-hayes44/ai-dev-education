@@ -41,81 +41,92 @@ export interface BrowserResponse {
  * Navigate to a specific URL
  * @param url The URL to navigate to
  */
-export async function navigateTo(url: string): Promise<BrowserResponse> {
-  return sendBrowserRequest({
-    action: BrowserAction.NAVIGATE,
-    params: { url }
-  });
+export async function navigateTo(url: string) {
+  return callMcpTool('puppeteer_navigate', { url });
 }
 
 /**
  * Click an element using a selector
  * @param selector The CSS selector to find the element
  */
-export async function clickElement(selector: string): Promise<BrowserResponse> {
-  return sendBrowserRequest({
-    action: BrowserAction.CLICK,
-    params: { selector }
-  });
+export async function clickElement(selector: string) {
+  return callMcpTool('puppeteer_click', { selector });
 }
 
 /**
- * Type text into an input element
+ * Fill out an input element with text
  * @param selector The CSS selector to find the input element
- * @param text The text to type
+ * @param value The text to type
  */
-export async function typeText(selector: string, text: string): Promise<BrowserResponse> {
-  return sendBrowserRequest({
-    action: BrowserAction.TYPE,
-    params: { selector, text }
-  });
+export async function typeText(selector: string, value: string) {
+  return callMcpTool('puppeteer_fill', { selector, value });
 }
 
 /**
  * Extract text from an element
+ * This uses JavaScript evaluation to get the text content
  * @param selector The CSS selector to find the element
  */
-export async function extractText(selector: string): Promise<BrowserResponse> {
-  return sendBrowserRequest({
-    action: BrowserAction.EXTRACT_TEXT,
-    params: { selector }
+export async function extractText(selector: string) {
+  return callMcpTool('puppeteer_evaluate', { 
+    script: `return document.querySelector("${selector}")?.textContent || ""` 
   });
 }
 
 /**
- * Take a screenshot of the current page
- * @param path Optional path to save the screenshot (defaults to timestamp)
+ * Take a screenshot of the current page or element
+ * @param name Name to identify the screenshot
+ * @param selector Optional selector for element to screenshot
+ * @param width Optional width for the screenshot
+ * @param height Optional height for the screenshot
  */
-export async function takeScreenshot(path?: string): Promise<BrowserResponse> {
-  return sendBrowserRequest({
-    action: BrowserAction.SCREENSHOT,
-    params: { path: path || `screenshot_${Date.now()}.png` }
+export async function takeScreenshot(name: string = `screenshot_${Date.now()}`, selector?: string, width?: number, height?: number) {
+  return callMcpTool('puppeteer_screenshot', { 
+    name,
+    selector,
+    width: width || 800,
+    height: height || 600
   });
 }
 
 /**
  * Evaluate JavaScript code in the context of the page
- * @param code The JavaScript code to evaluate
+ * @param script The JavaScript code to evaluate
  */
-export async function evaluateCode(code: string): Promise<BrowserResponse> {
-  return sendBrowserRequest({
-    action: BrowserAction.EVALUATE,
-    params: { code }
-  });
+export async function evaluateCode(script: string) {
+  return callMcpTool('puppeteer_evaluate', { script });
 }
 
 /**
- * Send a request to the Puppeteer MCP server
- * @param request The browser automation request
+ * Hover over an element
+ * @param selector The CSS selector for the element to hover
  */
-async function sendBrowserRequest(request: BrowserRequest): Promise<BrowserResponse> {
+export async function hoverElement(selector: string) {
+  return callMcpTool('puppeteer_hover', { selector });
+}
+
+/**
+ * Select an option from a dropdown
+ * @param selector The CSS selector for the select element
+ * @param value The value to select
+ */
+export async function selectOption(selector: string, value: string) {
+  return callMcpTool('puppeteer_select', { selector, value });
+}
+
+/**
+ * Call an MCP tool on the Puppeteer server
+ * @param tool The name of the tool to call
+ * @param args The arguments for the tool
+ */
+async function callMcpTool(tool: string, args: Record<string, unknown>) {
   try {
-    const response = await fetch(`${PUPPETEER_MCP_URL}/browser`, {
+    const response = await fetch(`${PUPPETEER_MCP_URL}/mcp/tools/${tool}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(request),
+      body: JSON.stringify({ args }),
     });
 
     if (!response.ok) {
@@ -125,7 +136,7 @@ async function sendBrowserRequest(request: BrowserRequest): Promise<BrowserRespo
 
     return await response.json();
   } catch (error) {
-    console.error('Error sending browser request:', error);
+    console.error(`Error calling ${tool}:`, error);
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error),

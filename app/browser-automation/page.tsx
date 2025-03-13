@@ -7,14 +7,24 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { navigateTo, clickElement, typeText, extractText, takeScreenshot, evaluateCode } from "@/lib/puppeteer-mcp"
+import { 
+  navigateTo, 
+  clickElement, 
+  typeText, 
+  extractText, 
+  takeScreenshot, 
+  evaluateCode,
+  hoverElement,
+  selectOption
+} from "@/lib/puppeteer-mcp"
 
 export default function BrowserAutomationPage() {
   const [url, setUrl] = useState("https://example.com")
   const [selector, setSelector] = useState("")
-  const [text, setText] = useState("")
+  const [value, setValue] = useState("")
+  const [screenshotName, setScreenshotName] = useState(`screenshot_${Date.now()}`)
   const [jsCode, setJsCode] = useState("return document.title;")
-  const [result, setResult] = useState<{ success: boolean; data?: unknown; error?: string }>()
+  const [result, setResult] = useState<{success?: boolean; data?: unknown; error?: string}>()
   const [isLoading, setIsLoading] = useState(false)
 
   const handleNavigate = async () => {
@@ -40,11 +50,35 @@ export default function BrowserAutomationPage() {
       setIsLoading(false)
     }
   }
+  
+  const handleHover = async () => {
+    setIsLoading(true)
+    try {
+      const response = await hoverElement(selector)
+      setResult(response)
+    } catch (error) {
+      setResult({ success: false, error: String(error) })
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const handleType = async () => {
     setIsLoading(true)
     try {
-      const response = await typeText(selector, text)
+      const response = await typeText(selector, value)
+      setResult(response)
+    } catch (error) {
+      setResult({ success: false, error: String(error) })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+  
+  const handleSelect = async () => {
+    setIsLoading(true)
+    try {
+      const response = await selectOption(selector, value)
       setResult(response)
     } catch (error) {
       setResult({ success: false, error: String(error) })
@@ -68,7 +102,7 @@ export default function BrowserAutomationPage() {
   const handleScreenshot = async () => {
     setIsLoading(true)
     try {
-      const response = await takeScreenshot()
+      const response = await takeScreenshot(screenshotName, selector)
       setResult(response)
     } catch (error) {
       setResult({ success: false, error: String(error) })
@@ -137,22 +171,28 @@ export default function BrowserAutomationPage() {
                 </div>
                 
                 <div className="grid gap-2">
-                  <Label htmlFor="text">Text to Type</Label>
+                  <Label htmlFor="value">Value</Label>
                   <Input
-                    id="text"
+                    id="value"
                     type="text"
-                    value={text}
-                    onChange={(e) => setText(e.target.value)}
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
                     placeholder="Hello, world!"
                   />
                 </div>
                 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button onClick={handleClick} disabled={isLoading} variant="outline">
                     Click Element
                   </Button>
+                  <Button onClick={handleHover} disabled={isLoading} variant="outline">
+                    Hover Element
+                  </Button>
                   <Button onClick={handleType} disabled={isLoading}>
-                    Type Text
+                    Fill Text
+                  </Button>
+                  <Button onClick={handleSelect} disabled={isLoading}>
+                    Select Option
                   </Button>
                 </div>
               </TabsContent>
@@ -166,6 +206,17 @@ export default function BrowserAutomationPage() {
                     value={selector}
                     onChange={(e) => setSelector(e.target.value)}
                     placeholder=".content"
+                  />
+                </div>
+                
+                <div className="grid gap-2">
+                  <Label htmlFor="screenshot-name">Screenshot Name</Label>
+                  <Input
+                    id="screenshot-name"
+                    type="text"
+                    value={screenshotName}
+                    onChange={(e) => setScreenshotName(e.target.value)}
+                    placeholder="my-screenshot"
                   />
                 </div>
                 
