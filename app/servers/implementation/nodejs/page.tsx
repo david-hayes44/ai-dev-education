@@ -1,17 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { MainLayout } from "@/components/layout/main-layout"
-import { FloatingChat } from "@/components/chat/floating-chat"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Code, Server, Check, Info, AlertTriangle } from "lucide-react"
+import { ArrowRight, Code,Check,AlertTriangle } from "lucide-react"
 
 export default function NodejsImplementationPage() {
   return (
     <>
-      <MainLayout>
-        <div className="container py-12">
+      <div className="container mx-auto px-6 sm:px-8 py-12">
           <div className="mb-8">
             <nav className="mb-4 flex items-center text-sm text-muted-foreground">
               <Link href="/" className="hover:text-foreground">
@@ -109,7 +105,7 @@ module.exports = {
 
             <pre className="bg-muted p-4 rounded-lg overflow-auto text-sm">
               <code>{`// server.js
-const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
+const { } = require('@modelcontextprotocol/sdk/server/index.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const { 
   CallToolRequestSchema, 
@@ -152,7 +148,7 @@ function startServer() {
   log('info', 'MCP Server started and listening...');
 }
 
-module.exports = { server, startServer, log };`}</code>
+module.exports = { server, startlog };`}</code>
             </pre>
 
             <h2 className="text-3xl font-bold mt-12 mb-6">Step 4: Implement Tool Handlers</h2>
@@ -349,7 +345,7 @@ module.exports = new ContextManager();`}</code>
 
             <pre className="bg-muted p-4 rounded-lg overflow-auto text-sm">
               <code>{`// index.js
-const { server, startServer, log } = require('./server');
+const { server, startlog } = require('./server');
 const tools = require('./tools');
 const contextManager = require('./context');
 
@@ -455,8 +451,6 @@ startServer();`}</code>
             </div>
           </div>
         </div>
-      </MainLayout>
-      <FloatingChat />
-    </>
+      </>
   )
 } 

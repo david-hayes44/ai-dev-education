@@ -1,16 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { MainLayout } from "@/components/layout/main-layout"
-import { FloatingChat } from "@/components/chat/floating-chat"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Code, Server, Database, Shield, Cloud } from "lucide-react"
+import { ArrowRight, Code, Server,Cloud } from "lucide-react"
 
 export default function ImplementationPage() {
   return (
     <>
-      <MainLayout>
-        <div className="container py-12">
+      <div className="container mx-auto px-6 sm:px-8 py-12">
           <div className="mb-8">
             <nav className="mb-4 flex items-center text-sm text-muted-foreground">
               <Link href="/" className="hover:text-foreground">
@@ -210,8 +207,6 @@ export default function ImplementationPage() {
             </div>
           </div>
         </div>
-      </MainLayout>
-      <FloatingChat />
-    </>
+      </>
   )
 } 

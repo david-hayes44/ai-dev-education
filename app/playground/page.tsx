@@ -2,9 +2,8 @@
 
 import Link from "next/link"
 import { useState } from "react"
-import { Play, Download, Copy, Share, RefreshCw, Code, Settings, Save } from "lucide-react"
+import { Play,Copy, Share, RefreshCw, Code,Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"

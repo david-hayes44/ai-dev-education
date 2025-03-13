@@ -11,12 +11,7 @@ import {
   ChevronDown,
   Home,
   BookOpen,
-  Code,
-  Puzzle,
-  Server,
-  CheckSquare,
-  MessageCircle,
-  Wrench,
+  Code,CheckSquare,Wrench,
   BookMarked,
   FileText,
   Mail
@@ -112,7 +107,7 @@ export function Header() {
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
   
-  // Handle dropdown visibility
+  // Handle dropdown visibility - support both click and hover
   const toggleDropdown = (path: string) => {
     if (activeDropdown === path) {
       setActiveDropdown(null)
@@ -123,8 +118,12 @@ export function Header() {
   
   // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = () => {
-      setActiveDropdown(null)
+    const handleClickOutside = (e: MouseEvent) => {
+      // Check if click is outside any nav item
+      const isOutside = !(e.target as Element).closest('.nav-item-container');
+      if (isOutside) {
+        setActiveDropdown(null);
+      }
     }
     
     document.addEventListener("click", handleClickOutside)
@@ -159,8 +158,9 @@ export function Header() {
             {navItems.map((item) => (
               <div 
                 key={item.path} 
-                className="relative" 
-                onClick={(e) => item.dropdown && e.stopPropagation()}
+                className="relative nav-item-container" 
+                onMouseEnter={() => item.dropdown && setActiveDropdown(item.path)}
+                onMouseLeave={() => setActiveDropdown(null)}
               >
                 {item.dropdown ? (
                   <div className="relative">
@@ -187,7 +187,7 @@ export function Header() {
                           initial={{ opacity: 0, y: -10 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -10 }}
-                          transition={{ duration: 0.2 }}
+                          transition={{ duration: 0.15 }}
                           className="absolute left-0 mt-1 w-48 rounded-md shadow-lg bg-background border border-border z-10"
                         >
                           <div className="py-1 rounded-md bg-popover">

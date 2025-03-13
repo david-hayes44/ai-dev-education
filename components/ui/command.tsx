@@ -15,7 +15,7 @@ const SafeCommand = React.forwardRef<
     controlledValue?: string
     onControlledValueChange?: (value: string) => void
   }
->(({ className, children, loop = true, controlledValue, onControlledValueChange, ...props }, ref) => {
+>(({ className, children, controlledValue, onControlledValueChange, ...props }, ref) => {
   const [mounted, setMounted] = React.useState(false)
   
   // Internal controlled state if not provided externally
@@ -61,7 +61,7 @@ const SafeCommand = React.forwardRef<
     value: value || "",
     onValueChange: setValue,
     filter: robustFilter,
-    loop: true, // Always enable loop to avoid edge cases
+    loop: true // Always enable loop to avoid edge cases
   }
   
   return (
@@ -219,8 +219,7 @@ const CommandItem = React.forwardRef<
 CommandItem.displayName = CommandPrimitive.Item.displayName
 
 const CommandShortcut = ({
-  className,
-  ...props
+  className, ...props
 }: React.HTMLAttributes<HTMLSpanElement>) => {
   return (
     <span

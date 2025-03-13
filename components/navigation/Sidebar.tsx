@@ -13,20 +13,9 @@ import {
   CheckSquare,
   Menu,
   X,
-  ChevronRight,
-  Globe,
-  MessageSquare,
-  Puzzle,
-  PanelLeft,
-  PanelRight,
-  Layers,
-  Wrench,
-  Lightbulb,
-  BookMarked,
+  ChevronRight,MessageSquare,Wrench,BookMarked,
   Mail,
-  FileText,
-  LayoutGrid
-} from "lucide-react";
+  FileText} from "lucide-react";
 
 type NavItem = {
   label: string;
@@ -317,32 +306,8 @@ export function Sidebar({ className }: SidebarProps) {
           }
         </button>
 
-        <div className="flex h-14 items-center justify-center py-4 relative">
-          <motion.div
-            initial={isCollapsed ? "collapsed" : "expanded"}
-            animate={isExpanded ? "expanded" : "collapsed"}
-            variants={{
-              expanded: { opacity: 1, x: 0 },
-              collapsed: { opacity: 0, x: -20 },
-            }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden text-xl font-bold gradient-text"
-          >
-            The AI Dev Odyssey
-          </motion.div>
-          <motion.div
-            initial={isCollapsed ? "collapsed" : "expanded"}
-            animate={isExpanded ? "collapsed" : "expanded"}
-            variants={{
-              expanded: { opacity: 0 },
-              collapsed: { opacity: 1 },
-            }}
-            transition={{ duration: 0.2 }}
-            className="absolute left-0 right-0 mx-auto w-full text-center text-xl font-bold gradient-text"
-          >
-            AI
-          </motion.div>
-        </div>
+        {/* Remove the text elements entirely and keep just a spacer */}
+        <div className="h-10"></div>
 
         <div className="mt-8 px-2">
           <ul className="space-y-2">

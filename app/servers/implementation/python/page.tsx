@@ -1,17 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { MainLayout } from "@/components/layout/main-layout"
-import { FloatingChat } from "@/components/chat/floating-chat"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Code, Server, Check, Info, AlertTriangle } from "lucide-react"
+import { ArrowRight, Code,Check,AlertTriangle } from "lucide-react"
 
 export default function PythonImplementationPage() {
   return (
     <>
-      <MainLayout>
-        <div className="container py-12">
+      <div className="container mx-auto px-6 sm:px-8 py-12">
           <div className="mb-8">
             <nav className="mb-4 flex items-center text-sm text-muted-foreground">
               <Link href="/" className="hover:text-foreground">
@@ -928,8 +924,6 @@ curl -X POST http://localhost:8000/ \\
             </div>
           </div>
         </div>
-      </MainLayout>
-      <FloatingChat />
-    </>
+      </>
   )
 } 
