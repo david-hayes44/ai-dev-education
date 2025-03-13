@@ -18,14 +18,25 @@ import {
   MessageSquare,
   Puzzle,
   PanelLeft,
-  PanelRight
+  PanelRight,
+  Layers,
+  Wrench,
+  Lightbulb,
+  BookMarked,
+  Mail,
+  FileText,
+  LayoutGrid
 } from "lucide-react";
 
 type NavItem = {
   label: string;
   href: string;
   icon: React.ReactNode;
-  subitems?: { label: string; href: string }[];
+  subitems?: {
+    label: string;
+    href: string;
+    subitems?: { label: string; href: string }[];
+  }[];
 };
 
 const navItems: NavItem[] = [
@@ -35,44 +46,110 @@ const navItems: NavItem[] = [
     icon: <Home className="h-5 w-5" />,
   },
   {
-    label: "Chat Playground",
-    href: "/chat",
-    icon: <MessageSquare className="h-5 w-5" />,
-  },
-  {
-    label: "AI-Dev Concepts",
-    href: "/concepts",
+    label: "Introduction",
+    href: "/introduction",
     icon: <BookOpen className="h-5 w-5" />,
-  },
-  {
-    label: "MCP Guides",
-    href: "/mcp",
-    icon: <Code className="h-5 w-5" />,
     subitems: [
-      { label: "What are MCPs", href: "/mcp/what-are-mcps" },
-      { label: "Core Components", href: "/mcp/core-components" },
-      { label: "Implementation Examples", href: "/mcp/examples" },
+      { label: "Concepts", href: "/introduction/concepts" },
+      { label: "Benefits", href: "/introduction/benefits" },
+      { label: "Getting Started", href: "/introduction/getting-started" },
     ],
   },
   {
-    label: "Integration",
-    href: "/integration",
-    icon: <Puzzle className="h-5 w-5" />,
-  },
-  {
-    label: "Building MCP Servers",
-    href: "/building-servers",
-    icon: <Server className="h-5 w-5" />,
+    label: "Understanding MCP",
+    href: "/mcp",
+    icon: <Code className="h-5 w-5" />,
+    subitems: [
+      { label: "Basics", href: "/mcp/basics" },
+      { label: "Benefits", href: "/mcp/benefits" },
+      { label: "Context Management", href: "/mcp/context-management" },
+      { label: "Implementation", href: "/mcp/implementation" },
+    ],
   },
   {
     label: "Best Practices",
     href: "/best-practices",
     icon: <CheckSquare className="h-5 w-5" />,
+    subitems: [
+      { label: "Context Management", href: "/best-practices/context-management" },
+      { label: "Code Review", href: "/best-practices/code-review" },
+      { label: "Testing", href: "/best-practices/testing" },
+      { label: "Security", href: "/best-practices/security" },
+      { label: "Collaboration", href: "/best-practices/collaboration" },
+      { label: "Practical LLM Usage", href: "/best-practices/practical-llm-usage" },
+      { label: "Project Customization", href: "/best-practices/project-customization" },
+      { label: "Coding Standards", href: "/best-practices/coding-standards" },
+    ],
   },
   {
-    label: "Browser Automation",
-    href: "/browser-automation",
-    icon: <Globe className="h-5 w-5" />,
+    label: "Building MCP Servers",
+    href: "/servers",
+    icon: <Server className="h-5 w-5" />,
+    subitems: [
+      { label: "Architecture", href: "/servers/architecture" },
+      { label: "Implementation", href: "/servers/implementation" },
+      { label: "Context Management", href: "/servers/context-management" },
+      { label: "Security", href: "/servers/security" },
+      { label: "Deployment", href: "/servers/deployment" },
+      { label: "Examples", href: "/servers/examples" },
+    ],
+  },
+  {
+    label: "AI Development Tools",
+    href: "/tools",
+    icon: <Wrench className="h-5 w-5" />,
+    subitems: [
+      { 
+        label: "Cursor", 
+        href: "/tools/cursor",
+        subitems: [
+          { label: "Setup & Installation", href: "/tools/cursor/setup" },
+          { label: "Core Features", href: "/tools/cursor/core-features" },
+          { label: "Project Rules", href: "/tools/cursor/project-rules" },
+        ] 
+      },
+      { label: "Windsurf", href: "/tools/windsurf" },
+      { label: "Claude", href: "/tools/claude" },
+      { label: "OpenAI", href: "/tools/openai" },
+    ],
+  },
+  {
+    label: "Learning Paths",
+    href: "/learning-paths",
+    icon: <BookMarked className="h-5 w-5" />,
+    subitems: [
+      { label: "Beginner Path", href: "/learning-paths/beginner" },
+      { label: "Developer Path", href: "/learning-paths/developer" },
+      { label: "MCP Architect Path", href: "/learning-paths/architect" },
+      { label: "Enterprise Path", href: "/learning-paths/enterprise" },
+      { label: "Skill Assessment", href: "/learning-paths/assessment" },
+    ],
+  },
+  {
+    label: "Resources",
+    href: "/resources",
+    icon: <FileText className="h-5 w-5" />,
+    subitems: [
+      { label: "Knowledge Base", href: "/resources/knowledge-base" },
+      { label: "Cursor Rules", href: "/resources/knowledge-base/cursor-rules" },
+      { label: "Glossary", href: "/resources/glossary" },
+      { label: "External Resources", href: "/resources/external-resources" },
+    ],
+  },
+  {
+    label: "Playground",
+    href: "/playground",
+    icon: <Code className="h-5 w-5" />,
+  },
+  {
+    label: "Contact",
+    href: "/contact",
+    icon: <Mail className="h-5 w-5" />,
+  },
+  {
+    label: "Chat",
+    href: "/chat",
+    icon: <MessageSquare className="h-5 w-5" />,
   },
 ];
 
@@ -82,6 +159,7 @@ type SidebarProps = {
 
 export function Sidebar({ className }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(true);
+  const [isHovered, setIsHovered] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const pathname = usePathname();
 
@@ -93,6 +171,9 @@ export function Sidebar({ className }: SidebarProps) {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  // Determine if sidebar should be expanded based on click or hover
+  const isExpanded = !isCollapsed || isHovered;
 
   return (
     <>
@@ -131,7 +212,7 @@ export function Sidebar({ className }: SidebarProps) {
               }}
             >
               <div className="flex justify-between">
-                <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-500 via-purple-500 to-orange-500">AI-Dev Platform</h2>
+                <h2 className="text-xl font-bold gradient-text">The AI Dev Odyssey</h2>
                 <button 
                   onClick={() => setIsMobileOpen(false)}
                   className="rounded-full p-1 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200"
@@ -148,29 +229,49 @@ export function Sidebar({ className }: SidebarProps) {
                         href={item.href}
                         className={cn(
                           "flex items-center rounded-md p-2 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200",
-                          pathname === item.href && "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                          pathname === item.href && "bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary"
                         )}
                         onClick={() => setIsMobileOpen(false)}
                       >
-                        <div className="mr-3">{item.icon}</div>
+                        <div className="mr-3 text-muted-foreground">{item.icon}</div>
                         <span>{item.label}</span>
                       </Link>
                       
-                      {item.subitems && item.subitems.length > 0 && (
+                      {item.subitems && item.subitems.length > 0 && pathname.startsWith(item.href) && (
                         <ul className="ml-6 mt-2 space-y-1">
                           {item.subitems.map((subitem) => (
                             <li key={subitem.href}>
                               <Link
                                 href={subitem.href}
                                 className={cn(
-                                  "flex items-center rounded-md p-2 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200",
-                                  pathname === subitem.href && "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                                  "flex items-center rounded-md p-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200",
+                                  pathname === subitem.href && "bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary"
                                 )}
                                 onClick={() => setIsMobileOpen(false)}
                               >
                                 <ChevronRight className="mr-2 h-3 w-3" />
                                 <span>{subitem.label}</span>
                               </Link>
+                              
+                              {subitem.subitems && subitem.subitems.length > 0 && pathname.startsWith(subitem.href) && (
+                                <ul className="ml-5 mt-1 space-y-1">
+                                  {subitem.subitems.map((nestedItem) => (
+                                    <li key={nestedItem.href}>
+                                      <Link
+                                        href={nestedItem.href}
+                                        className={cn(
+                                          "flex items-center rounded-md p-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200",
+                                          pathname === nestedItem.href && "bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary"
+                                        )}
+                                        onClick={() => setIsMobileOpen(false)}
+                                      >
+                                        <div className="ml-1 mr-2 h-1 w-1 rounded-full bg-muted-foreground"></div>
+                                        <span>{nestedItem.label}</span>
+                                      </Link>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
                             </li>
                           ))}
                         </ul>
@@ -184,16 +285,16 @@ export function Sidebar({ className }: SidebarProps) {
         )}
       </AnimatePresence>
 
-      {/* Desktop Sidebar with improved toggle button */}
+      {/* Desktop Sidebar with improved toggle button and hover functionality */}
       <motion.div
         className={cn(
-          "fixed left-0 top-0 z-30 hidden h-screen bg-white shadow-md dark:bg-gray-900 md:block",
+          "fixed left-0 top-0 z-30 hidden h-screen border-r border-border bg-white shadow-md dark:bg-gray-900 md:block",
           className
         )}
         initial={isCollapsed ? "collapsed" : "expanded"}
-        animate={isCollapsed ? "collapsed" : "expanded"}
+        animate={isExpanded ? "expanded" : "collapsed"}
         variants={{
-          expanded: { width: 240 },
+          expanded: { width: 280 },
           collapsed: { width: 70 },
         }}
         transition={{ 
@@ -201,6 +302,8 @@ export function Sidebar({ className }: SidebarProps) {
           stiffness: 300,
           damping: 30
         }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
       >
         {/* Persistent toggle button */}
         <button 
@@ -208,34 +311,34 @@ export function Sidebar({ className }: SidebarProps) {
           onClick={() => setIsCollapsed(!isCollapsed)}
           aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {isCollapsed ? 
-            <ChevronRight className="h-3 w-3" /> : 
-            <ChevronRight className="h-3 w-3 rotate-180" />
+          {isExpanded ? 
+            <ChevronRight className="h-3 w-3 rotate-180" /> : 
+            <ChevronRight className="h-3 w-3" />
           }
         </button>
 
         <div className="flex h-14 items-center justify-center py-4 relative">
           <motion.div
             initial={isCollapsed ? "collapsed" : "expanded"}
-            animate={isCollapsed ? "collapsed" : "expanded"}
+            animate={isExpanded ? "expanded" : "collapsed"}
             variants={{
               expanded: { opacity: 1, x: 0 },
               collapsed: { opacity: 0, x: -20 },
             }}
             transition={{ duration: 0.2 }}
-            className="overflow-hidden text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-500 via-purple-500 to-orange-500"
+            className="overflow-hidden text-xl font-bold gradient-text"
           >
-            AI-Dev Platform
+            The AI Dev Odyssey
           </motion.div>
           <motion.div
             initial={isCollapsed ? "collapsed" : "expanded"}
-            animate={isCollapsed ? "collapsed" : "expanded"}
+            animate={isExpanded ? "collapsed" : "expanded"}
             variants={{
               expanded: { opacity: 0 },
               collapsed: { opacity: 1 },
             }}
             transition={{ duration: 0.2 }}
-            className="absolute left-0 right-0 mx-auto w-full text-center text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-500 via-purple-500 to-orange-500"
+            className="absolute left-0 right-0 mx-auto w-full text-center text-xl font-bold gradient-text"
           >
             AI
           </motion.div>
@@ -248,62 +351,60 @@ export function Sidebar({ className }: SidebarProps) {
                 <Link
                   href={item.href}
                   className={cn(
-                    "flex items-center rounded-md p-2 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200",
-                    pathname === item.href && "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                    "flex items-center rounded-md p-2 transition-colors duration-200",
+                    !isExpanded ? "justify-center" : "justify-start",
+                    (pathname === item.href || pathname.startsWith(item.href + "/")) 
+                      ? "bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary"
+                      : "text-muted-foreground hover:bg-gray-100 hover:text-foreground dark:hover:bg-gray-800"
                   )}
-                  title={item.label}
                 >
-                  <div className="mr-3">{item.icon}</div>
-                  <motion.span
-                    initial={isCollapsed ? "collapsed" : "expanded"}
-                    animate={isCollapsed ? "collapsed" : "expanded"}
-                    variants={{
-                      expanded: { 
-                        opacity: 1, 
-                        width: "auto",
-                        display: "inline-block" 
-                      },
-                      collapsed: { 
-                        opacity: 0, 
-                        width: 0,
-                        display: "none",
-                        transition: { 
-                          display: { delay: 0.1 } 
-                        } 
-                      },
-                    }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    {item.label}
-                  </motion.span>
+                  <div className={cn("flex-shrink-0", !isExpanded ? "" : "mr-3")}>
+                    {item.icon}
+                  </div>
+                  {isExpanded && <span>{item.label}</span>}
                 </Link>
                 
-                <AnimatePresence>
-                  {!isCollapsed && item.subitems && item.subitems.length > 0 && (
-                    <motion.ul
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="ml-6 mt-2 space-y-1 overflow-hidden"
-                    >
-                      {item.subitems.map((subitem) => (
-                        <li key={subitem.href}>
-                          <Link
-                            href={subitem.href}
-                            className={cn(
-                              "flex items-center rounded-md p-2 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200",
-                              pathname === subitem.href && "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                            )}
-                          >
-                            <ChevronRight className="mr-2 h-3 w-3" />
-                            <span>{subitem.label}</span>
-                          </Link>
-                        </li>
-                      ))}
-                    </motion.ul>
-                  )}
-                </AnimatePresence>
+                {isExpanded && item.subitems && item.subitems.length > 0 && pathname.startsWith(item.href) && (
+                  <ul className="ml-9 mt-2 space-y-1 border-l border-border pl-2">
+                    {item.subitems.map((subitem) => (
+                      <li key={subitem.href}>
+                        <Link
+                          href={subitem.href}
+                          className={cn(
+                            "flex items-center rounded-md p-2 text-sm transition-colors duration-200",
+                            pathname === subitem.href || pathname.startsWith(subitem.href + "/")
+                              ? "bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary"
+                              : "text-muted-foreground hover:bg-gray-100 hover:text-foreground dark:hover:bg-gray-800"
+                          )}
+                        >
+                          <ChevronRight className="mr-2 h-3 w-3" />
+                          <span>{subitem.label}</span>
+                        </Link>
+                        
+                        {subitem.subitems && subitem.subitems.length > 0 && pathname.startsWith(subitem.href) && (
+                          <ul className="ml-5 mt-1 space-y-1 border-l border-border pl-2">
+                            {subitem.subitems.map((nestedItem) => (
+                              <li key={nestedItem.href}>
+                                <Link
+                                  href={nestedItem.href}
+                                  className={cn(
+                                    "flex items-center rounded-md p-2 text-xs transition-colors duration-200",
+                                    pathname === nestedItem.href
+                                      ? "bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary"
+                                      : "text-muted-foreground hover:bg-gray-100 hover:text-foreground dark:hover:bg-gray-800"
+                                  )}
+                                >
+                                  <div className="ml-1 mr-2 h-1 w-1 rounded-full bg-muted-foreground"></div>
+                                  <span>{nestedItem.label}</span>
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>
