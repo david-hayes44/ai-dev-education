@@ -2,13 +2,11 @@
 
 import { ReactNode } from "react";
 import { Header } from "./Header";
-import { Sidebar } from "./Sidebar";
 import { cn } from "@/lib/utils";
 
 type MainLayoutProps = {
   children: ReactNode;
   className?: string;
-  sidebarClassName?: string;
   headerClassName?: string;
   contentClassName?: string;
 };
@@ -16,15 +14,11 @@ type MainLayoutProps = {
 export function MainLayout({
   children,
   className,
-  sidebarClassName,
   headerClassName,
   contentClassName,
 }: MainLayoutProps) {
   return (
     <div className={cn("min-h-screen bg-gray-50 dark:bg-gray-950", className)}>
-      {/* Sidebar Component */}
-      <Sidebar className={sidebarClassName} />
-
       {/* Main Content Area with Header */}
       <div className="flex min-h-screen flex-col md:pl-[70px]">
         <Header className={headerClassName} />

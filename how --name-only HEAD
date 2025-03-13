@@ -1,0 +1,24 @@
+[33mcommit dbf6ef558c27cf3948ce730b7e43613f9cccbeeb[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: Rev4nchist <dkhay@rog-strix>
+Date:   Wed Mar 12 21:00:53 2025 -0500
+
+    Add Simple Puppeteer Server integration with improved browser automation capabilities, documentation, and cursor rules
+
+M	.cursor/rules/best-practices.mdc
+M	.cursor/rules/collab-rule.mdc
+M	.env.example
+A	Dockerfile.puppeteer
+M	README.md
+M	app/browser-automation/page.tsx
+M	docker-compose.yml
+A	documentation/puppeteer_integration_guide.md
+M	lib/puppeteer-mcp.ts
+M	package-lock.json
+M	package.json
+A	puppeteer-debug.log
+A	puppeteer-output.log
+A	simple-puppeteer-server.js
+A	test-mcp-server.js
+A	test-mcp-server.mjs
+A	test-puppeteer.js
+A	test-screenshot.png

@@ -1,7 +1,7 @@
 ---
-description: 
+description: Use this for best practices when you're creating new features. 
 globs: 
-alwaysApply: false
+alwaysApply: true
 ---
 ---
 description: Best practices to implement for the tech stack used

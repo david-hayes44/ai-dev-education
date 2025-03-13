@@ -8,12 +8,89 @@ import { Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 
-const Command = React.forwardRef<
+// More robust SafeCommand wrapper with explicit state management
+const SafeCommand = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive>
->(({ className, ...props }, ref) => (
-  <CommandPrimitive
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive> & {
+    controlledValue?: string
+    onControlledValueChange?: (value: string) => void
+  }
+>(({ className, children, loop = true, controlledValue, onControlledValueChange, ...props }, ref) => {
+  const [mounted, setMounted] = React.useState(false)
+  
+  // Internal controlled state if not provided externally
+  const [internalValue, setInternalValue] = React.useState("")
+  
+  // Determine if we're in controlled or uncontrolled mode
+  const isControlled = controlledValue !== undefined
+  const value = isControlled ? controlledValue : internalValue
+  const setValue = React.useCallback((newValue: string) => {
+    if (isControlled) {
+      if (onControlledValueChange) onControlledValueChange(newValue)
+    } else {
+      setInternalValue(newValue)
+    }
+  }, [isControlled, onControlledValueChange])
+  
+  // Extremely robust filter function to prevent undefined iterables
+  const robustFilter = React.useCallback((value: string, search: string) => {
+    // Guard against both value and search being undefined
+    if (!search || typeof search !== 'string') return 1
+    if (!value || typeof value !== 'string') return 0
+    
+    try {
+      return value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0
+    } catch (e) {
+      // Fallback in case of any string operation errors
+      return 0
+    }
+  }, [])
+  
+  // Only mount on client-side
+  React.useEffect(() => {
+    setMounted(true)
+    return () => setMounted(false)
+  }, [])
+  
+  if (!mounted) return null
+  
+  // Ensure any empty arrays or defaults are handled
+  const safeProps = {
+    ...props,
+    // Explicitly provide these critical props to prevent undefined errors
+    value: value || "",
+    onValueChange: setValue,
+    filter: robustFilter,
+    loop: true, // Always enable loop to avoid edge cases
+  }
+  
+  return (
+    <CommandPrimitive
+      ref={ref}
+      className={cn(
+        "flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground",
+        className
+      )}
+      {...safeProps}
+    >
+      {children}
+    </CommandPrimitive>
+  )
+})
+SafeCommand.displayName = "SafeCommand"
+
+// Updated Command component that uses our robust SafeCommand wrapper
+const Command = React.forwardRef<
+  React.ElementRef<typeof SafeCommand>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive> & {
+    controlledValue?: string
+    onControlledValueChange?: (value: string) => void
+  }
+>(({ className, controlledValue, onControlledValueChange, ...props }, ref) => (
+  <SafeCommand
     ref={ref}
+    controlledValue={controlledValue}
+    onControlledValueChange={onControlledValueChange}
     className={cn(
       "flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground",
       className
@@ -83,16 +160,25 @@ CommandEmpty.displayName = CommandPrimitive.Empty.displayName
 const CommandGroup = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Group>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Group>
->(({ className, ...props }, ref) => (
-  <CommandPrimitive.Group
-    ref={ref}
-    className={cn(
-      "overflow-hidden p-1 text-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground",
-      className
-    )}
-    {...props}
-  />
-))
+>(({ className, children, ...props }, ref) => {
+  // Always ensure we have valid children
+  const safeChildren = React.useMemo(() => {
+    return children || null;
+  }, [children]);
+  
+  return (
+    <CommandPrimitive.Group
+      ref={ref}
+      className={cn(
+        "overflow-hidden p-1 text-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground",
+        className
+      )}
+      {...props}
+    >
+      {safeChildren}
+    </CommandPrimitive.Group>
+  );
+})
 
 CommandGroup.displayName = CommandPrimitive.Group.displayName
 
@@ -111,16 +197,24 @@ CommandSeparator.displayName = CommandPrimitive.Separator.displayName
 const CommandItem = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
->(({ className, ...props }, ref) => (
-  <CommandPrimitive.Item
-    ref={ref}
-    className={cn(
-      "relative flex cursor-default gap-2 select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[disabled=true]:pointer-events-none data-[selected='true']:bg-accent data-[selected=true]:text-accent-foreground data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
-      className
-    )}
-    {...props}
-  />
-))
+>(({ className, ...props }, ref) => {
+  // Ensure value prop is always a string
+  const safeProps = {
+    ...props,
+    value: props.value ? String(props.value) : "",
+  };
+  
+  return (
+    <CommandPrimitive.Item
+      ref={ref}
+      className={cn(
+        "relative flex cursor-default gap-2 select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none aria-selected:bg-accent aria-selected:text-accent-foreground data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+        className
+      )}
+      {...safeProps}
+    />
+  );
+})
 
 CommandItem.displayName = CommandPrimitive.Item.displayName
 
