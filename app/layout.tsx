@@ -17,8 +17,10 @@ const geistMono = localFont({
 })
 
 export const metadata: Metadata = {
-  title: 'AI-Dev Education Platform',
-  description: 'Learn AI-assisted development and Model Context Protocol (MCP)',
+  title: 'The AI Dev Odyssey | AI-Assisted Development Education',
+  description: 'Embark on a journey to master AI-assisted development, Model Context Protocol (MCP), and modern development workflows.',
+  keywords: 'AI-assisted development, MCP, Model Context Protocol, programming, education, best practices, AI tools',
+  authors: [{ name: 'AI Dev Odyssey Team' }],
 }
 
 export default function RootLayout({

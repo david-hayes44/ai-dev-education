@@ -15,7 +15,11 @@ import {
   Puzzle,
   Server,
   CheckSquare,
-  MessageCircle
+  MessageCircle,
+  Wrench,
+  BookMarked,
+  FileText,
+  Mail
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 
@@ -26,29 +30,25 @@ const navItems = [
     icon: <Home className="w-4 h-4 mr-2" />,
   },
   {
-    path: "/ai-dev",
-    label: "AI-Dev Concepts",
+    path: "/introduction",
+    label: "Introduction",
     icon: <BookOpen className="w-4 h-4 mr-2" />,
-  },
-  {
-    path: "/mcp",
-    label: "MCP Guides",
-    icon: <Code className="w-4 h-4 mr-2" />,
     dropdown: [
-      { label: "Getting Started", path: "/mcp/getting-started" },
-      { label: "Core Concepts", path: "/mcp/core-concepts" },
-      { label: "Advanced Usage", path: "/mcp/advanced" },
+      { label: "Concepts", path: "/introduction/concepts" },
+      { label: "Benefits", path: "/introduction/benefits" },
+      { label: "Getting Started", path: "/introduction/getting-started" },
     ]
   },
   {
-    path: "/integration",
-    label: "Integration",
-    icon: <Puzzle className="w-4 h-4 mr-2" />,
-  },
-  {
-    path: "/building-servers",
-    label: "Building MCP Servers",
-    icon: <Server className="w-4 h-4 mr-2" />,
+    path: "/mcp",
+    label: "MCP",
+    icon: <Code className="w-4 h-4 mr-2" />,
+    dropdown: [
+      { label: "Basics", path: "/mcp/basics" },
+      { label: "Benefits", path: "/mcp/benefits" },
+      { label: "Context Management", path: "/mcp/context-management" },
+      { label: "Implementation", path: "/mcp/implementation" },
+    ]
   },
   {
     path: "/best-practices",
@@ -56,9 +56,29 @@ const navItems = [
     icon: <CheckSquare className="w-4 h-4 mr-2" />,
   },
   {
-    path: "/chat",
-    label: "Chat Playground",
-    icon: <MessageCircle className="w-4 h-4 mr-2" />,
+    path: "/servers",
+    label: "MCP Servers",
+    icon: <Server className="w-4 h-4 mr-2" />,
+  },
+  {
+    path: "/tools",
+    label: "Tools",
+    icon: <Wrench className="w-4 h-4 mr-2" />,
+  },
+  {
+    path: "/learning-paths",
+    label: "Learning Paths",
+    icon: <BookMarked className="w-4 h-4 mr-2" />,
+  },
+  {
+    path: "/resources",
+    label: "Resources",
+    icon: <FileText className="w-4 h-4 mr-2" />,
+  },
+  {
+    path: "/contact",
+    label: "Contact",
+    icon: <Mail className="w-4 h-4 mr-2" />,
   },
 ]
 
@@ -111,14 +131,12 @@ export function Header() {
           : "bg-background/60 backdrop-blur-sm"
       )}
     >
-      <div className="container mx-auto px-4 sm:px-6">
+      <div className="container mx-auto px-6 sm:px-8">
         <div className="flex items-center justify-between h-16 md:h-20">
           {/* Logo Section */}
           <div className="flex-shrink-0">
             <Link href="/" className="flex items-center">
-              <span className="font-bold text-xl sm:text-2xl bg-clip-text text-transparent bg-gradient-to-r from-blue-500 via-purple-500 to-orange-500">
-                AI-Dev Platform
-              </span>
+              <span className="font-bold text-xl sm:text-2xl gradient-text">The AI Dev Odyssey</span>
             </Link>
           </div>
           
@@ -183,7 +201,7 @@ export function Header() {
                     href={item.path}
                     className={cn(
                       "flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200",
-                      pathname === item.path
+                      pathname === item.path || pathname.startsWith(item.path + "/")
                         ? "bg-primary/10 text-primary"
                         : "text-muted-foreground hover:text-foreground hover:bg-muted"
                     )}
@@ -225,7 +243,7 @@ export function Header() {
             transition={{ duration: 0.3 }}
             className="md:hidden border-t border-border overflow-hidden"
           >
-            <div className="container mx-auto px-4 py-3">
+            <div className="container mx-auto px-6 sm:px-8 py-3">
               <nav className="grid gap-y-2">
                 {navItems.map((item) => (
                   <div key={item.path} className="w-full">
@@ -257,14 +275,14 @@ export function Header() {
                               animate={{ opacity: 1, height: "auto" }}
                               exit={{ opacity: 0, height: 0 }}
                               transition={{ duration: 0.2 }}
-                              className="mt-1 ml-4 pl-2 border-l border-border"
+                              className="mt-1 pl-5 overflow-hidden"
                             >
                               {item.dropdown.map((dropdownItem) => (
                                 <Link
                                   key={dropdownItem.path}
                                   href={dropdownItem.path}
                                   className={cn(
-                                    "flex px-3 py-2 rounded-md text-sm transition-colors duration-200",
+                                    "flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-200",
                                     pathname === dropdownItem.path
                                       ? "bg-primary/10 text-primary"
                                       : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -282,7 +300,7 @@ export function Header() {
                         href={item.path}
                         className={cn(
                           "flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200",
-                          pathname === item.path
+                          pathname === item.path || pathname.startsWith(item.path + "/")
                             ? "bg-primary/10 text-primary"
                             : "text-muted-foreground hover:text-foreground hover:bg-muted"
                         )}
