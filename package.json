@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "mcp:puppeteer": "npx @modelcontextprotocol/puppeteer-server --config mcp-servers/configs/puppeteer-config.json"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.10.2",

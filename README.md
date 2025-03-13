@@ -10,6 +10,7 @@ A modern, interactive learning environment built with Next.js that aims to educa
 - **Interactive Chat**: AI assistant to help answer questions about AI-Dev and MCP concepts
 - **Modern UI**: Responsive design with dark/light mode support
 - **Firebase Integration**: Ready for future dynamic content and chat persistence
+- **Browser Automation**: Integration with Puppeteer MCP server for browser control
 
 ## Tech Stack
 
@@ -18,6 +19,7 @@ A modern, interactive learning environment built with Next.js that aims to educa
 - **Backend**: Firebase (Firestore)
 - **AI Integration**: OpenRouter API (planned)
 - **Content Rendering**: react-markdown for formatted content
+- **Browser Automation**: Puppeteer MCP server
 
 ## Getting Started
 
@@ -62,6 +64,8 @@ A modern, interactive learning environment built with Next.js that aims to educa
   - `ui/`: UI components (buttons, inputs, etc.)
 - `hooks/`: Custom React hooks
 - `lib/`: Utility functions and API clients
+- `mcp-servers/`: MCP server configurations
+  - `configs/`: Configuration files for MCP servers
 - `public/`: Static assets
 - `styles/`: Global styles
 
@@ -112,3 +116,29 @@ To implement the generated documentation from CodeGuide:
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+## MCP Servers
+
+The platform includes integration with Model Context Protocol (MCP) servers:
+
+### Puppeteer MCP Server
+
+For browser automation capabilities, the platform integrates with the Puppeteer MCP server.
+
+To run the Puppeteer MCP server:
+
+```bash
+npm run mcp:puppeteer
+```
+
+This will start the Puppeteer MCP server on port 5004 (configurable in `mcp-servers/configs/puppeteer-config.json`).
+
+Available browser automation features:
+- Navigate to URLs
+- Click elements
+- Type text
+- Extract content
+- Take screenshots
+- Evaluate JavaScript code
+
+Visit the Browser Automation page at `/browser-automation` to try out these features.

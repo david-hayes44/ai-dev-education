@@ -13,7 +13,8 @@ import {
   CheckSquare,
   Menu,
   X,
-  ChevronRight
+  ChevronRight,
+  Globe
 } from "lucide-react";
 
 type NavItem = {
@@ -58,6 +59,11 @@ const navItems: NavItem[] = [
     label: "Best Practices",
     href: "/best-practices",
     icon: <CheckSquare className="h-5 w-5" />,
+  },
+  {
+    label: "Browser Automation",
+    href: "/browser-automation",
+    icon: <Globe className="h-5 w-5" />,
   },
 ];
 
