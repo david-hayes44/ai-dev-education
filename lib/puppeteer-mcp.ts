@@ -1,12 +1,12 @@
 /**
- * Puppeteer MCP client for browser automation
+ * Simple Puppeteer API client for browser automation
  * 
- * This module provides functions to interact with the Puppeteer MCP server
+ * This module provides functions to interact with the simple Puppeteer server
  * for browser automation capabilities within the AI-Dev Education Platform.
  */
 
-// Configuration for the Puppeteer MCP server
-const PUPPETEER_MCP_URL = process.env.NEXT_PUBLIC_PUPPETEER_MCP_URL || 'http://localhost:5004';
+// Configuration for the Puppeteer server
+const PUPPETEER_API_URL = process.env.NEXT_PUBLIC_PUPPETEER_API_URL || 'http://localhost:5004';
 
 /**
  * Browser automation action types
@@ -35,22 +35,23 @@ export interface BrowserResponse {
   success: boolean;
   data?: unknown;
   error?: string;
+  message?: string;
 }
 
 /**
  * Navigate to a specific URL
  * @param url The URL to navigate to
  */
-export async function navigateTo(url: string) {
-  return callMcpTool('puppeteer_navigate', { url });
+export async function navigateTo(url: string): Promise<BrowserResponse> {
+  return callApiEndpoint('/browser/navigate', { url });
 }
 
 /**
  * Click an element using a selector
  * @param selector The CSS selector to find the element
  */
-export async function clickElement(selector: string) {
-  return callMcpTool('puppeteer_click', { selector });
+export async function clickElement(selector: string): Promise<BrowserResponse> {
+  return callApiEndpoint('/browser/click', { selector });
 }
 
 /**
@@ -58,75 +59,68 @@ export async function clickElement(selector: string) {
  * @param selector The CSS selector to find the input element
  * @param value The text to type
  */
-export async function typeText(selector: string, value: string) {
-  return callMcpTool('puppeteer_fill', { selector, value });
+export async function typeText(selector: string, value: string): Promise<BrowserResponse> {
+  return callApiEndpoint('/browser/type', { selector, text: value });
 }
 
 /**
  * Extract text from an element
- * This uses JavaScript evaluation to get the text content
  * @param selector The CSS selector to find the element
  */
-export async function extractText(selector: string) {
-  return callMcpTool('puppeteer_evaluate', { 
-    script: `return document.querySelector("${selector}")?.textContent || ""` 
-  });
+export async function extractText(selector: string): Promise<BrowserResponse> {
+  return callApiEndpoint('/browser/extract', { selector });
 }
 
 /**
  * Take a screenshot of the current page or element
- * @param name Name to identify the screenshot
- * @param selector Optional selector for element to screenshot
- * @param width Optional width for the screenshot
- * @param height Optional height for the screenshot
  */
-export async function takeScreenshot(name: string = `screenshot_${Date.now()}`, selector?: string, width?: number, height?: number) {
-  return callMcpTool('puppeteer_screenshot', { 
-    name,
-    selector,
-    width: width || 800,
-    height: height || 600
-  });
+export async function takeScreenshot(): Promise<BrowserResponse> {
+  return callApiEndpoint('/browser/screenshot', {});
 }
 
 /**
- * Evaluate JavaScript code in the context of the page
- * @param script The JavaScript code to evaluate
+ * Initialize the browser
  */
-export async function evaluateCode(script: string) {
-  return callMcpTool('puppeteer_evaluate', { script });
+export async function initBrowser(): Promise<BrowserResponse> {
+  return callApiEndpoint('/browser/init', {});
 }
 
 /**
- * Hover over an element
- * @param selector The CSS selector for the element to hover
+ * Get server status
  */
-export async function hoverElement(selector: string) {
-  return callMcpTool('puppeteer_hover', { selector });
-}
-
-/**
- * Select an option from a dropdown
- * @param selector The CSS selector for the select element
- * @param value The value to select
- */
-export async function selectOption(selector: string, value: string) {
-  return callMcpTool('puppeteer_select', { selector, value });
-}
-
-/**
- * Call an MCP tool on the Puppeteer server
- * @param tool The name of the tool to call
- * @param args The arguments for the tool
- */
-async function callMcpTool(tool: string, args: Record<string, unknown>) {
+export async function getStatus(): Promise<BrowserResponse> {
   try {
-    const response = await fetch(`${PUPPETEER_MCP_URL}/mcp/tools/${tool}`, {
+    const response = await fetch(`${PUPPETEER_API_URL}/status`);
+    
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return {
+      success: true,
+      data
+    };
+  } catch (error) {
+    console.error('Error checking status:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+/**
+ * Call an API endpoint on the Puppeteer server
+ */
+async function callApiEndpoint(endpoint: string, data: Record<string, unknown>): Promise<BrowserResponse> {
+  try {
+    const response = await fetch(`${PUPPETEER_API_URL}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ args }),
+      body: JSON.stringify(data),
     });
 
     if (!response.ok) {
@@ -136,10 +130,10 @@ async function callMcpTool(tool: string, args: Record<string, unknown>) {
 
     return await response.json();
   } catch (error) {
-    console.error(`Error calling ${tool}:`, error);
+    console.error(`Error calling ${endpoint}:`, error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? error.message : String(error)
     };
   }
 } 

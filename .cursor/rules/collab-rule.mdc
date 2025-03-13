@@ -1,7 +1,7 @@
 ---
-description: 
+description: How to optimize AI and human development interactions. 
 globs: 
-alwaysApply: false
+alwaysApply: true
 ---
 ---
 description: Development Collaboration Rules for AI
@@ -41,6 +41,7 @@ The site is in a rough draft stage regarding content and functionality, with sig
   - Implement the minimal code needed to pass the tests
   - Refactor while maintaining passing tests
   - Verify tests continue to pass after refactoring
+  - You have a Test_Standards.md file for guidance on how to conduct this when needed. 
 
 ### 3. Incremental and Iterative Approach
 - I will break down complex tasks into clear, manageable steps

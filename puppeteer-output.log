@@ -1,0 +1,4 @@
+
+> codeguide-nextjs-firebase@0.1.0 mcp:puppeteer
+> npx -y @modelcontextprotocol/server-puppeteer --config mcp-servers/configs/puppeteer-config.json --verbose
+

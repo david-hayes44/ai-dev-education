@@ -143,19 +143,35 @@ npx -y @modelcontextprotocol/server-puppeteer
 npm install -g @modelcontextprotocol/server-puppeteer
 ```
 
+### Simple Puppeteer Server
+
+We've also implemented a simplified Express-based Puppeteer server that provides the same core functionality with improved debugging capabilities. To use this server:
+
+```bash
+node simple-puppeteer-server.js
+```
+
+This will start the Simple Puppeteer server on port 5004 with a visible browser instance. The server provides:
+
+- Basic browser automation (navigation, clicking, typing, screenshots)
+- Custom JavaScript execution for advanced operations
+- DOM structure analysis
+- CSS style inspection
+- Improved error handling
+
+For detailed documentation on the Simple Puppeteer server, see [documentation/puppeteer_integration_guide.md](documentation/puppeteer_integration_guide.md).
+
 #### Docker Setup
 
 You can also run the Puppeteer MCP server using Docker:
-
-1. Build the Docker image (first time only):
-   ```bash
-   docker build -t mcp/puppeteer -f https://raw.githubusercontent.com/modelcontextprotocol/servers/main/src/puppeteer/Dockerfile .
-   ```
+```bash
+docker build -t mcp/puppeteer -f https://raw.githubusercontent.com/modelcontextprotocol/servers/main/src/puppeteer/Dockerfile .
+```
 
 2. Run the Docker container:
-   ```bash
-   docker run -i --rm --init -e DOCKER_CONTAINER=true -p 5004:5004 mcp/puppeteer
-   ```
+```bash
+docker run -i --rm --init -e DOCKER_CONTAINER=true -p 5004:5004 mcp/puppeteer
+```
 
 Or use the provided docker-compose.yml file:
 ```bash
@@ -169,5 +185,7 @@ Available browser automation features:
 - Extract content
 - Take screenshots
 - Evaluate JavaScript code
+- Analyze DOM structure
+- Inspect CSS styles
 
 Visit the Browser Automation page at `/browser-automation` to try out these features.

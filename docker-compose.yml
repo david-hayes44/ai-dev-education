@@ -10,3 +10,14 @@ services:
       - "5004:5004"
     volumes:
       - ./mcp-servers/configs/puppeteer-config.json:/app/config.json 
+      
+  simple-puppeteer:
+    build:
+      context: .
+      dockerfile: Dockerfile.puppeteer
+    init: true
+    ports:
+      - "5004:5004"
+    volumes:
+      - ./simple-puppeteer-server.js:/app/simple-puppeteer-server.js
+    command: node /app/simple-puppeteer-server.js 
