@@ -38,6 +38,7 @@ export interface ChatCompletionResponse {
  * This will be implemented in the future
  */
 export async function sendChatCompletion(
+  // Param will be used in the future implementation
   request: ChatCompletionRequest
 ): Promise<ChatCompletionResponse> {
   if (!hasApiKey) {
@@ -47,6 +48,9 @@ export async function sendChatCompletion(
   
   // This is a placeholder implementation
   // In the future, this will make an actual API request to OpenRouter
+  // using the request parameter
+  console.log("Request received:", request.model, request.messages.length);
+  
   return {
     id: "placeholder-id",
     choices: [
