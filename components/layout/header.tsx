@@ -40,14 +40,26 @@ const navItems = [
     ]
   },
   {
+    path: "/learning-paths",
+    label: "Learning Paths",
+    icon: <BookMarked className="w-4 h-4 mr-2" />,
+  },
+  {
     path: "/mcp",
-    label: "MCP",
+    label: "MCP Framework",
     icon: <Code className="w-4 h-4 mr-2" />,
     dropdown: [
+      { label: "Overview", path: "/mcp" },
       { label: "Basics", path: "/mcp/basics" },
       { label: "Benefits", path: "/mcp/benefits" },
       { label: "Context Management", path: "/mcp/context-management" },
       { label: "Implementation", path: "/mcp/implementation" },
+      { label: "Server Overview", path: "/servers" },
+      { label: "Building Servers", path: "/building-servers" },
+      { label: "Implementations", path: "/servers/implementation" },
+      { label: "— Node.js", path: "/servers/implementation/nodejs" },
+      { label: "— Python", path: "/servers/implementation/python" },
+      { label: "— Firebase", path: "/servers/implementation/firebase" },
     ]
   },
   {
@@ -56,24 +68,26 @@ const navItems = [
     icon: <CheckSquare className="w-4 h-4 mr-2" />,
   },
   {
-    path: "/servers",
-    label: "MCP Servers",
-    icon: <Server className="w-4 h-4 mr-2" />,
-  },
-  {
     path: "/tools",
-    label: "Tools",
+    label: "AI Tools",
     icon: <Wrench className="w-4 h-4 mr-2" />,
-  },
-  {
-    path: "/learning-paths",
-    label: "Learning Paths",
-    icon: <BookMarked className="w-4 h-4 mr-2" />,
+    dropdown: [
+      { label: "Overview", path: "/tools" },
+      { label: "Cursor", path: "/tools/cursor" },
+      { label: "— Setup", path: "/tools/cursor/setup" },
+      { label: "— Core Features", path: "/tools/cursor/core-features" },
+      { label: "— Project Rules", path: "/tools/cursor/project-rules" },
+    ]
   },
   {
     path: "/resources",
     label: "Resources",
     icon: <FileText className="w-4 h-4 mr-2" />,
+    dropdown: [
+      { label: "Knowledge Base", path: "/resources/knowledge-base" },
+      { label: "Cursor Rules", path: "/resources/knowledge-base/cursor-rules" },
+      { label: "— Best Practices", path: "/resources/knowledge-base/cursor-rules/best-practices" },
+    ]
   },
   {
     path: "/contact",
