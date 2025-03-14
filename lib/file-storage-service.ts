@@ -145,7 +145,7 @@ export async function uploadFile(
     // Get file extension
     const fileExtension = getFileExtension(file.name);
     
-    // Create a storage reference
+    // Create a storage reference - using the imported storage instance directly
     const storageRef = ref(storage, `uploads/${sessionId}/${uniqueId}.${fileExtension}`);
     
     // Try to do a quick check if storage is accessible
@@ -164,6 +164,10 @@ export async function uploadFile(
     }
     
     console.log(`Starting upload for ${file.name} (${formatBytes(file.size)}) to ${storageRef.fullPath}`);
+    
+    // Log additional details for debugging
+    console.log("Storage bucket:", process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+    console.log("Upload path:", storageRef.fullPath);
     
     // Upload the file with progress tracking
     const uploadTask = uploadBytesResumable(storageRef, file);

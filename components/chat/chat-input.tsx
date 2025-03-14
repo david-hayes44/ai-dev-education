@@ -20,6 +20,8 @@ import {
   AlertTitle,
   AlertDescription
 } from "@/components/ui/alert"
+import { ref } from "firebase/storage"
+import { getApps } from "firebase/app"
 
 interface ChatInputProps {
   onSubmit: (content: string, attachments?: FileAttachment[]) => Promise<void>
@@ -107,6 +109,32 @@ export function ChatInput({
         setIsUploading(false);
         return;
       }
+      
+      // Add this additional debug info
+      console.log("Storage bucket:", process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+      console.log("Using Firebase App:", getApps().length > 0 ? "Yes" : "No");
+      
+      // Try a direct Firebase storage connectivity test
+      import('@/lib/firebase').then(({ storage }) => {
+        if (storage) {
+          console.log("Firebase storage object successfully imported");
+          
+          // Test if we can access the storage object
+          try {
+            const testRef = ref(storage, 'test-connectivity.txt');
+            console.log("Storage reference created successfully:", testRef.fullPath);
+          } catch (e) {
+            console.error("Error creating storage reference:", e);
+            setError(`Error creating storage reference: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        } else {
+          console.error("Storage object is undefined");
+          setError("Firebase storage object is undefined - initialization likely failed");
+        }
+      }).catch(err => {
+        console.error("Error importing Firebase modules:", err);
+        setError(`Error importing Firebase modules: ${err.message}`);
+      });
     } catch (e) {
       console.error("Error checking Firebase config:", e);
     }
