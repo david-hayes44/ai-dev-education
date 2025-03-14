@@ -9,10 +9,12 @@ interface ChatContextType {
   sessionsByCategory: Record<string, ChatSession[]>;
   currentSession: ChatSession | null;
   isLoading: boolean;
+  isStreaming: boolean;
   currentPage: string;
   selectedModel: string;
   availableModels: AIModel[];
   sendMessage: (content: string) => Promise<void>;
+  sendStreamingMessage: (content: string) => Promise<void>;
   createSession: (initialTopic?: string) => void;
   switchSession: (id: string) => void;
   deleteSession: (id: string) => void;
@@ -31,9 +33,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [sessionsByCategory, setSessionsByCategory] = useState<Record<string, ChatSession[]>>({});
   const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
   const [currentPage, setCurrentPage] = useState<string>("");
-  const [selectedModel, setSelectedModel] = useState<string>("openai/gpt-4");
+  const [selectedModel, setSelectedModel] = useState<string>("google/gemini-2.0-flash-thinking-exp:free");
   const [availableModels, setAvailableModels] = useState<AIModel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   
   // Track current page
   useEffect(() => {
@@ -46,30 +50,33 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   
   // Initialize on client side only
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      import('@/lib/chat-service').then(({ ChatService, AVAILABLE_MODELS }) => {
-        const service = ChatService.getInstance();
-        setChatService(service);
-        
-        const currentSession = service.getCurrentSession();
-        if (!currentSession) {
-          service.createSession();
-        }
-        
-        setCurrentSession(service.getCurrentSession());
-        setSessions(service.getSessions());
-        setSessionsByCategory(service.getSessionsByCategory());
-        setSelectedModel(service.getSelectedModel());
-        setAvailableModels(AVAILABLE_MODELS);
-        
-        // Set current page
-        if (pathname) {
-          const pageName = pathname.split('/').pop() || 'home';
-          service.setCurrentPage(pageName);
-          setCurrentPage(pageName);
-        }
-      });
-    }
+    // Skip initialization during SSR
+    if (typeof window === 'undefined') return;
+    
+    import('@/lib/chat-service').then(({ ChatService, AVAILABLE_MODELS }) => {
+      const service = ChatService.getInstance();
+      setChatService(service);
+      
+      const currentSession = service.getCurrentSession();
+      if (!currentSession) {
+        service.createSession();
+      }
+      
+      setCurrentSession(service.getCurrentSession());
+      setSessions(service.getSessions());
+      setSessionsByCategory(service.getSessionsByCategory());
+      setSelectedModel(service.getSelectedModel());
+      setAvailableModels(AVAILABLE_MODELS);
+      
+      // Set current page
+      if (pathname) {
+        const pageName = pathname.split('/').pop() || 'home';
+        service.setCurrentPage(pageName);
+        setCurrentPage(pageName);
+      }
+      
+      setIsInitialized(true);
+    });
   }, [pathname]);
   
   const sendMessage = async (content: string) => {
@@ -85,6 +92,35 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       console.error('Error sending message:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+  
+  // New function to send streaming messages
+  const sendStreamingMessage = async (content: string) => {
+    if (!chatService) return;
+    
+    setIsStreaming(true);
+    try {
+      // Create a placeholder for the assistant's response
+      chatService.createAssistantMessagePlaceholder(content);
+      setCurrentSession(chatService.getCurrentSession());
+      
+      // Start streaming
+      await chatService.sendStreamingMessage(content, (partialMessage) => {
+        // Update the current session with the partial response to display in real-time
+        setCurrentSession(chatService.getCurrentSession());
+      });
+      
+      // Update sessions after streaming is complete
+      setSessions(chatService.getSessions());
+      setSessionsByCategory(chatService.getSessionsByCategory());
+    } catch (error) {
+      console.error('Error sending streaming message:', error);
+      // Ensure the error is shown to the user
+      chatService.updateAssistantMessageWithError(error);
+      setCurrentSession(chatService.getCurrentSession());
+    } finally {
+      setIsStreaming(false);
     }
   };
   
@@ -145,24 +181,29 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   };
   
+  // Provide default values during SSR to prevent hydration mismatches
+  const contextValue = {
+    sessions,
+    sessionsByCategory,
+    currentSession,
+    isLoading,
+    isStreaming,
+    currentPage,
+    selectedModel,
+    availableModels,
+    sendMessage,
+    sendStreamingMessage,
+    createSession,
+    switchSession,
+    deleteSession,
+    renameSession,
+    setCategoryForSession,
+    setCurrentPage: handleSetCurrentPage,
+    setModel: handleSetModel
+  };
+  
   return (
-    <ChatContext.Provider value={{
-      sessions,
-      sessionsByCategory,
-      currentSession,
-      isLoading,
-      currentPage,
-      selectedModel,
-      availableModels,
-      sendMessage,
-      createSession,
-      switchSession,
-      deleteSession,
-      renameSession,
-      setCategoryForSession,
-      setCurrentPage: handleSetCurrentPage,
-      setModel: handleSetModel
-    }}>
+    <ChatContext.Provider value={contextValue}>
       {children}
     </ChatContext.Provider>
   );

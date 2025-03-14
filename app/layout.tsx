@@ -1,41 +1,55 @@
-import type { Metadata } from 'next'
-import localFont from 'next/font/local'
-import './globals.css'
-import TanstackClientProvider from '@/components/providers/tanstack-client-provider'
-import { ThemeProvider } from '@/components/providers/theme-provider'
-import ClientLayout from '@/components/layout/client-layout'
+import { Inter as FontSans } from "next/font/google"
+import "@/app/globals.css"
+import { ThemeProvider } from "@/components/providers/theme-provider"
+import { Toaster } from "@/components/ui/sonner"
+import { cn } from "@/lib/utils"
+import TanstackClientProvider from "@/components/providers/tanstack-client-provider"
+import ClientLayout from "@/components/layout/client-layout"
 
-const geistSans = localFont({
-  src: './fonts/GeistVF.woff',
-  variable: '--font-geist-sans',
-  weight: '100 900',
-})
-const geistMono = localFont({
-  src: './fonts/GeistMonoVF.woff',
-  variable: '--font-geist-mono',
-  weight: '100 900',
+const fontSans = FontSans({
+  subsets: ["latin"],
+  variable: "--font-sans",
 })
 
-export const metadata: Metadata = {
-  title: 'The AI Dev Odyssey | AI-Assisted Development Education',
-  description: 'Embark on a journey to master AI-assisted development, Model Context Protocol (MCP), and modern development workflows.',
-  keywords: 'AI-assisted development, MCP, Model Context Protocol, programming, education, best practices, AI tools',
-  authors: [{ name: 'AI Dev Odyssey Team' }],
+export const metadata = {
+  title: "AI Development Guide",
+  description: "Comprehensive guide to AI development with MCP",
+  icons: {
+    icon: [
+      { url: '/icon.png', type: 'image/png' }
+    ],
+    apple: [
+      { url: '/icon.png', type: 'image/png' }
+    ],
+    shortcut: ['/icon.png']
+  }
 }
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode
-}>) {
+}) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <TanstackClientProvider>
+      <head />
+      <body
+        className={cn(
+          "min-h-screen bg-background font-sans antialiased",
+          fontSans.variable
+        )}
+      >
+        <TanstackClientProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
             <ClientLayout>{children}</ClientLayout>
-          </TanstackClientProvider>
-        </ThemeProvider>
+            <Toaster />
+          </ThemeProvider>
+        </TanstackClientProvider>
       </body>
     </html>
   )

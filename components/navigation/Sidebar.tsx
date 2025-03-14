@@ -150,16 +150,31 @@ export function Sidebar({ className }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const pathname = usePathname();
 
   // Handle screen resize to detect mobile
   useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setIsMounted(true);
+    }, 100);
+    
     const handleResize = () => {
       setIsMobileOpen(false);
     };
+    
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener("resize", handleResize);
+    };
   }, []);
+
+  // Don't render during SSR or initial hydration
+  if (!isMounted) {
+    return null;
+  }
 
   // Determine if sidebar should be expanded based on click or hover
   const isExpanded = !isCollapsed || isHovered;

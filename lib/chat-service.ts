@@ -1,4 +1,4 @@
-import { ChatMessage, sendChatCompletion } from './openrouter';
+import { ChatMessage, sendChatCompletion, processStreamingResponse, ChatCompletionChunk } from './openrouter';
 
 export interface Message {
   id: string;
@@ -6,6 +6,7 @@ export interface Message {
   content: string;
   timestamp: number;
   metadata?: MessageMetadata;
+  isStreaming?: boolean; // Flag to indicate if this message is currently streaming
 }
 
 export interface MessageMetadata {
@@ -248,15 +249,13 @@ export class ChatService {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           messages: apiMessages,
-          model: this.selectedModel, // Use the selected model
-          temperature: 0.7,
-          max_tokens: 1500,
-          currentPage: this.currentPage // Pass the current page for context awareness
-        }),
+          currentPage: this.currentPage,
+          model: session.model || this.selectedModel
+        })
       });
       
       if (!response.ok) {
@@ -265,55 +264,77 @@ export class ChatService {
       
       const data = await response.json();
       
-      // Extract response metadata if any
-      const metadata: MessageMetadata = {};
-      if (data.metadata) {
-        metadata.type = data.metadata.type;
-        metadata.topic = data.metadata.topic;
-      }
-      
-      // Determine if the content contains code
-      const content = data.choices[0].message.content;
-      metadata.containsCode = content.includes('```');
-      
-      // Create assistant message from response
-      const assistantMessage: Message = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: content,
-        timestamp: Date.now(),
-        metadata
-      };
-      
-      // Add to session
-      session.messages.push(assistantMessage);
-      
-      // Update session title if it's a new chat (only has 3 messages including the system message)
-      if (session.messages.length === 3 && session.title === 'New Chat') {
-        // Generate a title based on the first user message
-        session.title = this.generateTitle(userMessage.content);
+      // Check if we have an assistant response
+      if (data.choices && data.choices.length > 0) {
+        const choice = data.choices[0];
         
-        // Set topic and category if not already set
-        if (!session.topic || !session.category) {
-          const { topic, category } = this.categorizeContent(userMessage.content);
-          session.topic = topic;
-          session.category = category;
+        // Create the assistant message
+        const assistantMessage: Message = {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: choice.message.content,
+          timestamp: Date.now(),
+          metadata: data.metadata
+        };
+        
+        // Check for JSON response and try to parse it
+        if (assistantMessage.content.startsWith('{') && assistantMessage.content.endsWith('}')) {
+          try {
+            const jsonResponse = JSON.parse(assistantMessage.content);
+            
+            // Check if this is a concept explanation
+            if (jsonResponse.concept && jsonResponse.summary) {
+              assistantMessage.metadata = {
+                ...assistantMessage.metadata,
+                type: 'concept_explanation',
+                topic: jsonResponse.concept,
+                knowledgeLevel: jsonResponse.knowledge_level || 'beginner'
+              };
+            }
+          } catch (e) {
+            // Not valid JSON, continue without parsing
+          }
         }
+        
+        // Check for code blocks which might require syntax highlighting
+        if (assistantMessage.content.includes('```')) {
+          assistantMessage.metadata = {
+            ...assistantMessage.metadata,
+            containsCode: true
+          };
+        }
+        
+        session.messages.push(assistantMessage);
+        
+        // Update the session with a better title if this is the first user message
+        if (session.messages.filter(m => m.role === 'user').length === 1) {
+          session.title = this.generateTitle(content);
+          
+          // Also update topic and category if applicable
+          const { topic, category } = this.categorizeContent(content);
+          if (topic) session.topic = topic;
+          if (category) session.category = category;
+        }
+        
+        session.updatedAt = Date.now();
+        this.saveSessions();
+        
+        return assistantMessage;
+      } else {
+        throw new Error('No response from API');
       }
-      
-      session.updatedAt = Date.now();
-      this.saveSessions();
-      
-      return assistantMessage;
     } catch (error) {
-      console.error('Error getting AI response:', error);
+      console.error('Error sending message:', error);
       
-      // Add error message
+      // Create error message
       const errorMessage: Message = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
-        content: 'Sorry, I encountered an error while processing your request. Please try again later.',
-        timestamp: Date.now()
+        content: `I'm sorry, I encountered an error while processing your request. ${error instanceof Error ? error.message : 'Please try again later.'}`,
+        timestamp: Date.now(),
+        metadata: {
+          type: 'general'
+        }
       };
       
       session.messages.push(errorMessage);
@@ -324,11 +345,182 @@ export class ChatService {
     }
   }
   
+  /**
+   * Creates a placeholder message for the assistant's response during streaming
+   */
+  public createAssistantMessagePlaceholder(userContent: string): Message {
+    if (!this.currentSessionId) {
+      this.createSession();
+    }
+    
+    const session = this.sessions[this.currentSessionId!];
+    
+    // Add user message
+    const userMessage: Message = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: userContent,
+      timestamp: Date.now()
+    };
+    
+    // Add placeholder assistant message
+    const assistantPlaceholder: Message = {
+      id: `assistant-${Date.now()}`,
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+      isStreaming: true
+    };
+    
+    session.messages.push(userMessage, assistantPlaceholder);
+    session.updatedAt = Date.now();
+    this.saveSessions();
+    
+    return assistantPlaceholder;
+  }
+  
+  /**
+   * Updates the assistant message with an error when streaming fails
+   */
+  public updateAssistantMessageWithError(error: unknown): void {
+    if (!this.currentSessionId) return;
+    
+    const session = this.sessions[this.currentSessionId];
+    const lastMessage = session.messages[session.messages.length - 1];
+    
+    if (lastMessage && lastMessage.role === 'assistant') {
+      lastMessage.content = `I'm sorry, I encountered an error while generating a response. ${error instanceof Error ? error.message : 'Please try again later.'}`;
+      lastMessage.isStreaming = false;
+      
+      session.updatedAt = Date.now();
+      this.saveSessions();
+    }
+  }
+  
+  /**
+   * Sends a message with streaming response
+   */
+  public async sendStreamingMessage(content: string, onChunk: (message: Message) => void): Promise<Message> {
+    if (!this.currentSessionId) {
+      this.createSession();
+    }
+    
+    const session = this.sessions[this.currentSessionId!];
+    
+    // Format messages for OpenRouter API (excluding the last assistant placeholder)
+    const messagesToSend = session.messages
+      .filter((msg, index) => index < session.messages.length - 1 || msg.role !== 'assistant')
+      .map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+    
+    try {
+      // Use our server-side API route with streaming enabled
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          messages: messagesToSend,
+          currentPage: this.currentPage,
+          model: session.model || this.selectedModel,
+          stream: true
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API request failed with status ${response.status}`);
+      }
+      
+      if (!response.body) {
+        throw new Error('No response stream available');
+      }
+      
+      const assistantMessage = session.messages[session.messages.length - 1];
+      
+      // Process the streaming response
+      await processStreamingResponse(
+        response.body,
+        (chunk: ChatCompletionChunk) => {
+          if (chunk.choices && chunk.choices.length > 0) {
+            const choice = chunk.choices[0];
+            if (choice.delta.content) {
+              // Append to the current content
+              assistantMessage.content += choice.delta.content;
+              
+              // Check for code blocks which might require syntax highlighting
+              if (assistantMessage.content.includes('```') && !assistantMessage.metadata?.containsCode) {
+                assistantMessage.metadata = {
+                  ...assistantMessage.metadata,
+                  containsCode: true
+                };
+              }
+              
+              // Save the session periodically for incremental updates
+              session.updatedAt = Date.now();
+              this.saveSessions();
+              
+              // Call the callback with the updated message
+              onChunk(assistantMessage);
+            }
+          }
+        },
+        () => {
+          // On complete
+          assistantMessage.isStreaming = false;
+          
+          // Update the session with a better title if this was the first user exchange
+          if (session.messages.filter(m => m.role === 'user').length === 1) {
+            session.title = this.generateTitle(content);
+            
+            // Also update topic and category if applicable
+            const { topic, category } = this.categorizeContent(content);
+            if (topic) session.topic = topic;
+            if (category) session.category = category;
+          }
+          
+          // Check if the response is JSON and attempt to parse
+          if (assistantMessage.content.startsWith('{') && assistantMessage.content.endsWith('}')) {
+            try {
+              const jsonResponse = JSON.parse(assistantMessage.content);
+              
+              // Check if this is a concept explanation
+              if (jsonResponse.concept && jsonResponse.summary) {
+                assistantMessage.metadata = {
+                  ...assistantMessage.metadata,
+                  type: 'concept_explanation',
+                  topic: jsonResponse.concept,
+                  knowledgeLevel: jsonResponse.knowledge_level || jsonResponse.explanation?.level || 'beginner'
+                };
+              }
+            } catch (e) {
+              // Not valid JSON, continue without parsing
+            }
+          }
+          
+          session.updatedAt = Date.now();
+          this.saveSessions();
+        },
+        (error) => {
+          // On error
+          console.error('Error in streaming response:', error);
+          this.updateAssistantMessageWithError(error);
+        }
+      );
+      
+      return assistantMessage;
+    } catch (error) {
+      console.error('Error sending streaming message:', error);
+      this.updateAssistantMessageWithError(error);
+      return session.messages[session.messages.length - 1];
+    }
+  }
+  
   private generateTitle(content: string): string {
-    // Simple title generation - use the first 30 chars of content
-    return content.length > 30 
-      ? `${content.substring(0, 30)}...` 
-      : content;
+    // Generate a title from the first user message
+    return content.length > 30 ? content.substring(0, 30) + '...' : content;
   }
   
   public getSessions(): ChatSession[] {
@@ -336,29 +528,26 @@ export class ChatService {
   }
   
   public getSessionsByCategory(): Record<string, ChatSession[]> {
-    const categories: Record<string, ChatSession[]> = {
-      "Model Context Protocol": [],
-      "AI Development": [],
-      "Tools": [],
-      "MCP Servers": [],
-      "General": []
-    };
+    const categories: Record<string, ChatSession[]> = {};
     
-    // Sort sessions into categories
-    for (const session of this.getSessions()) {
-      if (session.category && categories[session.category]) {
+    // Get all sessions
+    const allSessions = this.getSessions();
+    
+    // First, add categorized sessions
+    allSessions.forEach(session => {
+      if (session.category) {
+        if (!categories[session.category]) {
+          categories[session.category] = [];
+        }
         categories[session.category].push(session);
-      } else {
-        categories["General"].push(session);
-      }
-    }
-    
-    // Remove empty categories
-    Object.keys(categories).forEach(key => {
-      if (categories[key].length === 0) {
-        delete categories[key];
       }
     });
+    
+    // Then add uncategorized sessions to "General"
+    const uncategorized = allSessions.filter(session => !session.category);
+    if (uncategorized.length > 0) {
+      categories['General'] = uncategorized;
+    }
     
     return categories;
   }
@@ -368,7 +557,7 @@ export class ChatService {
   }
   
   public getCurrentSession(): ChatSession | null {
-    return this.currentSessionId ? this.sessions[this.currentSessionId] : null;
+    return this.currentSessionId ? this.sessions[this.currentSessionId] || null : null;
   }
   
   public setCurrentSession(id: string): boolean {
@@ -382,11 +571,18 @@ export class ChatService {
   public deleteSession(id: string): boolean {
     if (this.sessions[id]) {
       delete this.sessions[id];
+      this.saveSessions();
+      
+      // If the deleted session was the current one, set a new current session
       if (this.currentSessionId === id) {
         const sessions = this.getSessions();
         this.currentSessionId = sessions.length > 0 ? sessions[0].id : null;
+        
+        if (!this.currentSessionId) {
+          this.createSession(); // Create a new session if none exists
+        }
       }
-      this.saveSessions();
+      
       return true;
     }
     return false;

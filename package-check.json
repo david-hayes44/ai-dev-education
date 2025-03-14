@@ -1,0 +1,13 @@
+{
+  "name": "components-check",
+  "version": "1.0.0",
+  "description": "Check components on site",
+  "main": "check-components.js",
+  "type": "module",
+  "scripts": {
+    "check": "node check-components.js"
+  },
+  "dependencies": {
+    "puppeteer": "^21.0.0"
+  }
+} 
