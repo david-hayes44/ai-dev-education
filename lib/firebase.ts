@@ -1,6 +1,7 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp, getApps, FirebaseApp } from "firebase/app"
 import { getFirestore, Firestore } from "firebase/firestore"
+import { getStorage, FirebaseStorage } from "firebase/storage"
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -24,10 +25,14 @@ if (!getApps().length) {
 
 // Initialize Firestore
 let db: Firestore
+// Initialize Storage
+let storage: FirebaseStorage
+
 if (firebaseApp) {
   db = getFirestore(firebaseApp)
+  storage = getStorage(firebaseApp)
 } else {
   throw new Error("Firebase app initialization failed")
 }
 
-export { db }
+export { db, storage }

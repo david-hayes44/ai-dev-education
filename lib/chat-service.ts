@@ -7,6 +7,17 @@ export interface Message {
   timestamp: number;
   metadata?: MessageMetadata;
   isStreaming?: boolean; // Flag to indicate if this message is currently streaming
+  attachments?: FileAttachment[]; // New field for file attachments
+}
+
+export interface FileAttachment {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  url: string;
+  thumbnailUrl?: string;
+  content?: string; // For text-based files we might want to store content directly
 }
 
 export interface MessageMetadata {
@@ -218,7 +229,10 @@ export class ChatService {
     return { topic: undefined, category: undefined };
   }
   
-  public async sendMessage(content: string): Promise<Message> {
+  /**
+   * Sends a message with optional file attachments
+   */
+  public async sendMessage(content: string, attachments?: FileAttachment[]): Promise<Message> {
     if (!this.currentSessionId) {
       this.createSession();
     }
@@ -230,7 +244,8 @@ export class ChatService {
       id: `user-${Date.now()}`,
       role: 'user',
       content,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      attachments // Add the attachments to the user message
     };
     
     session.messages.push(userMessage);
@@ -348,7 +363,7 @@ export class ChatService {
   /**
    * Creates a placeholder message for the assistant's response during streaming
    */
-  public createAssistantMessagePlaceholder(userContent: string): Message {
+  public createAssistantMessagePlaceholder(userContent: string, attachments?: FileAttachment[]): Message {
     if (!this.currentSessionId) {
       this.createSession();
     }
@@ -360,7 +375,8 @@ export class ChatService {
       id: `user-${Date.now()}`,
       role: 'user',
       content: userContent,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      attachments // Add attachments to the user message
     };
     
     // Add placeholder assistant message

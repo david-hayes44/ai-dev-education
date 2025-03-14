@@ -1,7 +1,7 @@
 "use client"
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { ChatService, Message, ChatSession, AIModel } from '@/lib/chat-service';
+import { ChatService, Message, ChatSession, AIModel, FileAttachment } from '@/lib/chat-service';
 import { usePathname } from 'next/navigation';
 
 interface ChatContextType {
@@ -13,8 +13,8 @@ interface ChatContextType {
   currentPage: string;
   selectedModel: string;
   availableModels: AIModel[];
-  sendMessage: (content: string) => Promise<void>;
-  sendStreamingMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, attachments?: FileAttachment[]) => Promise<void>;
+  sendStreamingMessage: (content: string, attachments?: FileAttachment[]) => Promise<void>;
   createSession: (initialTopic?: string) => void;
   switchSession: (id: string) => void;
   deleteSession: (id: string) => void;
@@ -79,12 +79,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     });
   }, [pathname]);
   
-  const sendMessage = async (content: string) => {
+  const sendMessage = async (content: string, attachments?: FileAttachment[]) => {
     if (!chatService) return;
     
     setIsLoading(true);
     try {
-      await chatService.sendMessage(content);
+      await chatService.sendMessage(content, attachments);
       setCurrentSession(chatService.getCurrentSession());
       setSessions(chatService.getSessions());
       setSessionsByCategory(chatService.getSessionsByCategory());
@@ -96,13 +96,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   };
   
   // New function to send streaming messages
-  const sendStreamingMessage = async (content: string) => {
+  const sendStreamingMessage = async (content: string, attachments?: FileAttachment[]) => {
     if (!chatService) return;
     
     setIsStreaming(true);
     try {
       // Create a placeholder for the assistant's response
-      chatService.createAssistantMessagePlaceholder(content);
+      chatService.createAssistantMessagePlaceholder(content, attachments);
       setCurrentSession(chatService.getCurrentSession());
       
       // Start streaming
