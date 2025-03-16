@@ -28,14 +28,8 @@ export async function createBucketViaREST(bucketName: string, isPublic: boolean 
       headers: {
         'Content-Type': 'application/json',
         'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        // Add CORS headers
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST',
-        'Access-Control-Allow-Headers': 'Content-Type,apikey,Authorization'
+        'Authorization': `Bearer ${supabaseKey}`
       },
-      mode: 'cors',
-      credentials: 'include',
       body: JSON.stringify({
         id: bucketName,
         name: bucketName,
@@ -51,10 +45,15 @@ export async function createBucketViaREST(bucketName: string, isPublic: boolean 
       throw new Error('No response received from server');
     }
     
+    console.log('Response status:', response.status);
+    console.log('Response headers:', Object.fromEntries([...response.headers.entries()]));
+    
     const data = await response.json().catch(err => {
       console.error('Error parsing JSON response:', err);
       throw new Error(`Error parsing response: ${err.message}`);
     });
+    
+    console.log('Response data:', data);
     
     if (!response.ok) {
       // Check if error is because bucket already exists
@@ -104,14 +103,8 @@ export async function createPolicyViaREST(
       headers: {
         'Content-Type': 'application/json',
         'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        // Add CORS headers
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST',
-        'Access-Control-Allow-Headers': 'Content-Type,apikey,Authorization'
+        'Authorization': `Bearer ${supabaseKey}`
       },
-      mode: 'cors',
-      credentials: 'include',
       body: JSON.stringify({
         name: policyName,
         bucket_id: bucketName,
@@ -129,10 +122,15 @@ export async function createPolicyViaREST(
       throw new Error('No response received from server');
     }
     
+    console.log('Policy creation response status:', response.status);
+    console.log('Policy creation response headers:', Object.fromEntries([...response.headers.entries()]));
+    
     const data = await response.json().catch(err => {
       console.error('Error parsing JSON response:', err);
       throw new Error(`Error parsing response: ${err.message}`);
     });
+    
+    console.log('Policy creation response data:', data);
     
     if (!response.ok) {
       // Check if error is because policy already exists
