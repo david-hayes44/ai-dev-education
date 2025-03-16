@@ -1,0 +1,15 @@
+[
+  {
+    "origin": [
+      "https://new-ai-dev-education-jjw9vbrme-dave-hayes-projects.vercel.app", 
+      "http://localhost:3000", 
+      "http://localhost:3001",
+      "http://localhost:3002",
+      "http://localhost:3003",
+      "http://localhost:3004",
+      "http://localhost:3005"
+    ],
+    "method": ["GET", "HEAD", "PUT", "POST", "DELETE"],
+    "maxAgeSeconds": 3600
+  }
+] 

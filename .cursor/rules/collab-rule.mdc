@@ -1,4 +1,9 @@
 ---
+description: 
+globs: 
+alwaysApply: false
+---
+---
 description: How to optimize AI and human development interactions. 
 globs: 
 alwaysApply: true
