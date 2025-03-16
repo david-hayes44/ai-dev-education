@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/
 import { validateFile } from '@/lib/supabase-storage-service' // Import from supabase service
 import { uploadFile, deleteFile } from '@/lib/supabase-storage-service' // Import from supabase service
 import { isSupabaseConfigured } from '@/lib/supabase' // Import Supabase config check
-import { useToast } from '../ui/use-toast'
+import { useToast } from '@/components/ui/use-toast'
 import FileAttachmentItem from './file-attachment-item'
 
 // Test this configuration to ensure it's defined properly
@@ -327,7 +327,11 @@ export function ChatInputSupabase({
             {attachments.map(file => (
               <FileAttachmentItem
                 key={file.id}
-                file={file}
+                id={file.id}
+                name={file.name}
+                size={file.size}
+                type={file.type}
+                url={file.url}
                 onRemove={() => removeAttachment(file.id)}
               />
             ))}
