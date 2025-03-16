@@ -7,6 +7,13 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
+// Define a type for the connection info
+interface ConnectionInfo {
+  effectiveType?: string;
+  downlink?: number;
+  rtt?: number;
+}
+
 export default function SupabaseDiagnosticsPage() {
   const [log, setLog] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -156,7 +163,7 @@ export default function SupabaseDiagnosticsPage() {
 
   // Display network information
   useEffect(() => {
-    const connection = (navigator as any).connection;
+    const connection = (navigator as { connection?: ConnectionInfo }).connection;
     if (connection) {
       addLog(`Network type: ${connection.effectiveType}`);
       addLog(`Downlink: ${connection.downlink} Mbps`);

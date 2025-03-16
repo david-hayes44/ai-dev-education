@@ -5,11 +5,21 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
 
+// Define a proper type for the upload result
+interface UploadResult {
+  success: boolean;
+  url?: string;
+  path?: string;
+  bucket?: string;
+  fileName?: string;
+  error?: string;
+}
+
 export default function ServerStorageTestPage() {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [uploadResult, setUploadResult] = useState<any>(null);
+  const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
 
   const addLog = (message: string) => {
