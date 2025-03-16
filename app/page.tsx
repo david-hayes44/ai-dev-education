@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Code, BookOpen, Layers, Braces, ExternalLink, ServerCog } from "lucide-react"
+import { ArrowRight, Code, BookOpen, Layers, Braces, ExternalLink, ServerCog, Database } from "lucide-react"
 import Image from "next/image"
 
 export default function Home() {
@@ -69,6 +69,81 @@ const MCP = {
 }
             `}</code>
           </pre>
+        </div>
+      </section>
+
+      {/* Supabase Testing Section */}
+      <section className="bg-blue-50 py-12 dark:bg-blue-950 sm:py-16">
+        <div className="container mx-auto px-4">
+          <div className="mb-8 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900">
+              <Database className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+            </div>
+            <h2 className="mb-3 text-3xl font-bold text-gray-900 dark:text-white">
+              Supabase Integration Testing
+            </h2>
+            <p className="mx-auto max-w-2xl text-lg text-gray-600 dark:text-gray-400">
+              Use these tools to test the Supabase integration for storage, authentication and database functionality.
+            </p>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {/* Server-Side Storage Test */}
+            <div className="rounded-xl border border-blue-200 bg-white p-6 shadow-sm transition-all hover:shadow-md dark:border-blue-800 dark:bg-gray-900">
+              <h3 className="mb-2 text-xl font-semibold text-gray-900 dark:text-white">Server-Side Storage</h3>
+              <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                Test file uploads using server-side API to bypass CORS issues.
+              </p>
+              <Link 
+                href="/server-storage-test" 
+                className="inline-flex items-center text-blue-600 hover:underline dark:text-blue-400"
+              >
+                Open Test <ArrowRight className="ml-1 h-4 w-4" />
+              </Link>
+            </div>
+
+            {/* Direct Storage Test */}
+            <div className="rounded-xl border border-blue-200 bg-white p-6 shadow-sm transition-all hover:shadow-md dark:border-blue-800 dark:bg-gray-900">
+              <h3 className="mb-2 text-xl font-semibold text-gray-900 dark:text-white">Direct Storage Test</h3>
+              <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                Test client-side storage API with direct uploads to Supabase.
+              </p>
+              <Link 
+                href="/supabase-direct-storage-test" 
+                className="inline-flex items-center text-blue-600 hover:underline dark:text-blue-400"
+              >
+                Open Test <ArrowRight className="ml-1 h-4 w-4" />
+              </Link>
+            </div>
+
+            {/* Connection Diagnostics */}
+            <div className="rounded-xl border border-blue-200 bg-white p-6 shadow-sm transition-all hover:shadow-md dark:border-blue-800 dark:bg-gray-900">
+              <h3 className="mb-2 text-xl font-semibold text-gray-900 dark:text-white">Connection Diagnostics</h3>
+              <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                Diagnose Supabase connection issues and check configuration.
+              </p>
+              <Link 
+                href="/supabase-diagnostics" 
+                className="inline-flex items-center text-blue-600 hover:underline dark:text-blue-400"
+              >
+                Open Test <ArrowRight className="ml-1 h-4 w-4" />
+              </Link>
+            </div>
+
+            {/* Supabase Test Hub */}
+            <div className="rounded-xl border border-blue-200 bg-white p-6 shadow-sm transition-all hover:shadow-md dark:border-blue-800 dark:bg-gray-900">
+              <h3 className="mb-2 text-xl font-semibold text-gray-900 dark:text-white">Test Hub</h3>
+              <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                View all Supabase test pages from a central location.
+              </p>
+              <Link 
+                href="/supabase-test" 
+                className="inline-flex items-center text-blue-600 hover:underline dark:text-blue-400"
+              >
+                Open Hub <ArrowRight className="ml-1 h-4 w-4" />
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
 
