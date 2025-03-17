@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { cn } from "@/lib/utils"
 import TanstackClientProvider from "@/components/providers/tanstack-client-provider"
 import ClientLayout from "@/components/layout/client-layout"
+import { NavigationProvider } from "@/contexts/navigation-context"
 
 const fontSans = FontSans({
   subsets: ["latin"],
@@ -48,8 +49,10 @@ export default function RootLayout({
             disableTransitionOnChange
           >
             <AuthProvider>
-              <ClientLayout>{children}</ClientLayout>
-              <Toaster />
+              <NavigationProvider>
+                <ClientLayout>{children}</ClientLayout>
+                <Toaster />
+              </NavigationProvider>
             </AuthProvider>
           </ThemeProvider>
         </TanstackClientProvider>

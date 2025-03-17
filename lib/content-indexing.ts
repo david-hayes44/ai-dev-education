@@ -5,7 +5,6 @@
  * to support the AI Navigation Assistant with context-aware search and navigation.
  */
 
-import fs from 'fs';
 import path from 'path';
 import { promises as fsPromises } from 'fs';
 

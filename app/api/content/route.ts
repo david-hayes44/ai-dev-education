@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSiteContentIndex, searchContent, getCurrentPageContent } from "@/lib/content-indexing";
 
+// Mark this route as dynamic to prevent static generation attempts
+export const dynamic = 'force-dynamic';
+
 /**
  * API route for searching site content
  * GET /api/content/search?q=query
