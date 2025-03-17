@@ -4,6 +4,7 @@ import { ArrowRight, Code, TestTube, Lightbulb, PencilRuler } from "lucide-react
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { generateMetadata } from "@/lib/content-utils"
+import { ContentTemplate } from "@/components/content/ContentTemplate"
 
 export const metadata: Metadata = generateMetadata({
   title: "AI-Assisted Development Workshops",

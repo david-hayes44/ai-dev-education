@@ -1,7 +1,7 @@
 import { Metadata } from "next"
 import Link from "next/link"
 import Image from "next/image"
-import { ContentTemplate, CodeBlock, Callout } from "@/components/content"
+import { ContentTemplate, CodeBlock, Callout } from "@/components/content/ContentTemplate"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"

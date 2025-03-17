@@ -1,6 +1,6 @@
 import { Metadata } from "next"
 import Link from "next/link"
-import { ContentTemplate, CodeBlock, Callout } from "@/components/content"
+import { ContentTemplate, CodeBlock, Callout } from "@/components/content/ContentTemplate"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { TestTube, Code, Lightbulb, ArrowRight, ArrowLeft } from "lucide-react"
