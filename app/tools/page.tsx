@@ -6,7 +6,7 @@ import Link from "next/link"
 export const metadata: Metadata = generateMetadata({
   title: "AI Development Tools",
   description: "Explore tools that support AI-assisted development and MCP integration to enhance your development workflow.",
-  keywords: ["AI tools", "MCP integration", "Cursor", "Windsurf", "Claude", "OpenAI Agent SDK", "code assistants"],
+  keywords: ["AI tools", "MCP integration", "Cursor", "Windsurf", "code assistants"],
   section: "tools"
 })
 
@@ -43,16 +43,6 @@ export default function AIToolsPage() {
             {
               id: "windsurf",
               title: "Windsurf",
-              level: 3
-            },
-            {
-              id: "claude",
-              title: "Claude",
-              level: 3
-            },
-            {
-              id: "openai-agent-sdk",
-              title: "OpenAI Agent SDK",
               level: 3
             }
           ]
@@ -98,6 +88,11 @@ export default function AIToolsPage() {
         development across different environments and applications. MCP-compatible tools can share context with 
         each other, creating a more cohesive and efficient development experience.
       </p>
+      <p>
+        We specifically highlight Cursor and Windsurf as our recommended tools for AI-assisted development. These 
+        tools offer robust MCP integration and advanced features that make them particularly effective for modern 
+        development workflows.
+      </p>
       
       <Callout type="info" title="Why MCP Matters">
         The Model Context Protocol creates a standardized way for AI tools to share context about your 
@@ -118,8 +113,6 @@ export default function AIToolsPage() {
               <th className="px-3 py-3.5 text-left text-sm font-semibold">Feature</th>
               <th className="px-3 py-3.5 text-left text-sm font-semibold">Cursor</th>
               <th className="px-3 py-3.5 text-left text-sm font-semibold">Windsurf</th>
-              <th className="px-3 py-3.5 text-left text-sm font-semibold">Claude</th>
-              <th className="px-3 py-3.5 text-left text-sm font-semibold">OpenAI Agent SDK</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
@@ -127,50 +120,36 @@ export default function AIToolsPage() {
               <td className="px-3 py-4 text-sm">Primary Use</td>
               <td className="px-3 py-4 text-sm">Code Editor</td>
               <td className="px-3 py-4 text-sm">Code Assistant</td>
-              <td className="px-3 py-4 text-sm">LLM API</td>
-              <td className="px-3 py-4 text-sm">Agent Framework</td>
             </tr>
             <tr>
               <td className="px-3 py-4 text-sm">MCP Integration</td>
               <td className="px-3 py-4 text-sm">✅ Full</td>
               <td className="px-3 py-4 text-sm">✅ Native</td>
-              <td className="px-3 py-4 text-sm">⚠️ Via API</td>
-              <td className="px-3 py-4 text-sm">⚠️ Via API</td>
             </tr>
             <tr>
               <td className="px-3 py-4 text-sm">Code Generation</td>
               <td className="px-3 py-4 text-sm">✅ Advanced</td>
               <td className="px-3 py-4 text-sm">✅ Advanced</td>
-              <td className="px-3 py-4 text-sm">✅ Via API</td>
-              <td className="px-3 py-4 text-sm">✅ Via API</td>
             </tr>
             <tr>
               <td className="px-3 py-4 text-sm">IDE Integration</td>
               <td className="px-3 py-4 text-sm">✅ Standalone + VS Code</td>
               <td className="px-3 py-4 text-sm">✅ Multiple IDEs</td>
-              <td className="px-3 py-4 text-sm">❌ No</td>
-              <td className="px-3 py-4 text-sm">❌ No</td>
             </tr>
             <tr>
               <td className="px-3 py-4 text-sm">Command Line</td>
               <td className="px-3 py-4 text-sm">✅ Basic</td>
               <td className="px-3 py-4 text-sm">✅ Comprehensive</td>
-              <td className="px-3 py-4 text-sm">⚠️ Via API</td>
-              <td className="px-3 py-4 text-sm">⚠️ Via API</td>
             </tr>
             <tr>
               <td className="px-3 py-4 text-sm">API Access</td>
               <td className="px-3 py-4 text-sm">✅ Available</td>
               <td className="px-3 py-4 text-sm">✅ Full</td>
-              <td className="px-3 py-4 text-sm">✅ Primary</td>
-              <td className="px-3 py-4 text-sm">✅ Primary</td>
             </tr>
             <tr>
               <td className="px-3 py-4 text-sm">Team Collaboration</td>
               <td className="px-3 py-4 text-sm">✅ Good</td>
               <td className="px-3 py-4 text-sm">✅ Strong</td>
-              <td className="px-3 py-4 text-sm">⚠️ Via Custom Integration</td>
-              <td className="px-3 py-4 text-sm">✅ Good</td>
             </tr>
           </tbody>
         </table>
@@ -217,46 +196,6 @@ export default function AIToolsPage() {
           className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
         >
           Learn more about Windsurf →
-        </Link>
-      </div>
-
-      <h3 id="claude">Claude</h3>
-      <div className="flex items-center space-x-2 mb-2">
-        <span className="bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100 px-2 py-1 rounded text-xs font-medium">MCP via API</span>
-        <span className="bg-orange-100 text-orange-800 dark:bg-orange-800 dark:text-orange-100 px-2 py-1 rounded text-xs font-medium">LLM API</span>
-      </div>
-      <p>
-        Claude is a large language model by Anthropic, offering powerful capabilities for code generation, explanation, 
-        and understanding through its API. While not natively MCP-compatible, it can be integrated with MCP through custom 
-        implementations. Claude excels at understanding complex code contexts and generating high-quality code with clear 
-        explanations.
-      </p>
-      <div className="mt-2 mb-6">
-        <Link 
-          href="/tools/claude" 
-          className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
-        >
-          Learn more about Claude →
-        </Link>
-      </div>
-
-      <h3 id="openai-agent-sdk">OpenAI Agent SDK</h3>
-      <div className="flex items-center space-x-2 mb-2">
-        <span className="bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100 px-2 py-1 rounded text-xs font-medium">MCP via API</span>
-        <span className="bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100 px-2 py-1 rounded text-xs font-medium">Agent Framework</span>
-      </div>
-      <p>
-        The OpenAI Agent SDK enables developers to build custom AI assistants with specific instructions, tools, 
-        and API integrations. While not inherently MCP-compatible, it can be adapted to work with MCP systems through 
-        custom implementations. The SDK is ideal for creating tailored AI experiences that extend beyond standard code 
-        assistance.
-      </p>
-      <div className="mt-2 mb-6">
-        <Link 
-          href="/tools/openai" 
-          className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
-        >
-          Learn more about OpenAI Agent SDK →
         </Link>
       </div>
 
