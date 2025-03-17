@@ -18,9 +18,18 @@ import {
   Server,
   BookMarked,
   FileText,
-  Mail
+  Mail,
+  UserCircle,
+  User,
+  Database,
+  LogOut,
+  Sun,
+  Moon
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
+import { useTheme } from "next-themes"
+import { useAuth } from "@/lib/auth"
+import { useRouter } from "next/navigation"
 
 const navItems = [
   {
@@ -120,6 +129,9 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const { theme, setTheme } = useTheme()
+  const { user, signOut, isAuthenticated, loading } = useAuth()
+  const router = useRouter()
   
   // Handle scroll effect for header
   useEffect(() => {
@@ -153,6 +165,11 @@ export function Header() {
     document.addEventListener("click", handleClickOutside)
     return () => document.removeEventListener("click", handleClickOutside)
   }, [])
+  
+  const handleSignOut = async () => {
+    await signOut()
+    router.push('/login')
+  }
   
   return (
     <header
@@ -245,15 +262,118 @@ export function Header() {
             ))}
           </nav>
 
-          {/* Right side items: Auth Status + Theme Toggle + Mobile menu button */}
+          {/* Right side items: Your Profile dropdown */}
           <div className="flex items-center space-x-2 md:space-x-4">
-            {/* Auth Status Component */}
-            <div className="hidden sm:block">
-              <AuthStatus />
+            {/* Your Profile Dropdown */}
+            <div className="relative nav-item-container"
+                onMouseEnter={() => setActiveDropdown('profile')}
+                onMouseLeave={() => setActiveDropdown(null)}>
+              <button
+                onClick={() => toggleDropdown('profile')}
+                className="flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 text-muted-foreground hover:text-foreground hover:bg-muted"
+              >
+                <UserCircle className="w-4 h-4 mr-2" />
+                Your Profile
+                <ChevronDown className={cn(
+                  "ml-1 h-4 w-4 transition-transform duration-200",
+                  activeDropdown === 'profile' ? "rotate-180" : ""
+                )} />
+              </button>
+              
+              <AnimatePresence>
+                {activeDropdown === 'profile' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 mt-1 w-56 rounded-md shadow-lg bg-background border border-border z-10"
+                  >
+                    <div className="py-1 rounded-md bg-popover">
+                      {!isAuthenticated && (
+                        <>
+                          <Link
+                            href="/login"
+                            className="block px-4 py-2 text-sm transition-colors duration-200 text-muted-foreground hover:text-foreground hover:bg-muted"
+                          >
+                            Sign In
+                          </Link>
+                          <Link
+                            href="/signup"
+                            className="block px-4 py-2 text-sm transition-colors duration-200 text-muted-foreground hover:text-foreground hover:bg-muted"
+                          >
+                            Sign Up
+                          </Link>
+                        </>
+                      )}
+                      {isAuthenticated && (
+                        <>
+                          <div className="px-4 py-2 text-sm font-medium">
+                            {user?.displayName || 'User'}
+                          </div>
+                          <div className="px-4 py-1 text-xs text-muted-foreground">
+                            {user?.email}
+                          </div>
+                          <div className="border-t border-border my-1"></div>
+                          <Link
+                            href="/profile"
+                            className="flex items-center px-4 py-2 text-sm transition-colors duration-200 text-muted-foreground hover:text-foreground hover:bg-muted"
+                          >
+                            <User className="mr-2 h-4 w-4" />
+                            Profile
+                          </Link>
+                          {user?.isAdmin && (
+                            <Link
+                              href="/admin"
+                              className="flex items-center px-4 py-2 text-sm transition-colors duration-200 text-muted-foreground hover:text-foreground hover:bg-muted"
+                            >
+                              <Database className="mr-2 h-4 w-4" />
+                              Admin Dashboard
+                            </Link>
+                          )}
+                          <button
+                            onClick={handleSignOut}
+                            className="flex items-center w-full text-left px-4 py-2 text-sm transition-colors duration-200 text-muted-foreground hover:text-foreground hover:bg-muted"
+                          >
+                            <LogOut className="mr-2 h-4 w-4" />
+                            Log out
+                          </button>
+                        </>
+                      )}
+                      <Link
+                        href="/contact"
+                        className="flex items-center px-4 py-2 text-sm transition-colors duration-200 text-muted-foreground hover:text-foreground hover:bg-muted"
+                      >
+                        <Mail className="mr-2 h-4 w-4" />
+                        Contact
+                      </Link>
+                      <div className="border-t border-border my-1"></div>
+                      <div className="px-4 py-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Theme</span>
+                          <div className="flex space-x-1">
+                            <button
+                              onClick={() => setTheme("light")}
+                              className={`p-1 rounded-md ${theme === 'light' ? 'bg-muted' : 'hover:bg-muted/50'}`}
+                              aria-label="Light theme"
+                            >
+                              <Sun className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => setTheme("dark")}
+                              className={`p-1 rounded-md ${theme === 'dark' ? 'bg-muted' : 'hover:bg-muted/50'}`}
+                              aria-label="Dark theme"
+                            >
+                              <Moon className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-            
-            {/* Theme Toggle */}
-            <ThemeToggle />
             
             {/* Mobile menu button */}
             <button
