@@ -55,7 +55,7 @@ export default function UpdatePasswordPage() {
       
       // After successful password update, redirect to login after a delay
       setTimeout(() => {
-        router.push('/auth/login');
+        router.push('/login');
       }, 3000);
       
     } catch (err) {
@@ -142,7 +142,7 @@ export default function UpdatePasswordPage() {
           <CardFooter className="flex justify-center">
             <p className="text-sm text-muted-foreground">
               Remember your password?{' '}
-              <Link href="/auth/login" className="text-blue-500 hover:underline">
+              <Link href="/login" className="text-blue-500 hover:underline">
                 Sign in
               </Link>
             </p>

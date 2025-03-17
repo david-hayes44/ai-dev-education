@@ -3,22 +3,22 @@ import { Container } from "@/components/ui/container"
 import { PageHeader } from "@/components/page-header"
 
 export const metadata: Metadata = {
-  title: "Node.js MCP Server Implementation",
-  description: "Step-by-step guide to implementing a Model Context Protocol server using Node.js.",
+  title: "Collaboration in AI-Assisted Development",
+  description: "Best practices for team collaboration when using AI development tools.",
 }
 
 export default function Page() {
   return (
     <>
       <PageHeader
-        title="Node.js MCP Server Implementation"
-        description="Step-by-step guide to implementing a Model Context Protocol server using Node.js."
+        title="Collaboration in AI-Assisted Development"
+        description="Best practices for team collaboration when using AI development tools."
       />
       <Container className="py-8 md:py-12">
         <div className="prose prose-lg dark:prose-invert mx-auto">
           <h2>Introduction</h2>
           <p>
-            This is a placeholder content for the Node.js MCP Server Implementation page. This section will be populated with
+            This is a placeholder content for the Collaboration in AI-Assisted Development page. This section will be populated with
             actual content regarding the topic.
           </p>
 

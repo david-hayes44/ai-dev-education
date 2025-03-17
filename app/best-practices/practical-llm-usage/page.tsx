@@ -3,22 +3,22 @@ import { Container } from "@/components/ui/container"
 import { PageHeader } from "@/components/page-header"
 
 export const metadata: Metadata = {
-  title: "Node.js MCP Server Implementation",
-  description: "Step-by-step guide to implementing a Model Context Protocol server using Node.js.",
+  title: "Practical LLM Usage",
+  description: "Practical advice for effectively using Large Language Models in development.",
 }
 
 export default function Page() {
   return (
     <>
       <PageHeader
-        title="Node.js MCP Server Implementation"
-        description="Step-by-step guide to implementing a Model Context Protocol server using Node.js."
+        title="Practical LLM Usage"
+        description="Practical advice for effectively using Large Language Models in development."
       />
       <Container className="py-8 md:py-12">
         <div className="prose prose-lg dark:prose-invert mx-auto">
           <h2>Introduction</h2>
           <p>
-            This is a placeholder content for the Node.js MCP Server Implementation page. This section will be populated with
+            This is a placeholder content for the Practical LLM Usage page. This section will be populated with
             actual content regarding the topic.
           </p>
 

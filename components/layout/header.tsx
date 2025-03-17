@@ -30,15 +30,11 @@ const navItems = [
     label: "Introduction",
     icon: <BookOpen className="w-4 h-4 mr-2" />,
     dropdown: [
+      { label: "Overview", path: "/introduction" },
       { label: "Concepts", path: "/introduction/concepts" },
       { label: "Benefits", path: "/introduction/benefits" },
       { label: "Getting Started", path: "/introduction/getting-started" },
     ]
-  },
-  {
-    path: "/learning-paths",
-    label: "Learning Paths",
-    icon: <BookMarked className="w-4 h-4 mr-2" />,
   },
   {
     path: "/mcp",
@@ -50,17 +46,37 @@ const navItems = [
       { label: "Benefits", path: "/mcp/benefits" },
       { label: "Context Management", path: "/mcp/context-management" },
       { label: "Implementation", path: "/mcp/implementation" },
-      { label: "Server Overview", path: "/servers" },
-      { label: "Building Servers", path: "/building-servers" },
-      { label: "Implementations", path: "/servers/implementation" },
-      { label: "— Node.js", path: "/servers/implementation/nodejs" },
-      { label: "— Python", path: "/servers/implementation/python" },
     ]
   },
   {
     path: "/best-practices",
     label: "Best Practices",
     icon: <CheckSquare className="w-4 h-4 mr-2" />,
+    dropdown: [
+      { label: "Overview", path: "/best-practices" },
+      { label: "Context Management", path: "/best-practices/context-management" },
+      { label: "Code Review", path: "/best-practices/code-review" },
+      { label: "Testing", path: "/best-practices/testing" },
+      { label: "Security", path: "/best-practices/security" },
+      { label: "Collaboration", path: "/best-practices/collaboration" },
+      { label: "Practical LLM Usage", path: "/best-practices/practical-llm-usage" },
+      { label: "Project Customization", path: "/best-practices/project-customization" },
+      { label: "Coding Standards", path: "/best-practices/coding-standards" },
+    ]
+  },
+  {
+    path: "/servers",
+    label: "MCP Servers",
+    icon: <Wrench className="w-4 h-4 mr-2" />,
+    dropdown: [
+      { label: "Overview", path: "/servers" },
+      { label: "Architecture", path: "/servers/architecture" },
+      { label: "Implementation", path: "/servers/implementation" },
+      { label: "— Node.js", path: "/servers/implementation/nodejs" },
+      { label: "— Python", path: "/servers/implementation/python" },
+      { label: "Security", path: "/servers/security" },
+      { label: "Examples", path: "/servers/examples" },
+    ]
   },
   {
     path: "/tools",
@@ -69,9 +85,20 @@ const navItems = [
     dropdown: [
       { label: "Overview", path: "/tools" },
       { label: "Cursor", path: "/tools/cursor" },
-      { label: "— Setup", path: "/tools/cursor/setup" },
-      { label: "— Core Features", path: "/tools/cursor/core-features" },
-      { label: "— Project Rules", path: "/tools/cursor/project-rules" },
+      { label: "Windsurf", path: "/tools/windsurf" },
+      { label: "Claude", path: "/tools/claude" },
+      { label: "OpenAI", path: "/tools/openai" },
+    ]
+  },
+  {
+    path: "/learning-paths",
+    label: "Learning Paths",
+    icon: <BookMarked className="w-4 h-4 mr-2" />,
+    dropdown: [
+      { label: "Overview", path: "/learning-paths" },
+      { label: "Junior Developer", path: "/learning-paths/junior-developer" },
+      { label: "Experienced Developer", path: "/learning-paths/experienced-developer" },
+      { label: "Technical Leader", path: "/learning-paths/technical-leader" },
     ]
   },
   {
@@ -79,9 +106,11 @@ const navItems = [
     label: "Resources",
     icon: <FileText className="w-4 h-4 mr-2" />,
     dropdown: [
+      { label: "Overview", path: "/resources" },
       { label: "Knowledge Base", path: "/resources/knowledge-base" },
-      { label: "Cursor Rules", path: "/resources/knowledge-base/cursor-rules" },
-      { label: "— Best Practices", path: "/resources/knowledge-base/cursor-rules/best-practices" },
+      { label: "— Cursor Rules", path: "/resources/knowledge-base/cursor-rules" },
+      { label: "Glossary", path: "/resources/glossary" },
+      { label: "External Resources", path: "/resources/external-resources" },
     ]
   },
   {

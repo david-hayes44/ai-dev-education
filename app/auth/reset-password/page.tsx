@@ -24,7 +24,7 @@ export default function ResetPasswordPage() {
     try {
       // Use Supabase's password reset functionality
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/update-password`,
+        redirectTo: `${window.location.origin}/update-password`,
       });
       
       if (error) {
@@ -96,7 +96,7 @@ export default function ResetPasswordPage() {
           <CardFooter className="flex justify-center">
             <p className="text-sm text-muted-foreground">
               Remember your password?{' '}
-              <Link href="/auth/login" className="text-blue-500 hover:underline">
+              <Link href="/login" className="text-blue-500 hover:underline">
                 Sign in
               </Link>
             </p>
