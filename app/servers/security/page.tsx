@@ -37,7 +37,9 @@ export default function ServerSecurity() {
         }
       ]}
     >
-      <SimpleTOC />
+      <div className="sticky top-6">
+        <SimpleTOC />
+      </div>
 
       <h2 id="introduction">Introduction to MCP Server Security</h2>
       <p>

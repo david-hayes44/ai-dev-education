@@ -18,79 +18,81 @@ export default function Page() {
       />
       <Container className="py-8 md:py-12">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          {/* Table of Contents - only visible on larger screens */}
+          {/* Table of Contents - sticky on left side */}
           <div className="hidden lg:block lg:col-span-3">
-            <TableOfContents 
-              items={[
-                {
-                  id: "understanding-architecture",
-                  title: "Understanding MCP Server Architecture",
-                  level: 2,
-                },
-                {
-                  id: "core-components",
-                  title: "Core Architecture Components",
-                  level: 2,
-                  children: [
-                    {
-                      id: "data-storage",
-                      title: "Data Storage",
-                      level: 3,
-                    },
-                    {
-                      id: "api-layer",
-                      title: "API Layer",
-                      level: 3,
-                    },
-                    {
-                      id: "auth-security",
-                      title: "Authentication & Security",
-                      level: 3,
-                    },
-                    {
-                      id: "context-management",
-                      title: "Context Management",
-                      level: 3,
-                    },
-                    {
-                      id: "sync-mechanism",
-                      title: "Synchronization Mechanism",
-                      level: 3,
-                    }
-                  ]
-                },
-                {
-                  id: "architectural-patterns",
-                  title: "Architectural Patterns",
-                  level: 2,
-                },
-                {
-                  id: "deployment-options",
-                  title: "Deployment Options",
-                  level: 2,
-                },
-                {
-                  id: "scaling-considerations",
-                  title: "Scaling Considerations",
-                  level: 2,
-                },
-                {
-                  id: "integration-patterns",
-                  title: "Integration Patterns",
-                  level: 2,
-                },
-                {
-                  id: "reference-architectures",
-                  title: "Reference Architectures",
-                  level: 2,
-                },
-                {
-                  id: "conclusion",
-                  title: "Conclusion",
-                  level: 2,
-                }
-              ]}
-            />
+            <div className="sticky top-6">
+              <TableOfContents 
+                items={[
+                  {
+                    id: "understanding-architecture",
+                    title: "Understanding MCP Server Architecture",
+                    level: 2,
+                  },
+                  {
+                    id: "core-components",
+                    title: "Core Architecture Components",
+                    level: 2,
+                    children: [
+                      {
+                        id: "data-storage",
+                        title: "Data Storage",
+                        level: 3,
+                      },
+                      {
+                        id: "api-layer",
+                        title: "API Layer",
+                        level: 3,
+                      },
+                      {
+                        id: "auth-security",
+                        title: "Authentication & Security",
+                        level: 3,
+                      },
+                      {
+                        id: "context-management",
+                        title: "Context Management",
+                        level: 3,
+                      },
+                      {
+                        id: "sync-mechanism",
+                        title: "Synchronization Mechanism",
+                        level: 3,
+                      }
+                    ]
+                  },
+                  {
+                    id: "architectural-patterns",
+                    title: "Architectural Patterns",
+                    level: 2,
+                  },
+                  {
+                    id: "deployment-options",
+                    title: "Deployment Options",
+                    level: 2,
+                  },
+                  {
+                    id: "scaling-considerations",
+                    title: "Scaling Considerations",
+                    level: 2,
+                  },
+                  {
+                    id: "integration-patterns",
+                    title: "Integration Patterns",
+                    level: 2,
+                  },
+                  {
+                    id: "reference-architectures",
+                    title: "Reference Architectures",
+                    level: 2,
+                  },
+                  {
+                    id: "conclusion",
+                    title: "Conclusion",
+                    level: 2,
+                  }
+                ]}
+              />
+            </div>
           </div>
           
           {/* Main content */}

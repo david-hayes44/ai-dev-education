@@ -42,7 +42,9 @@ export default function MCPFramework() {
         }
       ]}
     >
-      <SimpleTOC />
+      <div className="sticky top-6">
+        <SimpleTOC />
+      </div>
       
       <h2 id="introduction">Introduction</h2>
       <p>
