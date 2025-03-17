@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "supabase": {
-      "command": "C:\\Windows\\System32\\cmd.exe",
-      "args": ["/c", "npx", "-y", "@modelcontextprotocol/server-postgres", "postgresql://postgres.mbabelguxbendvcawgnu:Fourth_2025%23%40%21@aws-0-us-east-2.pooler.supabase.com:5432/postgres?sslmode=no-verify"]
+      "command": "scripts/start-mcp-bridge.bat",
+      "args": []
     }
   }
 }

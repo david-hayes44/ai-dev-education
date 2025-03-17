@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "@/components/theme-toggle"
+import AuthStatus from "@/components/auth/auth-status"
 import { 
   Menu, 
   X, 
@@ -54,7 +55,6 @@ const navItems = [
       { label: "Implementations", path: "/servers/implementation" },
       { label: "— Node.js", path: "/servers/implementation/nodejs" },
       { label: "— Python", path: "/servers/implementation/python" },
-      { label: "— Firebase", path: "/servers/implementation/firebase" },
     ]
   },
   {
@@ -96,6 +96,7 @@ export function Header() {
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   
   // Handle scroll effect for header
   useEffect(() => {
@@ -130,13 +131,8 @@ export function Header() {
     return () => document.removeEventListener("click", handleClickOutside)
   }, [])
   
-  // Close mobile menu when route changes
-  useEffect(() => {
-    setMobileMenuOpen(false)
-  }, [pathname])
-  
   return (
-    <header 
+    <header
       className={cn(
         "sticky top-0 z-50 w-full transition-all duration-300",
         scrolled 
@@ -146,15 +142,13 @@ export function Header() {
     >
       <div className="container mx-auto px-6 sm:px-8">
         <div className="flex items-center justify-between h-16 md:h-20">
-          {/* Logo Section */}
-          <div className="flex-shrink-0">
-            <Link href="/" className="flex items-center">
-              <span className="font-bold text-xl sm:text-2xl gradient-text">The AI Dev Odyssey</span>
-            </Link>
-          </div>
-          
+          {/* Logo */}
+          <Link href="/" className="font-bold text-2xl tracking-tighter flex items-center">
+            <span className="text-primary mr-1">AI</span>Dev
+          </Link>
+
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-1">
+          <nav className="hidden md:flex items-center space-x-1 lg:space-x-2">
             {navItems.map((item) => (
               <div 
                 key={item.path} 
@@ -227,21 +221,24 @@ export function Header() {
               </div>
             ))}
           </nav>
-          
-          {/* Right side controls */}
-          <div className="flex items-center space-x-4">
+
+          {/* Right side items: Auth Status + Theme Toggle + Mobile menu button */}
+          <div className="flex items-center space-x-2 md:space-x-4">
+            {/* Auth Status Component */}
+            <div className="hidden sm:block">
+              <AuthStatus />
+            </div>
+            
+            {/* Theme Toggle */}
             <ThemeToggle />
             
             {/* Mobile menu button */}
             <button
-              className="md:hidden rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="inline-flex md:hidden items-center justify-center p-2 rounded-md text-foreground hover:bg-accent hover:text-accent-foreground focus:outline-none"
             >
-              {mobileMenuOpen ? (
-                <X className="h-6 w-6" />
-              ) : (
-                <Menu className="h-6 w-6" />
-              )}
+              <span className="sr-only">Open main menu</span>
+              {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
           </div>
         </div>

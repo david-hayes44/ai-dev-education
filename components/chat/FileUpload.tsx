@@ -50,15 +50,23 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
       setError(null);
 
       // Upload to specific folder per user
-      const path = `users/${userId}`;
+      const path = `users/${userId}/${fileInfo.name}`;
       
       // Handle progress updates
       const onProgressUpdate = (progress: number) => {
         setProgress(progress);
       };
 
-      const result = await uploadFile(fileInfo, path, onProgressUpdate);
-      onFileUploaded(result);
+      const result = await uploadFile("attachments", path, fileInfo, onProgressUpdate);
+      if (result) {
+        onFileUploaded({
+          path: result.path || path,
+          url: result.fullPath || `attachments/${path}`,
+          name: fileInfo.name,
+          size: fileInfo.size,
+          type: fileInfo.type
+        });
+      }
       
       // Reset after successful upload
       resetUpload();

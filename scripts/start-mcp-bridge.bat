@@ -1,0 +1,3 @@
+@echo off
+echo Starting MCP Bridge server...
+node scripts/mcp-bridge.js 

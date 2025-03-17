@@ -9,14 +9,14 @@ A modern, interactive learning environment built with Next.js that aims to educa
 - **Educational Content**: Structured learning paths on AI-assisted development and MCP
 - **Interactive Chat**: AI assistant to help answer questions about AI-Dev and MCP concepts
 - **Modern UI**: Responsive design with dark/light mode support
-- **Firebase Integration**: Ready for future dynamic content and chat persistence
+- **Supabase Integration**: Database, authentication, and storage
 - **Browser Automation**: Integration with Puppeteer MCP server for browser control
 
 ## Tech Stack
 
 - **Frontend**: Next.js 14+ with App Router, React, TypeScript
 - **Styling**: Tailwind CSS with custom theming
-- **Backend**: Firebase (Firestore)
+- **Backend**: Supabase (PostgreSQL)
 - **AI Integration**: OpenRouter API (planned)
 - **Content Rendering**: react-markdown for formatted content
 - **Browser Automation**: Puppeteer MCP server
@@ -26,7 +26,7 @@ A modern, interactive learning environment built with Next.js that aims to educa
 ### Prerequisites
 
 - Node.js 18+ and npm
-- Firebase account (for future integration)
+- Supabase account
 
 ### Installation
 
@@ -46,7 +46,7 @@ A modern, interactive learning environment built with Next.js that aims to educa
    cp .env.example .env.local
    ```
 
-4. Update the environment variables in `.env.local` with your Firebase and OpenRouter credentials.
+4. Update the environment variables in `.env.local` with your Supabase and OpenRouter credentials.
 
 5. Start the development server:
    ```bash

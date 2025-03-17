@@ -1,0 +1,3 @@
+@echo off
+echo Starting MCP PostgreSQL server...
+npx -y @modelcontextprotocol/server-postgres "postgresql://postgres.mbabelguxbendvcawgnu:Fourth_22025@aws-0-us-east-2.pooler.supabase.com:5432/postgres?sslmode=no-verify" 

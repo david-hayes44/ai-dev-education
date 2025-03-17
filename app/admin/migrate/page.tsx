@@ -1,93 +1,43 @@
 'use client';
 
-import { useState } from 'react';
-import { migrateAllStorage } from '@/utils/migrate-storage';
+import { useEffect } from 'react';
+import { useAuthContext } from '@/components/providers/auth-provider';
+import { Heading } from '@/components/ui/heading';
+import { useAuth } from '@/lib/auth';
+import { redirect } from 'next/navigation';
 
 export default function MigratePage() {
-  const [isRunning, setIsRunning] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [currentPath, setCurrentPath] = useState('');
-  const [results, setResults] = useState<{ success: number; failed: number; skipped: number } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { user, status } = useAuthContext();
+  const auth = useAuth();
 
-  const handleMigrate = async () => {
-    try {
-      setIsRunning(true);
-      setProgress(0);
-      setCurrentPath('');
-      setResults(null);
-      setError(null);
-
-      const migrationResults = await migrateAllStorage((current, total, path) => {
-        setProgress(Math.round((current / total) * 100));
-        setCurrentPath(path);
-      });
-
-      setResults(migrationResults);
-    } catch (err) {
-      console.error('Migration error:', err);
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
-    } finally {
-      setIsRunning(false);
+  // Only admin users should access this page
+  useEffect(() => {
+    if (status === 'authenticated' && user && !user.isAdmin) {
+      redirect('/dashboard');
     }
-  };
+    
+    if (status === 'unauthenticated') {
+      redirect('/login');
+    }
+  }, [status, user]);
+
+  if (status === 'loading') {
+    return <div className="p-6">Loading...</div>;
+  }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">Storage Migration Tool</h1>
+    <div className="container py-6 space-y-6">
+      <Heading title="Storage Migration" description="Migration is no longer required" />
       
-      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <h2 className="text-lg font-medium mb-4">Firebase to Supabase Migration</h2>
-        
-        <p className="mb-4 text-gray-600">
-          This tool will migrate all files from Firebase Storage to Supabase Storage.
-          The process may take some time depending on the number and size of files.
+      <div className="p-6 bg-yellow-50 border border-yellow-300 rounded-lg text-yellow-800">
+        <h3 className="text-lg font-semibold mb-2">Migration Not Required</h3>
+        <p>
+          The application has been fully migrated to use only Supabase. All Firebase references
+          have been removed from the codebase.
         </p>
-        
-        {error && (
-          <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
-            <p className="text-red-700">{error}</p>
-          </div>
-        )}
-        
-        {isRunning && (
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">Migration in progress...</span>
-              <span className="text-sm font-medium">{progress}%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2.5">
-              <div 
-                className="bg-blue-600 h-2.5 rounded-full" 
-                style={{ width: `${progress}%` }}
-              ></div>
-            </div>
-            {currentPath && (
-              <p className="mt-2 text-sm text-gray-500">
-                Currently processing: {currentPath}
-              </p>
-            )}
-          </div>
-        )}
-        
-        {results && !isRunning && (
-          <div className="mb-6 bg-green-50 p-4 rounded-md">
-            <h3 className="font-medium text-green-800 mb-2">Migration Complete</h3>
-            <ul className="text-sm text-green-700">
-              <li>Successfully migrated: {results.success} files</li>
-              <li>Failed: {results.failed} files</li>
-              <li>Skipped: {results.skipped} files</li>
-            </ul>
-          </div>
-        )}
-        
-        <button
-          onClick={handleMigrate}
-          disabled={isRunning}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed"
-        >
-          {isRunning ? 'Migration Running...' : 'Start Migration'}
-        </button>
+        <p className="mt-4">
+          This page is kept as a placeholder for documentation purposes. No further migration actions are required.
+        </p>
       </div>
     </div>
   );
