@@ -17,95 +17,213 @@ export default function Page() {
         description="Understanding the architecture and components of Model Context Protocol servers."
       />
       <Container className="py-8 md:py-12">
-        <div className="prose prose-lg dark:prose-invert mx-auto">
-          <h2>Understanding MCP Server Architecture</h2>
-          <p>
-            Building an effective Model Context Protocol (MCP) server requires a well-designed architecture that can 
-            handle context storage, retrieval, updates, and synchronization. This guide explores the key components 
-            of an MCP server architecture, providing you with a solid foundation for implementing your own solution.
-          </p>
-
-          <Callout type="info" title="What is an MCP Server?">
-            An MCP server acts as a central repository for context data used by AI tools in development workflows.
-            It standardizes how context is stored, shared, and updated across different tools and environments,
-            ensuring consistency and improving the effectiveness of AI assistance.
-          </Callout>
-
-          <h2>Core Architecture Components</h2>
-          <p>
-            An MCP server architecture consists of several essential components that work together to provide 
-            robust context management capabilities. Let's explore each of these components in detail.
-          </p>
-
-          <h3>1. Data Storage</h3>
-          <p>
-            The data storage component is responsible for persisting context data. Depending on your requirements,
-            you can choose from several options:
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <div className="bg-card rounded-lg border p-4">
-              <h4 className="text-base font-medium mb-2">Relational Databases</h4>
-              <p className="text-sm text-muted-foreground mb-2">
-                Best for structured data with complex relationships.
-              </p>
-              <ul className="text-sm list-disc pl-4 mb-0">
-                <li>PostgreSQL: Robust, feature-rich option with JSON support</li>
-                <li>MySQL/MariaDB: Widely used with good performance</li>
-                <li>SQLite: Lightweight, embeddable option for smaller deployments</li>
-              </ul>
-            </div>
-            
-            <div className="bg-card rounded-lg border p-4">
-              <h4 className="text-base font-medium mb-2">NoSQL Databases</h4>
-              <p className="text-sm text-muted-foreground mb-2">
-                Ideal for flexible schemas and document-based context data.
-              </p>
-              <ul className="text-sm list-disc pl-4 mb-0">
-                <li>MongoDB: Document-oriented with good JSON support</li>
-                <li>CouchDB: ACID-compliant with excellent replication</li>
-                <li>Firebase Firestore: Managed service with real-time capabilities</li>
-              </ul>
-            </div>
-            
-            <div className="bg-card rounded-lg border p-4">
-              <h4 className="text-base font-medium mb-2">Key-Value Stores</h4>
-              <p className="text-sm text-muted-foreground mb-2">
-                Great for simple, high-performance context lookups.
-              </p>
-              <ul className="text-sm list-disc pl-4 mb-0">
-                <li>Redis: In-memory with optional persistence</li>
-                <li>DynamoDB: Fully managed AWS service</li>
-                <li>etcd: Distributed key-value store for configuration data</li>
-              </ul>
-            </div>
-            
-            <div className="bg-card rounded-lg border p-4">
-              <h4 className="text-base font-medium mb-2">File-Based Storage</h4>
-              <p className="text-sm text-muted-foreground mb-2">
-                Simple option for smaller implementations or local development.
-              </p>
-              <ul className="text-sm list-disc pl-4 mb-0">
-                <li>JSON files: Simple, human-readable format</li>
-                <li>SQLite: File-based relational database</li>
-                <li>LevelDB: Fast key-value storage library</li>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+          {/* Table of Contents - only visible on larger screens */}
+          <div className="hidden lg:block lg:col-span-3">
+            <div className="p-4 border rounded-lg sticky top-20">
+              <p className="font-medium mb-3">On this page</p>
+              <ul className="space-y-1 text-sm">
+                <li>
+                  <a 
+                    href="#understanding-architecture" 
+                    className="text-muted-foreground hover:text-primary transition-colors block py-1"
+                  >
+                    Understanding MCP Server Architecture
+                  </a>
+                </li>
+                <li>
+                  <a 
+                    href="#core-components" 
+                    className="text-muted-foreground hover:text-primary transition-colors block py-1"
+                  >
+                    Core Architecture Components
+                  </a>
+                  <ul className="pl-4 space-y-1 mt-1">
+                    <li>
+                      <a 
+                        href="#data-storage" 
+                        className="text-muted-foreground hover:text-primary transition-colors block py-1"
+                      >
+                        Data Storage
+                      </a>
+                    </li>
+                    <li>
+                      <a 
+                        href="#api-layer" 
+                        className="text-muted-foreground hover:text-primary transition-colors block py-1"
+                      >
+                        API Layer
+                      </a>
+                    </li>
+                    <li>
+                      <a 
+                        href="#auth-security" 
+                        className="text-muted-foreground hover:text-primary transition-colors block py-1"
+                      >
+                        Authentication & Security
+                      </a>
+                    </li>
+                    <li>
+                      <a 
+                        href="#context-management" 
+                        className="text-muted-foreground hover:text-primary transition-colors block py-1"
+                      >
+                        Context Management
+                      </a>
+                    </li>
+                    <li>
+                      <a 
+                        href="#sync-mechanism" 
+                        className="text-muted-foreground hover:text-primary transition-colors block py-1"
+                      >
+                        Synchronization Mechanism
+                      </a>
+                    </li>
+                  </ul>
+                </li>
+                <li>
+                  <a 
+                    href="#architectural-patterns" 
+                    className="text-muted-foreground hover:text-primary transition-colors block py-1"
+                  >
+                    Architectural Patterns
+                  </a>
+                </li>
+                <li>
+                  <a 
+                    href="#deployment-options" 
+                    className="text-muted-foreground hover:text-primary transition-colors block py-1"
+                  >
+                    Deployment Options
+                  </a>
+                </li>
+                <li>
+                  <a 
+                    href="#scaling-considerations" 
+                    className="text-muted-foreground hover:text-primary transition-colors block py-1"
+                  >
+                    Scaling Considerations
+                  </a>
+                </li>
+                <li>
+                  <a 
+                    href="#integration-patterns" 
+                    className="text-muted-foreground hover:text-primary transition-colors block py-1"
+                  >
+                    Integration Patterns
+                  </a>
+                </li>
+                <li>
+                  <a 
+                    href="#reference-architectures" 
+                    className="text-muted-foreground hover:text-primary transition-colors block py-1"
+                  >
+                    Reference Architectures
+                  </a>
+                </li>
+                <li>
+                  <a 
+                    href="#conclusion" 
+                    className="text-muted-foreground hover:text-primary transition-colors block py-1"
+                  >
+                    Conclusion
+                  </a>
+                </li>
               </ul>
             </div>
           </div>
+          
+          {/* Main content */}
+          <div className="lg:col-span-9">
+            <div className="prose prose-lg dark:prose-invert mx-auto">
+              <h2 id="understanding-architecture">Understanding MCP Server Architecture</h2>
+              <p>
+                Building an effective Model Context Protocol (MCP) server requires a well-designed architecture that can 
+                handle context storage, retrieval, updates, and synchronization. This guide explores the key components 
+                of an MCP server architecture, providing you with a solid foundation for implementing your own solution.
+              </p>
 
-          <p>
-            Your choice of data storage should consider factors like expected data volume, query patterns,
-            scalability needs, and integration requirements. For most MCP server implementations, we recommend
-            using a database that has good support for JSON data, as context information is typically stored
-            in this format.
-          </p>
+              <Callout type="info" title="What is an MCP Server?">
+                An MCP server acts as a central repository for context data used by AI tools in development workflows.
+                It standardizes how context is stored, shared, and updated across different tools and environments,
+                ensuring consistency and improving the effectiveness of AI assistance.
+              </Callout>
 
-          <div className="bg-muted p-4 rounded-md">
-            <p className="font-mono text-sm mb-2">
-              <strong>Example:</strong> PostgreSQL table definition for context storage
-            </p>
-            <pre className="bg-card p-2 rounded">
-              {`-- Create a table for storing context data
+              <h2 id="core-components">Core Architecture Components</h2>
+              <p>
+                An MCP server architecture consists of several essential components that work together to provide 
+                robust context management capabilities. Let's explore each of these components in detail.
+              </p>
+
+              <h3 id="data-storage">1. Data Storage</h3>
+              <p>
+                The data storage component is responsible for persisting context data. Depending on your requirements,
+                you can choose from several options:
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="bg-card rounded-lg border p-4">
+                  <h4 className="text-base font-medium mb-2">Relational Databases</h4>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Best for structured data with complex relationships.
+                  </p>
+                  <ul className="text-sm list-disc pl-4 mb-0">
+                    <li>PostgreSQL: Robust, feature-rich option with JSON support</li>
+                    <li>MySQL/MariaDB: Widely used with good performance</li>
+                    <li>SQLite: Lightweight, embeddable option for smaller deployments</li>
+                  </ul>
+                </div>
+                
+                <div className="bg-card rounded-lg border p-4">
+                  <h4 className="text-base font-medium mb-2">NoSQL Databases</h4>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Ideal for flexible schemas and document-based context data.
+                  </p>
+                  <ul className="text-sm list-disc pl-4 mb-0">
+                    <li>MongoDB: Document-oriented with good JSON support</li>
+                    <li>CouchDB: ACID-compliant with excellent replication</li>
+                    <li>Firebase Firestore: Managed service with real-time capabilities</li>
+                  </ul>
+                </div>
+                
+                <div className="bg-card rounded-lg border p-4">
+                  <h4 className="text-base font-medium mb-2">Key-Value Stores</h4>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Great for simple, high-performance context lookups.
+                  </p>
+                  <ul className="text-sm list-disc pl-4 mb-0">
+                    <li>Redis: In-memory with optional persistence</li>
+                    <li>DynamoDB: Fully managed AWS service</li>
+                    <li>etcd: Distributed key-value store for configuration data</li>
+                  </ul>
+                </div>
+                
+                <div className="bg-card rounded-lg border p-4">
+                  <h4 className="text-base font-medium mb-2">File-Based Storage</h4>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Simple option for smaller implementations or local development.
+                  </p>
+                  <ul className="text-sm list-disc pl-4 mb-0">
+                    <li>JSON files: Simple, human-readable format</li>
+                    <li>SQLite: File-based relational database</li>
+                    <li>LevelDB: Fast key-value storage library</li>
+                  </ul>
+                </div>
+              </div>
+
+              <p>
+                Your choice of data storage should consider factors like expected data volume, query patterns,
+                scalability needs, and integration requirements. For most MCP server implementations, we recommend
+                using a database that has good support for JSON data, as context information is typically stored
+                in this format.
+              </p>
+
+              <div className="bg-muted p-4 rounded-md">
+                <p className="font-mono text-sm mb-2">
+                  <strong>Example:</strong> PostgreSQL table definition for context storage
+                </p>
+                <pre className="bg-card p-2 rounded">
+                  {`-- Create a table for storing context data
 CREATE TABLE context (
   id SERIAL PRIMARY KEY,
   user_id VARCHAR(128) NOT NULL,
@@ -141,70 +259,70 @@ CREATE TRIGGER update_context_timestamp
 BEFORE UPDATE ON context
 FOR EACH ROW
 EXECUTE FUNCTION update_modified_column();`}
-            </pre>
-          </div>
+                </pre>
+              </div>
 
-          <h3>2. API Endpoints</h3>
-          <p>
-            The MCP server exposes a set of RESTful API endpoints that handle context operations.
-            These endpoints allow clients to create, read, update, and delete context data.
-          </p>
+              <h3 id="api-layer">2. API Endpoints</h3>
+              <p>
+                The MCP server exposes a set of RESTful API endpoints that handle context operations.
+                These endpoints allow clients to create, read, update, and delete context data.
+              </p>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-300 dark:divide-gray-700">
-              <thead>
-                <tr>
-                  <th className="px-3 py-3.5 text-left text-sm font-semibold">Endpoint</th>
-                  <th className="px-3 py-3.5 text-left text-sm font-semibold">Method</th>
-                  <th className="px-3 py-3.5 text-left text-sm font-semibold">Purpose</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                <tr>
-                  <td className="px-3 py-4 text-sm font-mono">/api/context</td>
-                  <td className="px-3 py-4 text-sm">POST</td>
-                  <td className="px-3 py-4 text-sm">Create or update context data</td>
-                </tr>
-                <tr>
-                  <td className="px-3 py-4 text-sm font-mono">/api/context/:user/:project/:scope/:key</td>
-                  <td className="px-3 py-4 text-sm">GET</td>
-                  <td className="px-3 py-4 text-sm">Retrieve specific context data</td>
-                </tr>
-                <tr>
-                  <td className="px-3 py-4 text-sm font-mono">/api/context/:user/:project</td>
-                  <td className="px-3 py-4 text-sm">GET</td>
-                  <td className="px-3 py-4 text-sm">List all context for a project</td>
-                </tr>
-                <tr>
-                  <td className="px-3 py-4 text-sm font-mono">/api/context/:user/:project/:scope</td>
-                  <td className="px-3 py-4 text-sm">GET</td>
-                  <td className="px-3 py-4 text-sm">List context by scope</td>
-                </tr>
-                <tr>
-                  <td className="px-3 py-4 text-sm font-mono">/api/context/:user/:project/:scope/:key</td>
-                  <td className="px-3 py-4 text-sm">DELETE</td>
-                  <td className="px-3 py-4 text-sm">Delete specific context data</td>
-                </tr>
-                <tr>
-                  <td className="px-3 py-4 text-sm font-mono">/api/context/search</td>
-                  <td className="px-3 py-4 text-sm">GET</td>
-                  <td className="px-3 py-4 text-sm">Search for context data</td>
-                </tr>
-                <tr>
-                  <td className="px-3 py-4 text-sm font-mono">/api/context/sync</td>
-                  <td className="px-3 py-4 text-sm">POST</td>
-                  <td className="px-3 py-4 text-sm">Sync context between environments</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-300 dark:divide-gray-700">
+                  <thead>
+                    <tr>
+                      <th className="px-3 py-3.5 text-left text-sm font-semibold">Endpoint</th>
+                      <th className="px-3 py-3.5 text-left text-sm font-semibold">Method</th>
+                      <th className="px-3 py-3.5 text-left text-sm font-semibold">Purpose</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                    <tr>
+                      <td className="px-3 py-4 text-sm font-mono">/api/context</td>
+                      <td className="px-3 py-4 text-sm">POST</td>
+                      <td className="px-3 py-4 text-sm">Create or update context data</td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-4 text-sm font-mono">/api/context/:user/:project/:scope/:key</td>
+                      <td className="px-3 py-4 text-sm">GET</td>
+                      <td className="px-3 py-4 text-sm">Retrieve specific context data</td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-4 text-sm font-mono">/api/context/:user/:project</td>
+                      <td className="px-3 py-4 text-sm">GET</td>
+                      <td className="px-3 py-4 text-sm">List all context for a project</td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-4 text-sm font-mono">/api/context/:user/:project/:scope</td>
+                      <td className="px-3 py-4 text-sm">GET</td>
+                      <td className="px-3 py-4 text-sm">List context by scope</td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-4 text-sm font-mono">/api/context/:user/:project/:scope/:key</td>
+                      <td className="px-3 py-4 text-sm">DELETE</td>
+                      <td className="px-3 py-4 text-sm">Delete specific context data</td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-4 text-sm font-mono">/api/context/search</td>
+                      <td className="px-3 py-4 text-sm">GET</td>
+                      <td className="px-3 py-4 text-sm">Search for context data</td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-4 text-sm font-mono">/api/context/sync</td>
+                      <td className="px-3 py-4 text-sm">POST</td>
+                      <td className="px-3 py-4 text-sm">Sync context between environments</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
 
-          <div className="bg-muted p-4 rounded-md mt-4">
-            <p className="font-mono text-sm mb-2">
-              <strong>Example:</strong> Express.js route handlers for context API endpoints
-            </p>
-            <pre className="bg-card p-2 rounded">
-              {`// routes/context.js
+              <div className="bg-muted p-4 rounded-md mt-4">
+                <p className="font-mono text-sm mb-2">
+                  <strong>Example:</strong> Express.js route handlers for context API endpoints
+                </p>
+                <pre className="bg-card p-2 rounded">
+                  {`// routes/context.js
 const express = require('express');
 const router = express.Router();
 const { authenticateUser } = require('../middleware/auth');
@@ -252,25 +370,25 @@ router.post('/sync',
 );
 
 module.exports = router;`}
-            </pre>
-          </div>
+                </pre>
+              </div>
 
-          <h3>3. Authentication and Authorization</h3>
-          <p>
-            Robust authentication and authorization mechanisms are crucial for securing your MCP server. This ensures
-            that only authorized users can access and modify context data.
-          </p>
+              <h3 id="auth-security">3. Authentication and Authorization</h3>
+              <p>
+                Robust authentication and authorization mechanisms are crucial for securing your MCP server. This ensures
+                that only authorized users can access and modify context data.
+              </p>
 
-          <h4>Authentication Options</h4>
-          <ul>
-            <li>
-              <strong>API Key Authentication:</strong> Simple approach where clients include an API key with each request.
-              <div className="bg-muted p-4 rounded-md my-2">
-                <p className="font-mono text-sm mb-1">
-                  <strong>Example:</strong> API key middleware in Express.js
-                </p>
-                <pre className="bg-card p-2 rounded">
-                  {`// middleware/apiKeyAuth.js
+              <h4>Authentication Options</h4>
+              <ul>
+                <li>
+                  <strong>API Key Authentication:</strong> Simple approach where clients include an API key with each request.
+                  <div className="bg-muted p-4 rounded-md my-2">
+                    <p className="font-mono text-sm mb-1">
+                      <strong>Example:</strong> API key middleware in Express.js
+                    </p>
+                    <pre className="bg-card p-2 rounded">
+                      {`// middleware/apiKeyAuth.js
 const apiKeyAuth = (req, res, next) => {
   const apiKey = req.headers['x-api-key'];
   
@@ -296,17 +414,17 @@ const apiKeyAuth = (req, res, next) => {
 };
 
 module.exports = apiKeyAuth;`}
-                </pre>
-              </div>
-            </li>
-            <li>
-              <strong>JWT Authentication:</strong> More sophisticated approach using JSON Web Tokens for stateless authentication.
-              <div className="bg-muted p-4 rounded-md my-2">
-                <p className="font-mono text-sm mb-1">
-                  <strong>Example:</strong> JWT middleware in Express.js
-                </p>
-                <pre className="bg-card p-2 rounded">
-                  {`// middleware/jwtAuth.js
+                    </pre>
+                  </div>
+                </li>
+                <li>
+                  <strong>JWT Authentication:</strong> More sophisticated approach using JSON Web Tokens for stateless authentication.
+                  <div className="bg-muted p-4 rounded-md my-2">
+                    <p className="font-mono text-sm mb-1">
+                      <strong>Example:</strong> JWT middleware in Express.js
+                    </p>
+                    <pre className="bg-card p-2 rounded">
+                      {`// middleware/jwtAuth.js
 const jwt = require('jsonwebtoken');
 
 const jwtAuth = (req, res, next) => {
@@ -332,26 +450,26 @@ const jwtAuth = (req, res, next) => {
 };
 
 module.exports = jwtAuth;`}
-                </pre>
-              </div>
-            </li>
-            <li>
-              <strong>OAuth 2.0:</strong> Comprehensive framework for authentication and authorization, ideal for integration with existing identity systems.
-            </li>
-          </ul>
+                    </pre>
+                  </div>
+                </li>
+                <li>
+                  <strong>OAuth 2.0:</strong> Comprehensive framework for authentication and authorization, ideal for integration with existing identity systems.
+                </li>
+              </ul>
 
-          <h4>Authorization Strategies</h4>
-          <p>
-            Beyond authentication, implement appropriate authorization checks to ensure users can only access and
-            modify context data they have permission for.
-          </p>
+              <h4>Authorization Strategies</h4>
+              <p>
+                Beyond authentication, implement appropriate authorization checks to ensure users can only access and
+                modify context data they have permission for.
+              </p>
 
-          <div className="bg-muted p-4 rounded-md">
-            <p className="font-mono text-sm mb-2">
-              <strong>Example:</strong> Role-based authorization middleware
-            </p>
-            <pre className="bg-card p-2 rounded">
-              {`// middleware/checkPermission.js
+              <div className="bg-muted p-4 rounded-md">
+                <p className="font-mono text-sm mb-2">
+                  <strong>Example:</strong> Role-based authorization middleware
+                </p>
+                <pre className="bg-card p-2 rounded">
+                  {`// middleware/checkPermission.js
 const checkPermission = (resource, action) => {
   return (req, res, next) => {
     // Get user from request (set by authentication middleware)
@@ -385,47 +503,47 @@ module.exports = checkPermission;
 //   checkPermission('context', 'create'),
 //   contextController.createOrUpdateContext
 // );`}
-            </pre>
-          </div>
+                </pre>
+              </div>
 
-          <h3>4. Caching Mechanism</h3>
-          <p>
-            Implementing a caching layer can significantly improve the performance of your MCP server,
-            especially for frequently accessed context data.
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <div className="bg-card rounded-lg border p-4">
-              <h4 className="text-base font-medium mb-2">In-Memory Cache</h4>
-              <p className="text-sm text-muted-foreground">
-                Fast access but limited by available memory. Good for small to medium deployments.
+              <h3 id="context-management">4. Caching Mechanism</h3>
+              <p>
+                Implementing a caching layer can significantly improve the performance of your MCP server,
+                especially for frequently accessed context data.
               </p>
-              <ul className="text-sm list-disc pl-4 mb-0">
-                <li>Node.js Map or Object</li>
-                <li>node-cache library</li>
-                <li>lru-cache for least-recently-used eviction</li>
-              </ul>
-            </div>
-            
-            <div className="bg-card rounded-lg border p-4">
-              <h4 className="text-base font-medium mb-2">Distributed Cache</h4>
-              <p className="text-sm text-muted-foreground">
-                Scales across multiple instances. Ideal for high-traffic, clustered deployments.
-              </p>
-              <ul className="text-sm list-disc pl-4 mb-0">
-                <li>Redis</li>
-                <li>Memcached</li>
-                <li>Hazelcast</li>
-              </ul>
-            </div>
-          </div>
 
-          <div className="bg-muted p-4 rounded-md">
-            <p className="font-mono text-sm mb-2">
-              <strong>Example:</strong> Implementing a Redis cache for context data
-            </p>
-            <pre className="bg-card p-2 rounded">
-              {`// services/cacheService.js
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="bg-card rounded-lg border p-4">
+                  <h4 className="text-base font-medium mb-2">In-Memory Cache</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Fast access but limited by available memory. Good for small to medium deployments.
+                  </p>
+                  <ul className="text-sm list-disc pl-4 mb-0">
+                    <li>Node.js Map or Object</li>
+                    <li>node-cache library</li>
+                    <li>lru-cache for least-recently-used eviction</li>
+                  </ul>
+                </div>
+                
+                <div className="bg-card rounded-lg border p-4">
+                  <h4 className="text-base font-medium mb-2">Distributed Cache</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Scales across multiple instances. Ideal for high-traffic, clustered deployments.
+                  </p>
+                  <ul className="text-sm list-disc pl-4 mb-0">
+                    <li>Redis</li>
+                    <li>Memcached</li>
+                    <li>Hazelcast</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="bg-muted p-4 rounded-md">
+                <p className="font-mono text-sm mb-2">
+                  <strong>Example:</strong> Implementing a Redis cache for context data
+                </p>
+                <pre className="bg-card p-2 rounded">
+                  {`// services/cacheService.js
 const redis = require('redis');
 const { promisify } = require('util');
 
@@ -483,26 +601,26 @@ module.exports = {
   storeContextInCache,
   invalidateContextCache
 };`}
-            </pre>
-          </div>
+                </pre>
+              </div>
 
-          <h3>5. Security Measures</h3>
-          <p>
-            Implementing robust security measures is crucial for protecting context data and preventing
-            unauthorized access or data breaches.
-          </p>
+              <h3 id="sync-mechanism">5. Security Measures</h3>
+              <p>
+                Implementing robust security measures is crucial for protecting context data and preventing
+                unauthorized access or data breaches.
+              </p>
 
-          <h4>Essential Security Considerations</h4>
-          <ul>
-            <li>
-              <strong>Input Validation and Sanitization:</strong> Validate and sanitize all user inputs to prevent
-              injection attacks and ensure data integrity.
-              <div className="bg-muted p-4 rounded-md my-2">
-                <p className="font-mono text-sm mb-1">
-                  <strong>Example:</strong> Input validation with Joi
-                </p>
-                <pre className="bg-card p-2 rounded">
-                  {`// validators/contextValidator.js
+              <h4>Essential Security Considerations</h4>
+              <ul>
+                <li>
+                  <strong>Input Validation and Sanitization:</strong> Validate and sanitize all user inputs to prevent
+                  injection attacks and ensure data integrity.
+                  <div className="bg-muted p-4 rounded-md my-2">
+                    <p className="font-mono text-sm mb-1">
+                      <strong>Example:</strong> Input validation with Joi
+                    </p>
+                    <pre className="bg-card p-2 rounded">
+                      {`// validators/contextValidator.js
 const Joi = require('joi');
 
 const contextSchema = Joi.object({
@@ -521,20 +639,20 @@ const validateContext = (data) => {
 module.exports = {
   validateContext
 };`}
-                </pre>
-              </div>
-            </li>
-            <li>
-              <strong>HTTPS and TLS:</strong> Always use HTTPS to encrypt data in transit.
-            </li>
-            <li>
-              <strong>Rate Limiting:</strong> Implement rate limiting to prevent abuse and brute force attacks.
-              <div className="bg-muted p-4 rounded-md my-2">
-                <p className="font-mono text-sm mb-1">
-                  <strong>Example:</strong> Rate limiting middleware with express-rate-limit
-                </p>
-                <pre className="bg-card p-2 rounded">
-                  {`// middleware/rateLimit.js
+                    </pre>
+                  </div>
+                </li>
+                <li>
+                  <strong>HTTPS and TLS:</strong> Always use HTTPS to encrypt data in transit.
+                </li>
+                <li>
+                  <strong>Rate Limiting:</strong> Implement rate limiting to prevent abuse and brute force attacks.
+                  <div className="bg-muted p-4 rounded-md my-2">
+                    <p className="font-mono text-sm mb-1">
+                      <strong>Example:</strong> Rate limiting middleware with express-rate-limit
+                    </p>
+                    <pre className="bg-card p-2 rounded">
+                      {`// middleware/rateLimit.js
 const rateLimit = require('express-rate-limit');
 const RedisStore = require('rate-limit-redis');
 const redis = require('redis');
@@ -561,21 +679,21 @@ const apiLimiter = rateLimit({
 });
 
 module.exports = apiLimiter;`}
-                </pre>
-              </div>
-            </li>
-            <li>
-              <strong>Logging and Monitoring:</strong> Implement comprehensive logging and monitoring to detect and
-              respond to security incidents.
-            </li>
-            <li>
-              <strong>Data Encryption:</strong> Encrypt sensitive context data at rest.
-              <div className="bg-muted p-4 rounded-md my-2">
-                <p className="font-mono text-sm mb-1">
-                  <strong>Example:</strong> Field-level encryption for sensitive context data
-                </p>
-                <pre className="bg-card p-2 rounded">
-                  {`// utils/encryption.js
+                    </pre>
+                  </div>
+                </li>
+                <li>
+                  <strong>Logging and Monitoring:</strong> Implement comprehensive logging and monitoring to detect and
+                  respond to security incidents.
+                </li>
+                <li>
+                  <strong>Data Encryption:</strong> Encrypt sensitive context data at rest.
+                  <div className="bg-muted p-4 rounded-md my-2">
+                    <p className="font-mono text-sm mb-1">
+                      <strong>Example:</strong> Field-level encryption for sensitive context data
+                    </p>
+                    <pre className="bg-card p-2 rounded">
+                      {`// utils/encryption.js
 const crypto = require('crypto');
 
 // Get encryption key from environment variables
@@ -606,22 +724,22 @@ module.exports = {
   encrypt,
   decrypt
 };`}
-                </pre>
-              </div>
-            </li>
-            <li>
-              <strong>Regular Security Audits:</strong> Conduct regular security audits to identify and address vulnerabilities.
-            </li>
-          </ul>
+                    </pre>
+                  </div>
+                </li>
+                <li>
+                  <strong>Regular Security Audits:</strong> Conduct regular security audits to identify and address vulnerabilities.
+                </li>
+              </ul>
 
-          <h2>Putting It All Together</h2>
-          <p>
-            Here's a simplified architecture diagram showing how the components of an MCP server interact:
-          </p>
+              <h2>Putting It All Together</h2>
+              <p>
+                Here's a simplified architecture diagram showing how the components of an MCP server interact:
+              </p>
 
-          <div className="bg-card p-6 rounded-lg border mb-6">
-            <pre className="text-xs p-0">
-              {`┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
+              <div className="bg-card p-6 rounded-lg border mb-6">
+                <pre className="text-xs p-0">
+                  {`┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
 │                     │     │                     │     │                     │
 │   AI Development    │     │   MCP-Compatible    │     │      IDE with      │
 │        Tool         │◄────►     AI Tool        │◄────►    MCP Plugin      │
@@ -669,45 +787,47 @@ module.exports = {
                     │      MongoDB, etc.)             │
                     │                                 │
                     └─────────────────────────────────┘`}
-            </pre>
+                </pre>
+              </div>
+
+              <h2>Implementation Considerations</h2>
+              <p>
+                When implementing an MCP server, consider the following factors:
+              </p>
+              <ul>
+                <li><strong>Scalability:</strong> Design your architecture to handle increasing loads and users.</li>
+                <li><strong>Performance:</strong> Optimize for fast context retrieval and updates.</li>
+                <li><strong>Reliability:</strong> Implement proper error handling and recovery mechanisms.</li>
+                <li><strong>Maintainability:</strong> Use modular design and comprehensive documentation.</li>
+                <li><strong>Security:</strong> Implement authentication, authorization, and data protection.</li>
+                <li><strong>Compatibility:</strong> Ensure compatibility with different MCP-compatible tools.</li>
+              </ul>
+
+              <h2>Related Resources</h2>
+              <ul>
+                <li>
+                  <Link href="/servers/implementation" className="text-primary hover:underline">
+                    MCP Server Implementation Guide
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/servers/security" className="text-primary hover:underline">
+                    MCP Server Security Best Practices
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/servers/examples" className="text-primary hover:underline">
+                    MCP Server Code Examples
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/mcp/context-management" className="text-primary hover:underline">
+                    MCP Context Management
+                  </Link>
+                </li>
+              </ul>
+            </div>
           </div>
-
-          <h2>Implementation Considerations</h2>
-          <p>
-            When implementing an MCP server, consider the following factors:
-          </p>
-          <ul>
-            <li><strong>Scalability:</strong> Design your architecture to handle increasing loads and users.</li>
-            <li><strong>Performance:</strong> Optimize for fast context retrieval and updates.</li>
-            <li><strong>Reliability:</strong> Implement proper error handling and recovery mechanisms.</li>
-            <li><strong>Maintainability:</strong> Use modular design and comprehensive documentation.</li>
-            <li><strong>Security:</strong> Implement authentication, authorization, and data protection.</li>
-            <li><strong>Compatibility:</strong> Ensure compatibility with different MCP-compatible tools.</li>
-          </ul>
-
-          <h2>Related Resources</h2>
-          <ul>
-            <li>
-              <Link href="/servers/implementation" className="text-primary hover:underline">
-                MCP Server Implementation Guide
-              </Link>
-            </li>
-            <li>
-              <Link href="/servers/security" className="text-primary hover:underline">
-                MCP Server Security Best Practices
-              </Link>
-            </li>
-            <li>
-              <Link href="/servers/examples" className="text-primary hover:underline">
-                MCP Server Code Examples
-              </Link>
-            </li>
-            <li>
-              <Link href="/mcp/context-management" className="text-primary hover:underline">
-                MCP Context Management
-              </Link>
-            </li>
-          </ul>
         </div>
       </Container>
     </>
