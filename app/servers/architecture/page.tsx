@@ -1,7 +1,7 @@
 import { Metadata } from "next"
 import { Container } from "@/components/ui/container"
 import { PageHeader } from "@/components/page-header"
-import { Callout } from "@/components/content"
+import { Callout, TableOfContents } from "@/components/content"
 import Link from "next/link"
 
 export const metadata: Metadata = {
@@ -20,117 +20,77 @@ export default function Page() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
           {/* Table of Contents - only visible on larger screens */}
           <div className="hidden lg:block lg:col-span-3">
-            <div className="p-4 border rounded-lg sticky top-20">
-              <p className="font-medium mb-3">On this page</p>
-              <ul className="space-y-1 text-sm">
-                <li>
-                  <a 
-                    href="#understanding-architecture" 
-                    className="text-muted-foreground hover:text-primary transition-colors block py-1"
-                  >
-                    Understanding MCP Server Architecture
-                  </a>
-                </li>
-                <li>
-                  <a 
-                    href="#core-components" 
-                    className="text-muted-foreground hover:text-primary transition-colors block py-1"
-                  >
-                    Core Architecture Components
-                  </a>
-                  <ul className="pl-4 space-y-1 mt-1">
-                    <li>
-                      <a 
-                        href="#data-storage" 
-                        className="text-muted-foreground hover:text-primary transition-colors block py-1"
-                      >
-                        Data Storage
-                      </a>
-                    </li>
-                    <li>
-                      <a 
-                        href="#api-layer" 
-                        className="text-muted-foreground hover:text-primary transition-colors block py-1"
-                      >
-                        API Layer
-                      </a>
-                    </li>
-                    <li>
-                      <a 
-                        href="#auth-security" 
-                        className="text-muted-foreground hover:text-primary transition-colors block py-1"
-                      >
-                        Authentication & Security
-                      </a>
-                    </li>
-                    <li>
-                      <a 
-                        href="#context-management" 
-                        className="text-muted-foreground hover:text-primary transition-colors block py-1"
-                      >
-                        Context Management
-                      </a>
-                    </li>
-                    <li>
-                      <a 
-                        href="#sync-mechanism" 
-                        className="text-muted-foreground hover:text-primary transition-colors block py-1"
-                      >
-                        Synchronization Mechanism
-                      </a>
-                    </li>
-                  </ul>
-                </li>
-                <li>
-                  <a 
-                    href="#architectural-patterns" 
-                    className="text-muted-foreground hover:text-primary transition-colors block py-1"
-                  >
-                    Architectural Patterns
-                  </a>
-                </li>
-                <li>
-                  <a 
-                    href="#deployment-options" 
-                    className="text-muted-foreground hover:text-primary transition-colors block py-1"
-                  >
-                    Deployment Options
-                  </a>
-                </li>
-                <li>
-                  <a 
-                    href="#scaling-considerations" 
-                    className="text-muted-foreground hover:text-primary transition-colors block py-1"
-                  >
-                    Scaling Considerations
-                  </a>
-                </li>
-                <li>
-                  <a 
-                    href="#integration-patterns" 
-                    className="text-muted-foreground hover:text-primary transition-colors block py-1"
-                  >
-                    Integration Patterns
-                  </a>
-                </li>
-                <li>
-                  <a 
-                    href="#reference-architectures" 
-                    className="text-muted-foreground hover:text-primary transition-colors block py-1"
-                  >
-                    Reference Architectures
-                  </a>
-                </li>
-                <li>
-                  <a 
-                    href="#conclusion" 
-                    className="text-muted-foreground hover:text-primary transition-colors block py-1"
-                  >
-                    Conclusion
-                  </a>
-                </li>
-              </ul>
-            </div>
+            <TableOfContents 
+              items={[
+                {
+                  id: "understanding-architecture",
+                  title: "Understanding MCP Server Architecture",
+                  level: 2,
+                },
+                {
+                  id: "core-components",
+                  title: "Core Architecture Components",
+                  level: 2,
+                  children: [
+                    {
+                      id: "data-storage",
+                      title: "Data Storage",
+                      level: 3,
+                    },
+                    {
+                      id: "api-layer",
+                      title: "API Layer",
+                      level: 3,
+                    },
+                    {
+                      id: "auth-security",
+                      title: "Authentication & Security",
+                      level: 3,
+                    },
+                    {
+                      id: "context-management",
+                      title: "Context Management",
+                      level: 3,
+                    },
+                    {
+                      id: "sync-mechanism",
+                      title: "Synchronization Mechanism",
+                      level: 3,
+                    }
+                  ]
+                },
+                {
+                  id: "architectural-patterns",
+                  title: "Architectural Patterns",
+                  level: 2,
+                },
+                {
+                  id: "deployment-options",
+                  title: "Deployment Options",
+                  level: 2,
+                },
+                {
+                  id: "scaling-considerations",
+                  title: "Scaling Considerations",
+                  level: 2,
+                },
+                {
+                  id: "integration-patterns",
+                  title: "Integration Patterns",
+                  level: 2,
+                },
+                {
+                  id: "reference-architectures",
+                  title: "Reference Architectures",
+                  level: 2,
+                },
+                {
+                  id: "conclusion",
+                  title: "Conclusion",
+                  level: 2,
+                }
+              ]}
+            />
           </div>
           
           {/* Main content */}

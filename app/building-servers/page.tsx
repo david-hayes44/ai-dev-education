@@ -1,299 +1,222 @@
 "use client"
 
 import Link from "next/link"
+import { Container } from "@/components/ui/container"
+import { PageHeader } from "@/components/page-header"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Code, Server, Database} from "lucide-react"
+import { TableOfContents } from "@/components/content"
 
 export default function BuildingServersPage() {
   return (
     <>
-      <div className="container mx-auto px-6 sm:px-8 py-12">
-        <div className="mb-8">
-          <nav className="mb-4 flex items-center text-sm text-muted-foreground">
-            <Link href="/" className="hover:text-foreground">
-              Home
-            </Link>
-            <span className="mx-2 text-muted-foreground">/</span>
-            <span className="text-foreground">Building MCP Servers</span>
-          </nav>
-          <h1 className="mb-2 text-4xl font-extrabold tracking-tight md:text-5xl">
-            Building MCP Servers
-          </h1>
-          <p className="text-xl text-muted-foreground">
-            Learn how to implement your own MCP servers using different technologies
-          </p>
-        </div>
-
-        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3 mb-12">
-          <div className="rounded-lg border bg-card p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <Server className="h-5 w-5 text-primary" />
-              <h3 className="text-lg font-semibold">Architecture</h3>
-            </div>
-            <p className="text-muted-foreground mb-4">
-              Understand the core components and design patterns for building robust MCP servers.
-            </p>
-            <Link href="/servers/architecture">
-              <Button variant="outline" className="w-full">
-                Learn Architecture <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </Link>
+      <PageHeader
+        title="Building MCP Servers"
+        description="Learn how to implement your own MCP servers using different technologies"
+      />
+      
+      <Container className="py-8 md:py-12">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+          {/* Table of Contents - only visible on larger screens */}
+          <div className="hidden lg:block lg:col-span-3">
+            <TableOfContents 
+              items={[
+                {
+                  id: "getting-started",
+                  title: "Getting Started",
+                  level: 2,
+                },
+                {
+                  id: "server-technologies",
+                  title: "Server Technologies",
+                  level: 2,
+                  children: [
+                    {
+                      id: "node-express",
+                      title: "Node.js & Express",
+                      level: 3,
+                    },
+                    {
+                      id: "python-flask",
+                      title: "Python & Flask",
+                      level: 3,
+                    },
+                    {
+                      id: "go-server",
+                      title: "Go Server",
+                      level: 3,
+                    }
+                  ]
+                },
+                {
+                  id: "deployment-options",
+                  title: "Deployment Options",
+                  level: 2,
+                },
+                {
+                  id: "advanced-features",
+                  title: "Advanced Features",
+                  level: 2,
+                },
+                {
+                  id: "next-steps",
+                  title: "Next Steps",
+                  level: 2,
+                }
+              ]}
+            />
           </div>
           
-          <div className="rounded-lg border bg-card p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <Code className="h-5 w-5 text-primary" />
-              <h3 className="text-lg font-semibold">Implementation</h3>
-            </div>
-            <p className="text-muted-foreground mb-4">
-              Step-by-step guides for implementing MCP servers with different technologies.
-            </p>
-            <Link href="/servers/implementation">
-              <Button variant="outline" className="w-full">
-                View Implementations <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </Link>
-          </div>
-          
-          <div className="rounded-lg border bg-card p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <Database className="h-5 w-5 text-primary" />
-              <h3 className="text-lg font-semibold">Context Management</h3>
-            </div>
-            <p className="text-muted-foreground mb-4">
-              Learn techniques for efficient context handling, storage, and retrieval in MCP servers.
-            </p>
-            <Link href="/servers/context-management">
-              <Button variant="outline" className="w-full">
-                Explore Context <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </Link>
-          </div>
-        </div>
-
-        <div className="prose dark:prose-invert max-w-none">
-          <h2 className="text-3xl font-bold mb-6">MCP Server Architecture</h2>
-          <p className="lead mb-6">
-            An MCP server acts as an intermediary between the user and AI models, managing context, handling requests, and formatting responses. Understanding the architecture is crucial for building effective implementations.
-          </p>
-          
-          <div className="bg-muted p-6 rounded-lg my-8">
-            <h3 className="text-xl font-semibold mb-4">Core Components of an MCP Server</h3>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <h4 className="font-medium mb-2">1. Transport Layer</h4>
-                <p className="text-sm text-muted-foreground">
-                  Handles communication between the client and server, typically using stdio, HTTP, or WebSockets.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">2. Request Handler</h4>
-                <p className="text-sm text-muted-foreground">
-                  Processes incoming requests, validates parameters, and routes to appropriate services.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">3. Context Manager</h4>
-                <p className="text-sm text-muted-foreground">
-                  Stores and retrieves conversation history and relevant context for AI models.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">4. Tool Registry</h4>
-                <p className="text-sm text-muted-foreground">
-                  Manages available tools and their capabilities that can be used by the AI.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">5. Model Interface</h4>
-                <p className="text-sm text-muted-foreground">
-                  Communicates with AI models (like OpenAI, Claude) and handles their responses.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">6. Response Formatter</h4>
-                <p className="text-sm text-muted-foreground">
-                  Structures and formats responses for the client application.
-                </p>
-              </div>
-            </div>
-          </div>
-          
-          <h3 className="text-2xl font-bold mb-4">Basic MCP Server Implementation</h3>
-          <p>
-            Here's a simplified example of an MCP server using the official SDK:
-          </p>
-          
-          <pre className="bg-muted p-4 rounded-lg overflow-auto text-sm">
-            <code>{`import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { 
-  CallToolRequestSchema, 
-  ListToolsRequestSchema 
-} from '@modelcontextprotocol/sdk/types.js';
-
-// Create a new MCP server
-const server = new Server(
-  {
-    name: 'example-mcp-server',
-    version: '1.0.0'
-  },
-  {
-    capabilities: {
-      tools: {}
-    }
-  }
-);
-
-// Set up tool handlers
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
-    {
-      name: 'get_weather',
-      description: 'Get the current weather for a location',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          location: {
-            type: 'string',
-            description: 'City name or coordinates'
-          }
-        },
-        required: ['location']
-      }
-    }
-  ]
-}));
-
-// Handle tool calls
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  if (request.name === 'get_weather') {
-    const { location } = request.parameters;
-    
-    // In a real implementation, you would call a weather API here
-    return {
-      result: {
-        temperature: 72,
-        condition: 'Sunny',
-        location: location
-      }
-    };
-  }
-  
-  throw new Error(\`Unknown tool: \${request.name}\`);
-});
-
-// Handle errors
-server.onerror = (error) => console.error('[MCP Error]', error);
-
-// Start the server with stdio transport
-const transport = new StdioServerTransport();
-server.listen(transport);
-
-console.log('MCP Server started and listening...');`}</code>
-          </pre>
-          
-          <h2 className="text-3xl font-bold mt-12 mb-6">Implementation Approaches</h2>
-          
-          <Tabs defaultValue="nodejs" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="nodejs">Node.js</TabsTrigger>
-              <TabsTrigger value="python">Python</TabsTrigger>
-              <TabsTrigger value="firebase">Firebase</TabsTrigger>
-            </TabsList>
-            <TabsContent value="nodejs" className="p-4 border rounded-md mt-2">
-              <h3 className="text-xl font-semibold mb-4">Node.js Implementation</h3>
-              <p className="mb-4">
-                Node.js is an excellent choice for building MCP servers due to its event-driven architecture and extensive package ecosystem.
+          {/* Main content */}
+          <div className="lg:col-span-9">
+            <div className="prose prose-lg dark:prose-invert mx-auto">
+              <h2 id="getting-started">Getting Started</h2>
+              <p>
+                Building your own Model Context Protocol (MCP) server allows you to centralize context
+                management for AI tools in your development workflow. This guide will walk you through 
+                the process of setting up an MCP server using different technologies.
               </p>
-              <h4 className="font-medium mb-2">Key Benefits:</h4>
-              <ul className="list-disc pl-6 mb-4">
-                <li>Official MCP SDK available</li>
-                <li>Excellent async/await support</li>
-                <li>Rich ecosystem for API integrations</li>
-                <li>Easy deployment options (Vercel, Netlify, etc.)</li>
-              </ul>
-              <Link href="/servers/implementation/nodejs">
-                <Button>
-                  View Node.js Guide <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
-            </TabsContent>
-            <TabsContent value="python" className="p-4 border rounded-md mt-2">
-              <h3 className="text-xl font-semibold mb-4">Python Implementation</h3>
-              <p className="mb-4">
-                Python is ideal for MCP servers that need to leverage data science libraries or complex AI processing.
+              
+              <p>
+                Before diving into implementation, make sure you understand the following:
               </p>
-              <h4 className="font-medium mb-2">Key Benefits:</h4>
-              <ul className="list-disc pl-6 mb-4">
-                <li>Excellent for data processing and ML tasks</li>
-                <li>Simple syntax for rapid development</li>
-                <li>Rich ecosystem of AI and NLP libraries</li>
-                <li>Strong community support</li>
+              
+              <ul>
+                <li>The fundamental concepts of the Model Context Protocol</li>
+                <li>The architecture of an MCP server (see <Link href="/servers/architecture" className="text-primary hover:underline">Server Architecture</Link>)</li>
+                <li>Your specific requirements for context storage and management</li>
               </ul>
-              <Link href="/servers/implementation/python">
-                <Button>
-                  View Python Guide <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
-            </TabsContent>
-            <TabsContent value="firebase" className="p-4 border rounded-md mt-2">
-              <h3 className="text-xl font-semibold mb-4">Firebase Implementation</h3>
-              <p className="mb-4">
-                Firebase provides a serverless approach to building MCP servers with built-in authentication and database capabilities.
+
+              <div className="bg-muted p-4 rounded-md mb-6">
+                <p className="text-sm font-medium mb-2">Prerequisites</p>
+                <ul className="text-sm space-y-1">
+                  <li>Basic knowledge of web development and APIs</li>
+                  <li>Familiarity with at least one server-side programming language</li>
+                  <li>Understanding of database concepts</li>
+                  <li>Local development environment set up</li>
+                </ul>
+              </div>
+
+              <h2 id="server-technologies">Server Technologies</h2>
+              <p>
+                You can implement an MCP server using various technologies. Below are some popular options
+                to consider, each with its own advantages.
               </p>
-              <h4 className="font-medium mb-2">Key Benefits:</h4>
-              <ul className="list-disc pl-6 mb-4">
-                <li>Serverless architecture</li>
-                <li>Built-in authentication</li>
-                <li>Real-time database capabilities</li>
-                <li>Scalable cloud functions</li>
+
+              <h3 id="node-express">Node.js & Express</h3>
+              <p>
+                Node.js with Express is a popular choice for building MCP servers due to its simplicity,
+                performance, and extensive ecosystem.
+              </p>
+
+              <div className="bg-card p-4 rounded-lg border">
+                <p className="font-medium">Key advantages:</p>
+                <ul className="mt-2">
+                  <li>JavaScript throughout your stack</li>
+                  <li>Excellent JSON handling (native to JavaScript)</li>
+                  <li>Wide range of database connectors</li>
+                  <li>Active community and extensive packages</li>
+                </ul>
+              </div>
+
+              <h3 id="python-flask">Python & Flask</h3>
+              <p>
+                Python with Flask provides a lightweight but powerful framework for building MCP servers,
+                especially if you're already using Python in your workflow.
+              </p>
+
+              <div className="bg-card p-4 rounded-lg border">
+                <p className="font-medium">Key advantages:</p>
+                <ul className="mt-2">
+                  <li>Clean, readable syntax</li>
+                  <li>Strong data processing capabilities</li>
+                  <li>Excellent for AI/ML integration</li>
+                  <li>Simple to get started with</li>
+                </ul>
+              </div>
+
+              <h3 id="go-server">Go Server</h3>
+              <p>
+                Go excels at building high-performance web servers with minimal resource usage,
+                making it an excellent choice for production MCP servers.
+              </p>
+
+              <div className="bg-card p-4 rounded-lg border">
+                <p className="font-medium">Key advantages:</p>
+                <ul className="mt-2">
+                  <li>Excellent performance and low resource usage</li>
+                  <li>Strong concurrency support</li>
+                  <li>Compiled language with static typing</li>
+                  <li>Built-in HTTP server capabilities</li>
+                </ul>
+              </div>
+
+              <h2 id="deployment-options">Deployment Options</h2>
+              <p>
+                Once you've built your MCP server, you'll need to deploy it. Here are some common
+                deployment options to consider:
+              </p>
+
+              <ul>
+                <li><strong>Self-hosted:</strong> Deploy on your own infrastructure for maximum control</li>
+                <li><strong>Cloud providers:</strong> AWS, Google Cloud, or Azure for scalability</li>
+                <li><strong>Platform-as-a-Service:</strong> Heroku, Vercel, or Netlify for simplicity</li>
+                <li><strong>Containerization:</strong> Docker and Kubernetes for consistent deployment</li>
               </ul>
-              <Link href="/servers/implementation/firebase">
-                <Button>
-                  View Firebase Guide <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
-            </TabsContent>
-          </Tabs>
-          
-          <h2 className="text-3xl font-bold mt-12 mb-6">Getting Started</h2>
-          <p className="mb-6">
-            Ready to build your own MCP server? Follow these steps to get started:
-          </p>
-          
-          <ol className="list-decimal pl-6 mb-8 space-y-4">
-            <li>
-              <strong>Install the MCP SDK:</strong> Begin by installing the official Model Context Protocol SDK for your preferred language.
-            </li>
-            <li>
-              <strong>Choose a transport layer:</strong> Decide how your server will communicate (stdio, HTTP, WebSockets).
-            </li>
-            <li>
-              <strong>Define your tools:</strong> Determine what capabilities your MCP server will provide.
-            </li>
-            <li>
-              <strong>Implement context management:</strong> Set up storage for conversation history and context.
-            </li>
-            <li>
-              <strong>Add error handling:</strong> Implement robust error handling for a production-ready server.
-            </li>
-          </ol>
-          
-          <div className="bg-primary/10 p-6 rounded-lg my-8 border border-primary/20">
-            <h3 className="text-xl font-semibold mb-4 text-primary">Try It Yourself</h3>
-            <p className="mb-4">
-              The best way to learn is by doing. Use our interactive code playground to experiment with MCP server implementations.
-            </p>
-            <Link href="/playground">
-              <Button>
-                Open Code Playground <Code className="ml-2 h-4 w-4" />
-              </Button>
-            </Link>
+
+              <h2 id="advanced-features">Advanced Features</h2>
+              <p>
+                Once you have a basic MCP server working, consider implementing these advanced features:
+              </p>
+
+              <ul>
+                <li><strong>Authentication and Authorization:</strong> Secure your server with JWT or OAuth</li>
+                <li><strong>Versioning:</strong> Support versioning of context data</li>
+                <li><strong>Webhooks:</strong> Notify other services when context changes</li>
+                <li><strong>Rate Limiting:</strong> Protect your server from abuse</li>
+                <li><strong>Analytics:</strong> Track usage patterns and optimize performance</li>
+                <li><strong>Search:</strong> Implement advanced search capabilities for context data</li>
+              </ul>
+
+              <h2 id="next-steps">Next Steps</h2>
+              <p>
+                Ready to start building your MCP server? Check out these resources:
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 not-prose mt-6">
+                <Link 
+                  href="/servers/implementation" 
+                  className="flex items-center p-4 border rounded-lg hover:border-primary hover:bg-accent transition-colors"
+                >
+                  <div className="mr-4">
+                    <Code className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">Implementation Guide</h3>
+                    <p className="text-sm text-muted-foreground">Step-by-step instructions for building servers</p>
+                  </div>
+                  <ArrowRight className="ml-auto h-5 w-5 text-muted-foreground" />
+                </Link>
+                
+                <Link 
+                  href="/servers/examples" 
+                  className="flex items-center p-4 border rounded-lg hover:border-primary hover:bg-accent transition-colors"
+                >
+                  <div className="mr-4">
+                    <Database className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">Server Examples</h3>
+                    <p className="text-sm text-muted-foreground">Example implementations in different languages</p>
+                  </div>
+                  <ArrowRight className="ml-auto h-5 w-5 text-muted-foreground" />
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </Container>
     </>
   )
 } 

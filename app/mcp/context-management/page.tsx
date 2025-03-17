@@ -1,5 +1,5 @@
 import { Metadata } from "next"
-import { ContentTemplate, CodeBlock, Callout } from "@/components/content"
+import { ContentTemplate, CodeBlock, Callout, SimpleTOC } from "@/components/content"
 import { generateMetadata } from "@/lib/content-utils"
 
 export const metadata: Metadata = generateMetadata({
@@ -28,78 +28,9 @@ export default function MCPContextManagement() {
           }
         ]
       }}
-      tableOfContents={[
-        {
-          id: "understanding-context",
-          title: "Understanding Context in AI",
-          level: 2
-        },
-        {
-          id: "context-structure",
-          title: "Structuring Context Effectively",
-          level: 2,
-          children: [
-            {
-              id: "project-context",
-              title: "Project Context",
-              level: 3
-            },
-            {
-              id: "code-context",
-              title: "Code Context",
-              level: 3
-            },
-            {
-              id: "task-context",
-              title: "Task Context",
-              level: 3
-            }
-          ]
-        },
-        {
-          id: "context-lifecycle",
-          title: "Context Lifecycle Management",
-          level: 2
-        },
-        {
-          id: "context-optimization",
-          title: "Context Optimization Techniques",
-          level: 2
-        },
-        {
-          id: "collaborative-context",
-          title: "Collaborative Context Management",
-          level: 2
-        },
-        {
-          id: "integration-patterns",
-          title: "Context Integration Patterns",
-          level: 2
-        },
-        {
-          id: "practical-examples",
-          title: "Practical Examples",
-          level: 2
-        }
-      ]}
-      relatedContent={[
-        {
-          title: "MCP Basics",
-          href: "/mcp/basics",
-          description: "Learn the fundamental concepts of the Model Context Protocol."
-        },
-        {
-          title: "MCP Benefits",
-          href: "/mcp/benefits",
-          description: "Explore the advantages of using MCP in your development workflow."
-        },
-        {
-          title: "MCP Implementation",
-          href: "/mcp/implementation",
-          description: "Practical guide to implementing MCP in your projects."
-        }
-      ]}
     >
+      <SimpleTOC />
+      
       <h2 id="understanding-context">Understanding Context in AI</h2>
       <p>
         Context is the information that AI models use to generate relevant and accurate responses. It shapes the AI's understanding of your project, your requirements, and the specific tasks you want it to perform. Without proper context, even the most powerful AI models can produce irrelevant or incorrect results.
