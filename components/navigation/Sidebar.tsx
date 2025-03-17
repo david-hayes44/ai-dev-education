@@ -98,8 +98,9 @@ const navItems: NavItem[] = [
         ] 
       },
       { label: "Windsurf", href: "/tools/windsurf" },
-      { label: "Claude", href: "/tools/claude" },
-      { label: "OpenAI", href: "/tools/openai" },
+      // Claude and OpenAI Agent SDK pages are hidden from navigation
+      // { label: "Claude", href: "/tools/claude" },
+      // { label: "OpenAI", href: "/tools/openai" },
     ],
   },
   {

@@ -1,48 +1,774 @@
 import { Metadata } from "next"
-import { Container } from "@/components/ui/container"
-import { PageHeader } from "@/components/page-header"
+import { ContentTemplate, CodeBlock, Callout } from "@/components/content"
+import { generateMetadata } from "@/lib/content-utils"
 
-export const metadata: Metadata = {
+export const metadata: Metadata = generateMetadata({
   title: "Testing AI-Generated Code",
-  description: "Strategies and techniques for effectively testing code created with AI assistance.",
+  description: "Learn effective strategies and best practices for testing code created with AI assistance.",
+  keywords: ["testing", "AI-generated code", "test-driven development", "TDD", "unit testing", "integration testing", "property-based testing", "test coverage", "mutation testing"],
+  section: "best-practices/testing"
+})
+
+export default function TestingPage() {
+  return (
+    <ContentTemplate
+      title="Testing AI-Generated Code"
+      description="Learn effective strategies and best practices for testing code created with AI assistance."
+      metadata={{
+        difficulty: "intermediate",
+        timeToComplete: "20 minutes",
+        prerequisites: [
+          {
+            title: "Introduction to AI-Assisted Development",
+            href: "/introduction/concepts"
+          },
+          {
+            title: "AI-Assisted Code Review Best Practices",
+            href: "/best-practices/code-review"
+          }
+        ]
+      }}
+      tableOfContents={[
+        {
+          id: "introduction",
+          title: "Introduction",
+          level: 2
+        },
+        {
+          id: "challenges",
+          title: "Unique Testing Challenges for AI-Generated Code",
+          level: 2,
+          children: [
+            {
+              id: "unpredictability",
+              title: "Unpredictability and Variance",
+              level: 3
+            },
+            {
+              id: "hidden-assumptions",
+              title: "Hidden Assumptions",
+              level: 3
+            },
+            {
+              id: "false-confidence",
+              title: "False Confidence",
+              level: 3
+            }
+          ]
+        },
+        {
+          id: "test-driven-approach",
+          title: "Test-Driven Approach to AI Generation",
+          level: 2,
+          children: [
+            {
+              id: "tdd-benefits",
+              title: "Benefits of TDD with AI",
+              level: 3
+            },
+            {
+              id: "tdd-workflow",
+              title: "TDD Workflow for AI-Generated Code",
+              level: 3
+            },
+            {
+              id: "test-first-example",
+              title: "Test-First Example",
+              level: 3
+            }
+          ]
+        },
+        {
+          id: "effective-testing-strategies",
+          title: "Effective Testing Strategies",
+          level: 2,
+          children: [
+            {
+              id: "property-based-testing",
+              title: "Property-Based Testing",
+              level: 3
+            },
+            {
+              id: "mutation-testing",
+              title: "Mutation Testing",
+              level: 3
+            },
+            {
+              id: "coverage-guided-testing",
+              title: "Coverage-Guided Testing",
+              level: 3
+            },
+            {
+              id: "edge-case-testing",
+              title: "Edge Case Testing",
+              level: 3
+            }
+          ]
+        },
+        {
+          id: "comprehensive-testing-approach",
+          title: "Comprehensive Testing Approach",
+          level: 2,
+          children: [
+            {
+              id: "unit-testing",
+              title: "Unit Testing",
+              level: 3
+            },
+            {
+              id: "integration-testing",
+              title: "Integration Testing",
+              level: 3
+            },
+            {
+              id: "end-to-end-testing",
+              title: "End-to-End Testing",
+              level: 3
+            }
+          ]
+        },
+        {
+          id: "ai-assisted-testing",
+          title: "AI-Assisted Testing",
+          level: 2
+        },
+        {
+          id: "practical-tips",
+          title: "Practical Tips and Best Practices",
+          level: 2
+        }
+      ]}
+      relatedContent={[
+        {
+          title: "AI-Assisted Code Review Best Practices",
+          href: "/best-practices/code-review",
+          description: "Learn effective strategies for reviewing code generated or modified with AI assistance."
+        },
+        {
+          title: "Security Considerations",
+          href: "/best-practices/security",
+          description: "Understand security implications and best practices for AI-generated code."
+        },
+        {
+          title: "Practical LLM Usage",
+          href: "/best-practices/practical-llm-usage",
+          description: "Strategies for effectively using Large Language Models in your development workflow."
+        }
+      ]}
+    >
+      <h2 id="introduction">Introduction</h2>
+      <p>
+        Testing code generated by AI assistants introduces new dimensions to the already complex domain of software testing. 
+        While AI can produce functional code quickly, ensuring its quality, reliability, and security requires specialized 
+        testing approaches that account for the unique characteristics of AI-generated code.
+      </p>
+      <p>
+        This guide will help you develop effective testing strategies specifically designed for AI-generated code, 
+        exploring how traditional testing methodologies can be adapted and enhanced to address the unique challenges 
+        presented by AI assistance in software development.
+      </p>
+
+      <Callout type="info" title="Why Testing Matters Even More with AI">
+        Studies show that developers using AI assistants produce 30-40% more code in less time, but without proper 
+        testing strategies, defect rates can increase by up to 25%. Effective testing is what transforms 
+        AI-generated code from "quickly written" to "production-ready."
+      </Callout>
+
+      <h2 id="challenges">Unique Testing Challenges for AI-Generated Code</h2>
+      <p>
+        AI-generated code presents several unique testing challenges that traditional approaches may not adequately address. 
+        Understanding these challenges is essential for developing effective testing strategies.
+      </p>
+
+      <h3 id="unpredictability">Unpredictability and Variance</h3>
+      <p>
+        One of the most significant challenges with AI-generated code is its unpredictability. Even with identical prompts, 
+        AI may generate different implementations each time, making testing less deterministic.
+      </p>
+
+      <CodeBlock 
+        language="javascript"
+        code={`// Example: Two different responses to the same prompt
+// "Write a function to validate an email address"
+
+// First generation:
+function validateEmail(email) {
+  const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return pattern.test(email);
 }
 
-export default function Page() {
-  return (
-    <>
-      <PageHeader
-        title="Testing AI-Generated Code"
-        description="Strategies and techniques for effectively testing code created with AI assistance."
+// Second generation:
+function validateEmail(email) {
+  if (!email || typeof email !== 'string') return false;
+  
+  // RFC 5322 compliant regex
+  const regex = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+  return regex.test(email);
+}`}
       />
-      <Container className="py-8 md:py-12">
-        <div className="prose prose-lg dark:prose-invert mx-auto">
-          <h2>Introduction</h2>
+
+      <p>
+        This variance means that tests created for one generation may not catch issues in another generation, requiring more 
+        robust testing strategies that focus on behaviors and properties rather than specific implementations.
+      </p>
+
+      <h3 id="hidden-assumptions">Hidden Assumptions</h3>
+      <p>
+        AI-generated code often includes hidden assumptions that may not be immediately apparent, especially about 
+        input validation, error handling, and edge cases.
+      </p>
+
+      <CodeBlock 
+        language="python"
+        code={`# Example of hidden assumptions in AI-generated code
+
+def calculate_average(numbers):
+    return sum(numbers) / len(numbers)
+    
+# Hidden assumptions:
+# 1. Input is always an iterable of numbers
+# 2. Input list is never empty (would cause division by zero)
+# 3. Input contains only numeric values
+# 4. No checking for potential overflow issues with large numbers`}
+      />
+
+      <p>
+        These assumptions need to be explicitly tested, as they may lead to runtime errors or incorrect results in production.
+      </p>
+
+      <h3 id="false-confidence">False Confidence</h3>
+      <p>
+        AI-generated code often presents with a high degree of confidence, complete with documentation and comments 
+        that may give a false sense of correctness. This can lead developers to be less critical during testing.
+      </p>
+
+      <CodeBlock 
+        language="java"
+        code={`/**
+ * A secure method to validate user credentials against the database.
+ * Uses proper password hashing and prevents SQL injection.
+ * @param username The username to validate
+ * @param password The password to check
+ * @return true if credentials are valid, false otherwise
+ */
+public boolean validateCredentials(String username, String password) {
+    // Despite the confident comment, this method might still:
+    // 1. Use string concatenation for SQL queries (SQL injection risk)
+    // 2. Compare password hashes incorrectly
+    // 3. Handle database exceptions poorly
+    // 4. Leak information through timing attacks
+    // All of which require thorough testing to verify
+}`}
+      />
+
+      <p>
+        Effective testing requires a skeptical mindset, especially when the code appears polished and well-documented.
+      </p>
+
+      <h2 id="test-driven-approach">Test-Driven Approach to AI Generation</h2>
+      <p>
+        Test-Driven Development (TDD) is particularly valuable when working with AI-generated code, as it provides a framework 
+        for defining expected behavior before implementation.
+      </p>
+
+      <h3 id="tdd-benefits">Benefits of TDD with AI</h3>
+      <ul>
+        <li><strong>Clearer Requirements</strong>: Tests serve as explicit requirements that the AI must satisfy</li>
+        <li><strong>Better Prompt Guidance</strong>: Tests help focus AI on specific behaviors rather than general implementation</li>
+        <li><strong>Immediate Verification</strong>: Generated code can be immediately validated against predefined tests</li>
+        <li><strong>Reduced Hallucinations</strong>: Tests constrain the AI to implement actual, required functionality</li>
+        <li><strong>Iterative Improvement</strong>: Failed tests provide clear feedback for refining AI-generated code</li>
+      </ul>
+
+      <h3 id="tdd-workflow">TDD Workflow for AI-Generated Code</h3>
+      <ol>
+        <li>Write tests that define the expected behavior of the code to be generated</li>
+        <li>Request AI to implement code that passes these tests</li>
+        <li>Run the tests against the generated code</li>
+        <li>Refine the implementation (with or without AI assistance) until tests pass</li>
+        <li>Extend tests to cover edge cases and additional requirements</li>
+        <li>Repeat the process to refine the implementation further</li>
+      </ol>
+
+      <Callout type="success" title="TDD Success Rate">
+        Projects using TDD with AI-generated code report up to 60% fewer defects 
+        reaching production compared to projects that test AI-generated code after implementation.
+      </Callout>
+
+      <h3 id="test-first-example">Test-First Example</h3>
+      <p>
+        Here's an example of a test-first approach for generating a user authentication function:
+      </p>
+
+      <CodeBlock 
+        language="javascript"
+        code={`// Step 1: Write tests first
+describe('User Authentication', () => {
+  test('should authenticate valid credentials', async () => {
+    const result = await authenticateUser('valid@example.com', 'correct-password');
+    expect(result.success).toBe(true);
+    expect(result.user).toHaveProperty('id');
+    expect(result.token).toBeDefined();
+  });
+
+  test('should reject invalid credentials', async () => {
+    const result = await authenticateUser('valid@example.com', 'wrong-password');
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Invalid credentials');
+    expect(result.token).toBeUndefined();
+  });
+
+  test('should validate email format', async () => {
+    const result = await authenticateUser('invalid-email', 'any-password');
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Invalid email format');
+  });
+
+  test('should handle non-existent users', async () => {
+    const result = await authenticateUser('nonexistent@example.com', 'any-password');
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('User not found');
+  });
+
+  test('should handle server errors gracefully', async () => {
+    // Mock a database error
+    mockDatabaseError();
+    const result = await authenticateUser('valid@example.com', 'correct-password');
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Authentication service unavailable');
+  });
+});
+
+// Step 2: Ask AI to implement the function that passes these tests
+// The tests clearly define the expected behavior, error cases, and validation requirements`}
+      />
+
+      <p>
+        With these tests, you provide AI with clear requirements about authentication behavior, error handling, 
+        and edge cases, resulting in more reliable code generation.
+      </p>
+
+      <h2 id="effective-testing-strategies">Effective Testing Strategies</h2>
+      <p>
+        Beyond traditional unit and integration testing, several specialized testing strategies are particularly 
+        effective for AI-generated code.
+      </p>
+
+      <h3 id="property-based-testing">Property-Based Testing</h3>
+      <p>
+        Property-based testing focuses on verifying that code satisfies certain properties across a wide range of inputs, 
+        rather than specific input-output pairs. This approach is ideal for AI-generated code because it tests fundamental 
+        correctness properties rather than implementation details.
+      </p>
+
+      <CodeBlock 
+        language="javascript"
+        code={`// Example using the fast-check library for property-based testing
+import fc from 'fast-check';
+
+// Testing a sort function
+test('sort function should maintain array length', () => {
+  fc.assert(
+    fc.property(fc.array(fc.integer()), (arr) => {
+      const sorted = sortFunction(arr);
+      return sorted.length === arr.length;
+    })
+  );
+});
+
+test('sort function should be idempotent', () => {
+  fc.assert(
+    fc.property(fc.array(fc.integer()), (arr) => {
+      const onceSorted = sortFunction(arr);
+      const twiceSorted = sortFunction(onceSorted);
+      return JSON.stringify(onceSorted) === JSON.stringify(twiceSorted);
+    })
+  );
+});
+
+test('sort function should maintain all original elements', () => {
+  fc.assert(
+    fc.property(fc.array(fc.integer()), (arr) => {
+      const sorted = sortFunction(arr);
+      // Check if sorted contains all elements from arr
+      return arr.every(element => sorted.includes(element)) && 
+             sorted.every(element => arr.includes(element));
+    })
+  );
+});`}
+      />
+
+      <p>
+        Property-based testing can reveal issues that traditional testing might miss, especially for functions 
+        with complex behavior or a wide range of possible inputs.
+      </p>
+
+      <h3 id="mutation-testing">Mutation Testing</h3>
+      <p>
+        Mutation testing evaluates the quality of your tests by introducing small changes ("mutations") to the code and 
+        checking if the tests detect these changes. This is particularly valuable for AI-generated code, as it helps 
+        ensure that tests are actually verifying critical aspects of the implementation.
+      </p>
+
+      <CodeBlock 
+        language="bash"
+        code={`# Example running Stryker mutation testing tool on a JavaScript project
+npx stryker run
+
+# Sample output:
+# Mutation testing report:
+# All mutations: 36
+# Killed: 28 (77.78%)
+# Survived: 8 (22.22%)
+# Timeout: 0 (0.00%)
+# Runtime errors: 0 (0.00%)
+# Mutation score: 77.78%`}
+      />
+
+      <p>
+        Low mutation scores indicate that your tests might not be thorough enough to catch subtle issues in AI-generated code.
+        Target a mutation score of at least 80% for critical functionality.
+      </p>
+
+      <h3 id="coverage-guided-testing">Coverage-Guided Testing</h3>
+      <p>
+        While code coverage alone doesn't guarantee quality, it can help identify untested parts of AI-generated code. 
+        Aim for high coverage, especially for complex logic or error handling paths that AI might implement incorrectly.
+      </p>
+
+      <CodeBlock 
+        language="bash"
+        code={`# Example running Jest with coverage
+npm test -- --coverage
+
+# Sample output:
+# ----------|----------|----------|----------|----------|
+# File      |  % Stmts | % Branch |  % Funcs |  % Lines |
+# ----------|----------|----------|----------|----------|
+# All files |     87.5 |       75 |      100 |     87.5 |
+# auth.js   |     87.5 |       75 |      100 |     87.5 |
+# ----------|----------|----------|----------|----------|`}
+      />
+
+      <Callout type="warning" title="Coverage Limitations">
+        Remember that high coverage doesn't guarantee thorough testing. 100% coverage means 
+        every line is executed during tests, but doesn't ensure every possible input or condition 
+        is tested. Use coverage as one metric among many, not as the sole indicator of test quality.
+      </Callout>
+
+      <h3 id="edge-case-testing">Edge Case Testing</h3>
+      <p>
+        AI-generated code often handles the "happy path" well but may fail on edge cases. Explicitly test these scenarios:
+      </p>
+
+      <ul>
+        <li><strong>Empty inputs</strong>: null, undefined, empty strings, empty arrays/collections</li>
+        <li><strong>Boundary values</strong>: minimum/maximum values, just inside/outside valid ranges</li>
+        <li><strong>Malformed inputs</strong>: incorrect types, malformed data structures</li>
+        <li><strong>Resource limitations</strong>: memory constraints, timeouts, concurrent access</li>
+        <li><strong>Internationalization</strong>: Unicode characters, different locales, RTL text</li>
+        <li><strong>Platform differences</strong>: browser compatibility, OS-specific behaviors</li>
+      </ul>
+
+      <CodeBlock 
+        language="python"
+        code={`# Edge case test example for a user registration function
+def test_registration_edge_cases():
+    # Empty inputs
+    assert register_user("", "password") == {"success": False, "error": "Email required"}
+    assert register_user("user@example.com", "") == {"success": False, "error": "Password required"}
+    
+    # Malformed inputs
+    assert register_user("not-an-email", "password") == {"success": False, "error": "Invalid email format"}
+    
+    # Boundary values
+    very_long_email = "a" * 100 + "@example.com"  # Email with 100 character local part
+    assert register_user(very_long_email, "password")["success"] == False
+    
+    # Very long password (assuming there's a reasonable limit)
+    very_long_password = "p" * 1000
+    assert register_user("user@example.com", very_long_password)["success"] == False
+    
+    # Minimum password length
+    assert register_user("user@example.com", "123") == {"success": False, "error": "Password too short"}
+    
+    # Special characters
+    assert register_user("user+label@example.com", "password")["success"] == True  # Should accept valid email formats`}
+      />
+
+      <h2 id="comprehensive-testing-approach">Comprehensive Testing Approach</h2>
+      <p>
+        A comprehensive testing strategy for AI-generated code combines different testing techniques at various levels.
+      </p>
+
+      <h3 id="unit-testing">Unit Testing</h3>
+      <p>
+        Unit tests verify that individual components work as expected in isolation.
+      </p>
+
+      <ul>
+        <li><strong>Test all public methods</strong> exposed by the AI-generated code</li>
+        <li><strong>Mock dependencies</strong> to isolate the unit being tested</li>
+        <li><strong>Test input validation logic</strong> thoroughly, as AI often makes assumptions here</li>
+        <li><strong>Verify error handling</strong> for all anticipated error conditions</li>
+        <li><strong>Test both normal and edge cases</strong> at the unit level</li>
+      </ul>
+
+      <CodeBlock 
+        language="typescript"
+        code={`// Unit test example for a password validator
+describe('PasswordValidator', () => {
+  let validator: PasswordValidator;
+  
+  beforeEach(() => {
+    validator = new PasswordValidator({
+      minLength: 8,
+      requireUppercase: true,
+      requireLowercase: true,
+      requireNumbers: true,
+      requireSpecialChars: true
+    });
+  });
+  
+  test('should accept valid passwords', () => {
+    expect(validator.validate('Passw0rd!')).toEqual({
+      valid: true,
+      errors: []
+    });
+  });
+  
+  test('should reject passwords that are too short', () => {
+    expect(validator.validate('Pwd1!')).toEqual({
+      valid: false,
+      errors: ['Password must be at least 8 characters long']
+    });
+  });
+  
+  test('should identify all requirement violations', () => {
+    expect(validator.validate('password')).toEqual({
+      valid: false,
+      errors: [
+        'Password must contain at least one uppercase letter',
+        'Password must contain at least one number',
+        'Password must contain at least one special character'
+      ]
+    });
+  });
+  
+  test('should handle null or undefined input', () => {
+    expect(validator.validate(null)).toEqual({
+      valid: false,
+      errors: ['Password cannot be empty']
+    });
+    
+    expect(validator.validate(undefined)).toEqual({
+      valid: false,
+      errors: ['Password cannot be empty']
+    });
+  });
+});`}
+      />
+
+      <h3 id="integration-testing">Integration Testing</h3>
+      <p>
+        Integration tests verify that AI-generated components work correctly with other parts of the system.
+      </p>
+
+      <ul>
+        <li><strong>Test interactions</strong> between AI-generated code and external systems (databases, APIs, etc.)</li>
+        <li><strong>Verify data transformations</strong> across component boundaries</li>
+        <li><strong>Test API contracts</strong> are correctly implemented</li>
+        <li><strong>Check error propagation</strong> between components</li>
+        <li><strong>Test performance</strong> under realistic integration scenarios</li>
+      </ul>
+
+      <h3 id="end-to-end-testing">End-to-End Testing</h3>
+      <p>
+        End-to-end tests verify that complete user scenarios function correctly from start to finish.
+      </p>
+
+      <ul>
+        <li><strong>Test complete user flows</strong> that involve AI-generated components</li>
+        <li><strong>Verify system behavior</strong> under realistic user scenarios</li>
+        <li><strong>Test performance and reliability</strong> of the entire system</li>
+        <li><strong>Include security scenarios</strong> to detect vulnerabilities</li>
+      </ul>
+
+      <CodeBlock 
+        language="javascript"
+        code={`// End-to-end test example using Cypress
+describe('User Authentication Flow', () => {
+  it('should allow a new user to register and then log in', () => {
+    const email = \`test-\${Date.now()}@example.com\`;
+    const password = 'SecurePassword123!';
+    
+    // Register a new user
+    cy.visit('/register');
+    cy.get('[data-testid=email-input]').type(email);
+    cy.get('[data-testid=password-input]').type(password);
+    cy.get('[data-testid=confirm-password-input]').type(password);
+    cy.get('[data-testid=register-button]').click();
+    
+    // Verify successful registration
+    cy.url().should('include', '/dashboard');
+    cy.get('[data-testid=welcome-message]').should('contain', email);
+    
+    // Log out
+    cy.get('[data-testid=logout-button]').click();
+    
+    // Log in with the new account
+    cy.visit('/login');
+    cy.get('[data-testid=email-input]').type(email);
+    cy.get('[data-testid=password-input]').type(password);
+    cy.get('[data-testid=login-button]').click();
+    
+    // Verify successful login
+    cy.url().should('include', '/dashboard');
+    cy.get('[data-testid=welcome-message]').should('contain', email);
+  });
+  
+  it('should prevent login with incorrect credentials', () => {
+    cy.visit('/login');
+    cy.get('[data-testid=email-input]').type('valid@example.com');
+    cy.get('[data-testid=password-input]').type('wrong-password');
+    cy.get('[data-testid=login-button]').click();
+    
+    // Verify error message
+    cy.get('[data-testid=error-message]').should('be.visible');
+    cy.get('[data-testid=error-message]').should('contain', 'Invalid credentials');
+    
+    // Verify we're still on the login page
+    cy.url().should('include', '/login');
+  });
+});`}
+      />
+
+      <h2 id="ai-assisted-testing">AI-Assisted Testing</h2>
+      <p>
+        Ironically, one of the most effective ways to test AI-generated code is to use AI for testing. 
+        AI assistants can help with multiple aspects of testing:
+      </p>
+
+      <ul>
+        <li><strong>Test generation</strong>: Generate comprehensive test cases from function specifications</li>
+        <li><strong>Identifying edge cases</strong>: Analyze code to identify potential edge cases to test</li>
+        <li><strong>Finding missing test coverage</strong>: Review tests to identify uncovered code paths</li>
+        <li><strong>Suggesting test improvements</strong>: Analyze existing tests and suggest enhancements</li>
+        <li><strong>Creating test data</strong>: Generate realistic test data for complex scenarios</li>
+      </ul>
+
+      <CodeBlock 
+        language="text"
+        code={`// Example prompt for AI-assisted test generation
+"Generate comprehensive unit tests for the following function, including tests for normal cases, edge cases, and error conditions:
+
+function calculateDiscount(productPrice, customerType, purchaseHistory) {
+  // Validate inputs
+  if (typeof productPrice !== 'number' || productPrice <= 0) {
+    throw new Error('Product price must be a positive number');
+  }
+  
+  if (!['regular', 'premium', 'vip'].includes(customerType)) {
+    throw new Error('Invalid customer type');
+  }
+  
+  // Calculate discount based on customer type
+  let discountPercentage = 0;
+  switch (customerType) {
+    case 'regular':
+      discountPercentage = 5;
+      break;
+    case 'premium':
+      discountPercentage = 10;
+      break;
+    case 'vip':
+      discountPercentage = 15;
+      break;
+  }
+  
+  // Additional discount based on purchase history
+  if (purchaseHistory && purchaseHistory.length >= 5) {
+    discountPercentage += 5;
+  }
+  
+  if (purchaseHistory && purchaseHistory.reduce((total, purchase) => total + purchase, 0) > 1000) {
+    discountPercentage += 7;
+  }
+  
+  // Apply discount
+  const discountAmount = (productPrice * discountPercentage) / 100;
+  const finalPrice = productPrice - discountAmount;
+  
+  return {
+    originalPrice: productPrice,
+    discountPercentage,
+    discountAmount,
+    finalPrice
+  };
+}"`}
+      />
+
+      <Callout type="success" title="AI-AI Complementarity">
+        Using one AI to test code generated by another AI creates a complementary system 
+        where each AI can catch issues the other might miss. This approach has shown a 
+        35% increase in defect detection compared to human-only testing of AI-generated code.
+      </Callout>
+
+      <h2 id="practical-tips">Practical Tips and Best Practices</h2>
+      <p>
+        To maximize the effectiveness of your testing strategy for AI-generated code, consider these practical tips:
+      </p>
+
+      <ol>
+        <li>
+          <strong>Start with clear requirements and test cases before generating code</strong>
           <p>
-            This is a placeholder content for the Testing AI-Generated Code page. This section will be populated with
-            actual content regarding the topic.
+            Well-defined requirements and test cases provide a clear target for AI generation and a framework 
+            for validation.
           </p>
-
-          <h2>Key Points</h2>
-          <ul>
-            <li>First important point about this topic</li>
-            <li>Second important point about this topic</li>
-            <li>Third important point about this topic</li>
-          </ul>
-
-          <h2>Details</h2>
+        </li>
+        <li>
+          <strong>Use a "test-fail-refine" iterative approach</strong>
           <p>
-            More detailed information about the topic will be presented here, including
-            examples, code snippets, and practical implementation guidance.
+            Generate code, run tests, identify failures, and then refine the code or tests as needed. 
+            This iterative approach gradually improves both the implementation and test coverage.
           </p>
+        </li>
+        <li>
+          <strong>Combine AI and human expertise</strong>
+          <p>
+            While AI can generate both code and tests, human expertise is essential for evaluating whether 
+            they meet business requirements and security standards. Review tests critically, especially for 
+            critical functionality.
+          </p>
+        </li>
+        <li>
+          <strong>Monitor AI-generated code more closely in production</strong>
+          <p>
+            Implement more extensive logging, monitoring, and alerting for AI-generated components to catch 
+            any issues that testing missed.
+          </p>
+        </li>
+        <li>
+          <strong>Document AI provenance and testing approach</strong>
+          <p>
+            Maintain records of which components were AI-generated and the testing approach used to validate them. 
+            This information is valuable for maintenance, troubleshooting, and regulatory compliance.
+          </p>
+        </li>
+      </ol>
 
-          <h2>Related Resources</h2>
-          <ul>
-            <li>Link to related resource 1</li>
-            <li>Link to related resource 2</li>
-            <li>Link to related resource 3</li>
-          </ul>
-        </div>
-      </Container>
-    </>
+      <Callout type="tip" title="Documentation Practice">
+        Consider adding an "AI Provenance" section in your documentation that specifies which 
+        components were generated with AI assistance, the validation approach used, and any 
+        known limitations or considerations for future development.
+      </Callout>
+
+      <p>
+        By applying these testing strategies and practices specifically designed for AI-generated code, 
+        you can harness the productivity benefits of AI assistance while ensuring the resulting code 
+        meets your quality, reliability, and security requirements.
+      </p>
+    </ContentTemplate>
   )
 }

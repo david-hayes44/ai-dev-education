@@ -77,6 +77,11 @@ export default function GettingStartedPage() {
           level: 2
         },
         {
+          id: "first-example-project",
+          title: "First Example Project",
+          level: 2
+        },
+        {
           id: "next-steps",
           title: "Next Steps in Your AI Development Journey",
           level: 2
@@ -366,6 +371,311 @@ console.log(validateEmail('test@example')); // false (missing top-level domain)`
           practice. Keep refining your prompting techniques.
         </li>
       </ul>
+
+      <h2 id="first-example-project">First Example Project</h2>
+      <p>
+        Let's walk through a complete example of creating a simple project with AI assistance to demonstrate 
+        how these concepts work together in practice. We'll build a basic weather dashboard that fetches 
+        and displays weather data.
+      </p>
+
+      <h3>1. Project Planning with AI</h3>
+      <CodeBlock 
+        language="text"
+        code={`User: Help me plan a simple weather dashboard web app using React.
+
+AI: I'll help you plan a React weather dashboard. Here's a simple structure:
+
+1. Components:
+   - WeatherDashboard (main container)
+   - SearchBar (for city input)
+   - CurrentWeather (displays current conditions)
+   - ForecastList (shows 5-day forecast)
+   - WeatherCard (reusable component for forecast items)
+   - LoadingIndicator
+   - ErrorMessage
+
+2. Data Flow:
+   - Use OpenWeatherMap API (free tier)
+   - Store API key in .env file
+   - Manage state with useState or useContext
+   - Handle API calls with async/await and fetch or axios
+
+3. Features:
+   - Search by city name
+   - Display current temperature, conditions, humidity, wind
+   - Show 5-day forecast
+   - Toggle between Celsius/Fahrenheit
+   - Responsive design for mobile/desktop
+
+4. Project Setup:
+   - Create React App or Vite for bootstrapping
+   - Use CSS modules or styled-components for styling
+   - Add simple error handling for API failures
+
+Would you like me to help with any specific part of this plan?`}
+      />
+
+      <h3>2. Project Setup with AI</h3>
+      <CodeBlock 
+        language="text"
+        code={`User: Help me set up the initial project structure with Vite and React.
+
+AI: I'll help you set up a new React project with Vite. First, run these commands in your terminal:
+
+\`\`\`bash
+npm create vite@latest weather-dashboard -- --template react
+cd weather-dashboard
+npm install
+npm install axios
+\`\`\`
+
+Now let's set up our project structure:
+
+\`\`\`
+src/
+├── components/
+│   ├── CurrentWeather.jsx
+│   ├── ForecastList.jsx
+│   ├── SearchBar.jsx
+│   ├── WeatherCard.jsx
+│   ├── LoadingIndicator.jsx
+│   └── ErrorMessage.jsx
+├── services/
+│   └── weatherService.js
+├── hooks/
+│   └── useWeather.js
+├── utils/
+│   └── formatters.js
+├── App.jsx
+└── main.jsx
+\`\`\`
+
+I can help you create any of these files.`}
+      />
+
+      <h3>3. Implementing Components</h3>
+      <CodeBlock 
+        language="jsx"
+        filename="components/SearchBar.jsx"
+        code={`import { useState } from 'react';
+import './SearchBar.css';
+
+const SearchBar = ({ onSearch }) => {
+  const [city, setCity] = useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (city.trim()) {
+      onSearch(city.trim());
+    }
+  };
+
+  return (
+    <form className="search-bar" onSubmit={handleSubmit}>
+      <input
+        type="text"
+        value={city}
+        onChange={(e) => setCity(e.target.value)}
+        placeholder="Enter city name"
+        aria-label="City name"
+      />
+      <button type="submit">Search</button>
+    </form>
+  );
+};
+
+export default SearchBar;`}
+      />
+
+      <p>
+        Using AI assistance, you can generate the rest of the components in a similar way. For example, 
+        you might ask the AI to generate the CurrentWeather component that displays the current conditions.
+      </p>
+
+      <h3>4. Creating the API Service</h3>
+      <CodeBlock 
+        language="javascript"
+        filename="services/weatherService.js"
+        code={`import axios from 'axios';
+
+const API_KEY = import.meta.env.VITE_WEATHER_API_KEY;
+const BASE_URL = 'https://api.openweathermap.org/data/2.5';
+
+export const getWeatherByCity = async (city) => {
+  try {
+    const response = await axios.get(\`\${BASE_URL}/weather\`, {
+      params: {
+        q: city,
+        appid: API_KEY,
+        units: 'metric'
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching current weather:', error);
+    throw error;
+  }
+};
+
+export const getForecastByCity = async (city) => {
+  try {
+    const response = await axios.get(\`\${BASE_URL}/forecast\`, {
+      params: {
+        q: city,
+        appid: API_KEY,
+        units: 'metric'
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching forecast:', error);
+    throw error;
+  }
+};`}
+      />
+
+      <h3>5. Creating a Custom Hook</h3>
+      <CodeBlock 
+        language="javascript"
+        filename="hooks/useWeather.js"
+        code={`import { useState } from 'react';
+import { getWeatherByCity, getForecastByCity } from '../services/weatherService';
+
+const useWeather = () => {
+  const [currentWeather, setCurrentWeather] = useState(null);
+  const [forecast, setForecast] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const fetchWeather = async (city) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const weatherData = await getWeatherByCity(city);
+      setCurrentWeather(weatherData);
+      
+      const forecastData = await getForecastByCity(city);
+      
+      // Process forecast data to get one forecast per day
+      const dailyForecasts = forecastData.list.filter(item => 
+        item.dt_txt.includes('12:00:00')
+      ).slice(0, 5);
+      
+      setForecast(dailyForecasts);
+    } catch (err) {
+      setError('Failed to fetch weather data. Please try again.');
+      setCurrentWeather(null);
+      setForecast([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return {
+    currentWeather,
+    forecast,
+    loading,
+    error,
+    fetchWeather
+  };
+};
+
+export default useWeather;`}
+      />
+
+      <h3>6. Integrating in App.jsx</h3>
+      <CodeBlock 
+        language="jsx"
+        filename="App.jsx"
+        code={`import { useState, useEffect } from 'react';
+import SearchBar from './components/SearchBar';
+import CurrentWeather from './components/CurrentWeather';
+import ForecastList from './components/ForecastList';
+import LoadingIndicator from './components/LoadingIndicator';
+import ErrorMessage from './components/ErrorMessage';
+import useWeather from './hooks/useWeather';
+import './App.css';
+
+function App() {
+  const { currentWeather, forecast, loading, error, fetchWeather } = useWeather();
+  
+  const handleSearch = (city) => {
+    fetchWeather(city);
+  };
+  
+  // Optional: Load default city on initial render
+  useEffect(() => {
+    fetchWeather('London');
+  }, []);
+
+  return (
+    <div className="app">
+      <h1>Weather Dashboard</h1>
+      <SearchBar onSearch={handleSearch} />
+      
+      {loading && <LoadingIndicator />}
+      {error && <ErrorMessage message={error} />}
+      
+      {currentWeather && !loading && (
+        <CurrentWeather data={currentWeather} />
+      )}
+      
+      {forecast.length > 0 && !loading && (
+        <ForecastList data={forecast} />
+      )}
+    </div>
+  );
+}
+
+export default App;`}
+      />
+
+      <h3>7. Debugging with AI</h3>
+      <CodeBlock 
+        language="text"
+        code={`User: I'm getting an error "TypeError: Cannot read properties of null (reading 'main')" in my CurrentWeather component.
+
+AI: This error occurs when you're trying to access a property on a null or undefined value. Specifically, you're likely trying to access currentWeather.main when currentWeather is null.
+
+In your CurrentWeather component, make sure you're checking if the data exists before accessing its properties:
+
+\`\`\`jsx
+const CurrentWeather = ({ data }) => {
+  // Add this check at the beginning
+  if (!data || !data.main) {
+    return <div>No weather data available</div>;
+  }
+
+  // Now you can safely access data.main
+  const { temp, feels_like, humidity } = data.main;
+  
+  // Rest of your component...
+}
+\`\`\`
+
+This pattern is called defensive programming and helps prevent these types of errors.`}
+      />
+
+      <h3>8. Enhancing and Refining</h3>
+      <p>
+        Once your basic application works, you can use AI to help enhance and refine it:
+      </p>
+      <ul>
+        <li>Ask for styling improvements using CSS or styled-components</li>
+        <li>Generate unit tests for your components</li>
+        <li>Add new features like geolocation or weather maps</li>
+        <li>Optimize performance for larger applications</li>
+        <li>Implement error boundary components for better error handling</li>
+      </ul>
+
+      <Callout type="success" title="Learning Through Building">
+        This simple project demonstrates many aspects of AI-assisted development: planning, code generation, 
+        component creation, API integration, and debugging. By working through a complete example like this, 
+        you'll develop an intuition for when and how to effectively leverage AI throughout the software 
+        development lifecycle.
+      </Callout>
 
       <h2 id="next-steps">Next Steps in Your AI Development Journey</h2>
       <p>
