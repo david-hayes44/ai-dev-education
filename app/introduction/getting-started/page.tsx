@@ -227,7 +227,7 @@ export default function GettingStartedPage() {
       <ol>
         <li>
           Add a comment describing what you want to implement<br />
-          <code>// Create a function that validates email addresses using regex</code>
+          <code>{"// Create a function that validates email addresses using regex"}</code>
         </li>
         <li>Press Enter or the tool's generation shortcut</li>
         <li>Review the generated code and modify as needed</li>
