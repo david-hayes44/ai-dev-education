@@ -115,12 +115,7 @@ const navItems = [
       { label: "Glossary", path: "/resources/glossary" },
       { label: "External Resources", path: "/resources/external-resources" },
     ]
-  },
-  {
-    path: "/contact",
-    label: "Contact",
-    icon: <Mail className="w-4 h-4 mr-2" />,
-  },
+  }
 ]
 
 export function Header() {

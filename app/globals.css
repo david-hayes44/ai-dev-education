@@ -118,6 +118,94 @@
   }
 }
 
+/* Enhanced code blocks for better visibility */
+pre {
+  @apply rounded-lg overflow-x-auto my-4;
+}
+
+/* Light mode code styling */
+:root pre {
+  @apply bg-slate-800 text-slate-50 border border-slate-700;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Dark mode code styling - already has good contrast */
+.dark pre {
+  @apply bg-black text-white border border-gray-800;
+}
+
+/* Inline code styling */
+:not(pre) > code {
+  @apply px-1.5 py-0.5 rounded bg-slate-200 text-slate-800 font-mono text-sm;
+}
+
+.dark :not(pre) > code {
+  @apply bg-slate-800 text-slate-200;
+}
+
+/* Code block within bg-card */
+.bg-card pre {
+  @apply border-slate-300 dark:border-slate-700;
+}
+
+/* For code blocks in bg-muted sections */
+.bg-muted pre {
+  @apply border-slate-300 dark:border-slate-700;
+}
+
+/* Code in the example sections */
+.bg-muted .bg-card pre {
+  @apply bg-slate-800 text-slate-50 border-slate-600;
+}
+
+/* Enhanced syntax highlighting colors for light mode */
+:root pre .token.comment,
+:root pre .token.prolog,
+:root pre .token.doctype,
+:root pre .token.cdata {
+  @apply text-slate-400;
+}
+
+:root pre .token.punctuation {
+  @apply text-slate-300;
+}
+
+:root pre .token.property,
+:root pre .token.tag,
+:root pre .token.boolean,
+:root pre .token.number,
+:root pre .token.constant,
+:root pre .token.symbol {
+  @apply text-blue-300;
+}
+
+:root pre .token.selector,
+:root pre .token.attr-name,
+:root pre .token.string,
+:root pre .token.char,
+:root pre .token.builtin {
+  @apply text-green-300;
+}
+
+:root pre .token.operator,
+:root pre .token.entity,
+:root pre .token.url,
+:root pre .language-css .token.string,
+:root pre .style .token.string {
+  @apply text-yellow-300;
+}
+
+:root pre .token.atrule,
+:root pre .token.attr-value,
+:root pre .token.keyword {
+  @apply text-purple-300;
+}
+
+:root pre .token.function,
+:root pre .token.class-name {
+  @apply text-orange-300;
+}
+
 /* Gradient text for headings */
 .gradient-text {
   @apply bg-clip-text text-transparent;
