@@ -1,16 +1,93 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { useChat } from "@/contexts/chat-context"
+import { useNavigation, NavigationRecommendation as NavigationRecommendationType } from "@/contexts/navigation-context"
 import { ChatInput } from "@/components/chat/chat-input"
 import { ChatMessage } from "@/components/chat/chat-message"
-import { Loader2, Info } from "lucide-react"
+import { Loader2, Info, RefreshCw, ArrowRight, ExternalLink } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+
+// Temporary inline implementation to avoid import issues
+function NavigationRecommendation({ recommendation }: { recommendation: NavigationRecommendationType }) {
+  const { path, title, description, summary, confidence } = recommendation
+  const router = useRouter()
+  const isExternal = path.startsWith("http")
+  
+  // Format confidence as percentage
+  const confidencePercent = Math.round(confidence * 100)
+  
+  const handleNavigate = () => {
+    if (isExternal) {
+      window.open(path, "_blank")
+    } else {
+      router.push(path)
+    }
+  }
+  
+  return (
+    <div className="rounded-md border border-border bg-card p-3 shadow-sm">
+      <div className="flex items-start justify-between gap-2">
+        <h4 className="font-medium text-sm">{title}</h4>
+        {confidence > 0 && (
+          <span className={cn(
+            "text-xs px-1.5 py-0.5 rounded-full",
+            confidencePercent > 80 
+              ? "bg-primary/10 text-primary"
+              : "bg-muted text-muted-foreground"
+          )}>
+            {confidencePercent}%
+          </span>
+        )}
+      </div>
+      
+      {(description || summary) && (
+        <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+          {description || summary}
+        </p>
+      )}
+      
+      <div className="mt-2 flex justify-between items-center">
+        <span className="text-xs text-muted-foreground truncate max-w-[140px]">
+          {path}
+        </span>
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="h-7 px-2"
+          onClick={handleNavigate}
+        >
+          {isExternal ? (
+            <>
+              <span className="text-xs">Open</span>
+              <ExternalLink className="h-3 w-3 ml-1" />
+            </>
+          ) : (
+            <>
+              <span className="text-xs">Go</span>
+              <ArrowRight className="h-3 w-3 ml-1" />
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 export function ChatContainer() {
   const { currentSession, isLoading, isStreaming, sendStreamingMessage } = useChat()
+  const { search, currentPage } = useNavigation()
   const chatEndRef = React.useRef<HTMLDivElement>(null)
   const messagesContainerRef = React.useRef<HTMLDivElement>(null)
   const [mounted, setMounted] = React.useState(false)
+  const [showRecommendations, setShowRecommendations] = React.useState(false)
+  const [recommendations, setRecommendations] = React.useState<{
+    query: string;
+    items: NavigationRecommendationType[];
+  } | null>(null)
+  const [isSearching, setIsSearching] = React.useState(false)
 
   // Set mounted state after hydration
   React.useEffect(() => {
@@ -57,9 +134,56 @@ export function ChatContainer() {
     }
   }, [mounted, currentSession?.messages])
 
+  // Handle searching for content based on user query
+  const searchContent = async (query: string) => {
+    setIsSearching(true)
+    try {
+      const results = await search(query)
+      if (results && results.length > 0) {
+        setRecommendations({
+          query,
+          items: results
+        })
+        setShowRecommendations(true)
+      } else {
+        setRecommendations(null)
+      }
+    } catch (error) {
+      console.error("Error searching content:", error)
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
   const handleSubmit = async (content: string) => {
-    // Use streaming message by default
-    await sendStreamingMessage(content)
+    // Hide recommendations when user sends a message
+    setShowRecommendations(false)
+    
+    // Check if message is a navigation command
+    if (content.toLowerCase().includes("find") || 
+        content.toLowerCase().includes("search") ||
+        content.toLowerCase().includes("looking for") ||
+        content.toLowerCase().includes("where is") ||
+        content.toLowerCase().includes("how do i get to")) {
+      // Extract the search query - remove command words
+      const queryWords = content
+        .replace(/find|search|looking for|where is|how do i get to/gi, "")
+        .trim()
+      
+      if (queryWords) {
+        // Search for content first
+        await searchContent(queryWords)
+        
+        // Also send to the chat for context
+        await sendStreamingMessage(content)
+      } else {
+        await sendStreamingMessage(content)
+      }
+    } else {
+      // Regular message handling
+      await sendStreamingMessage(content)
+    }
+    
     scrollToBottom()
   }
 
@@ -140,6 +264,39 @@ export function ChatContainer() {
                 />
               );
             })}
+            
+            {/* Show search recommendations if available */}
+            {showRecommendations && recommendations && recommendations.items.length > 0 && (
+              <div className="p-4 bg-accent/5">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-medium">Content matches for "{recommendations.query}"</h4>
+                  <button 
+                    className="text-xs flex items-center text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowRecommendations(false)}
+                  >
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Hide
+                  </button>
+                </div>
+                <div className="grid gap-2 mt-2">
+                  {recommendations.items.slice(0, 3).map((item) => (
+                    <NavigationRecommendation 
+                      key={item.path}
+                      recommendation={item}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* Loading indicator for content search */}
+            {isSearching && (
+              <div className="flex items-center justify-center p-4">
+                <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full mr-2"></div>
+                <p className="text-sm text-muted-foreground">Searching content...</p>
+              </div>
+            )}
+            
             <div ref={chatEndRef} className="h-4" />
           </div>
         )}

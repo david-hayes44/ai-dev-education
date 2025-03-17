@@ -1,24 +1,19 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { X, MessageCircle, Settings, Maximize2, Minimize2, Search, Compass, ExternalLink, ChevronRight, Info, ArrowRight } from "lucide-react"
+import { useNavigation } from "@/contexts/navigation-context"
+import { Search, Compass, ExternalLink, ChevronRight, Info, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ChatContainer } from "@/components/chat/chat-container"
-import { useLocalStorage } from "@/hooks/use-local-storage"
-import { ChatProvider, useChat } from "@/contexts/chat-context"
-import { useNavigation, NavigationRecommendation as NavRecommendationType } from "@/contexts/navigation-context"
-import { ModelSelector } from "@/components/chat/model-selector"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 
-// Inline implementation of NavigationContainer to avoid import issues
-function NavigationContainer({ onClose }: { onClose: () => void }) {
+interface NavigationContainerProps {
+  onClose: () => void
+}
+
+export function NavigationContainer({ onClose }: NavigationContainerProps) {
   const [searchQuery, setSearchQuery] = React.useState("")
   const [isSearching, setIsSearching] = React.useState(false)
   const { currentPage, recommendations, isLoading, search } = useNavigation()
@@ -155,10 +150,18 @@ function NavigationContainer({ onClose }: { onClose: () => void }) {
   )
 }
 
-function RecommendationCard({ recommendation, onClick }: {
-  recommendation: NavRecommendationType,
+interface RecommendationCardProps {
+  recommendation: {
+    path: string
+    title: string
+    description?: string
+    summary?: string
+    confidence: number
+  }
   onClick: () => void
-}) {
+}
+
+function RecommendationCard({ recommendation, onClick }: RecommendationCardProps) {
   const { path, title, description, summary, confidence } = recommendation
   const isExternal = path.startsWith("http")
   
@@ -205,177 +208,5 @@ function RecommendationCard({ recommendation, onClick }: {
         <ArrowRight className="h-3 w-3 ml-1" />
       </Button>
     </div>
-  )
-}
-
-// Define larger default sizes with increased comfort
-const DEFAULT_WIDTH = 420; // Increased from 350
-const DEFAULT_HEIGHT = 650; // Increased from previous value
-const LARGE_WIDTH = 800;
-const LARGE_HEIGHT = 800;
-
-// Must be used within a ChatProvider
-function ChatHeader({ isLarge, toggleSize, onClose }: { 
-  isLarge: boolean; 
-  toggleSize: () => void;
-  onClose: () => void;
-}) {
-  const { selectedModel, setModel } = useChat();
-  const [isOpen, setIsOpen] = React.useState(false);
-  const { currentPage } = useNavigation();
-
-  // Show current page in header if available
-  const pageTitle = currentPage?.title || "AI Navigation Assistant";
-
-  return (
-    <div className="flex items-center justify-between border-b p-4 h-16">
-      <h3 className="font-semibold text-base flex items-center">
-        <span className="truncate max-w-[200px]">{pageTitle}</span>
-      </h3>
-      <div className="flex items-center gap-3">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleSize}
-          className="h-9 w-9 hover:bg-accent/50"
-          aria-label={isLarge ? "Minimize chat" : "Maximize chat"}
-        >
-          {isLarge ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-        </Button>
-        <Popover open={isOpen} onOpenChange={setIsOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-accent/50">
-              <Settings className="h-4 w-4" />
-              <span className="sr-only">Settings</span>
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-60 p-4">
-            <div className="space-y-3">
-              <h4 className="font-medium text-sm">Model</h4>
-              <ModelSelector 
-                selectedModel={selectedModel} 
-                onSelectModel={setModel} 
-              />
-            </div>
-          </PopoverContent>
-        </Popover>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onClose}
-          className="h-9 w-9 hover:bg-accent/50"
-          aria-label="Close chat"
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// Main component that renders the floating chat UI
-export function FloatingChat() {
-  const [isVisible, setIsVisible] = React.useState(false)
-  const [isLarge, setIsLarge] = React.useState(false)
-  const [width, setWidth] = React.useState(DEFAULT_WIDTH)
-  const [height, setHeight] = React.useState(DEFAULT_HEIGHT)
-  const [activeTab, setActiveTab] = React.useState<"chat" | "navigation">("chat")
-  
-  // Store visibility in local storage
-  const [storedVisibility, setStoredVisibility] = useLocalStorage("floatingChatVisible", false)
-  
-  // Set visibility from stored value on mount
-  React.useEffect(() => {
-    setIsVisible(storedVisibility)
-  }, [storedVisibility])
-  
-  // Toggle chat visibility
-  const toggleVisibility = () => {
-    const newVisibility = !isVisible
-    setIsVisible(newVisibility)
-    setStoredVisibility(newVisibility)
-  }
-  
-  // Toggle between normal and large size
-  const toggleSize = () => {
-    setIsLarge(!isLarge)
-    setWidth(!isLarge ? LARGE_WIDTH : DEFAULT_WIDTH)
-    setHeight(!isLarge ? LARGE_HEIGHT : DEFAULT_HEIGHT)
-  }
-  
-  // Reset to chat tab when closed
-  React.useEffect(() => {
-    if (!isVisible) {
-      setActiveTab("chat")
-    }
-  }, [isVisible])
-  
-  return (
-    <>
-      {/* Chat button */}
-      {!isVisible && (
-        <Button
-          onClick={toggleVisibility}
-          className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50"
-          aria-label="Open chat"
-        >
-          <MessageCircle className="h-6 w-6" />
-        </Button>
-      )}
-      
-      {/* Chat panel */}
-      {isVisible && (
-        <div
-          className="fixed bottom-6 right-6 bg-background border rounded-lg shadow-lg overflow-hidden flex flex-col z-50"
-          style={{
-            width: `${width}px`,
-            height: `${height}px`,
-          }}
-        >
-          <ChatProvider>
-            <ChatHeader 
-              isLarge={isLarge} 
-              toggleSize={toggleSize} 
-              onClose={toggleVisibility} 
-            />
-            
-            {/* Tab navigation */}
-            <div className="flex items-center border-b">
-              <button
-                onClick={() => setActiveTab("chat")}
-                className={cn(
-                  "flex-1 py-2 text-sm font-medium text-center transition-colors",
-                  activeTab === "chat" 
-                    ? "border-b-2 border-primary" 
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Chat
-              </button>
-              <button
-                onClick={() => setActiveTab("navigation")}
-                className={cn(
-                  "flex-1 py-2 text-sm font-medium text-center transition-colors",
-                  activeTab === "navigation" 
-                    ? "border-b-2 border-primary" 
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Navigation
-              </button>
-            </div>
-            
-            {/* Content based on active tab */}
-            <div className="flex-1 overflow-hidden">
-              {activeTab === "chat" ? (
-                <ChatContainer />
-              ) : (
-                <NavigationContainer onClose={() => setActiveTab("chat")} />
-              )}
-            </div>
-          </ChatProvider>
-        </div>
-      )}
-    </>
   )
 } 

@@ -12,7 +12,10 @@ import {
   ChevronDown,
   Home,
   BookOpen,
-  Code,CheckSquare,Wrench,
+  Code,
+  CheckSquare,
+  Wrench,
+  Server,
   BookMarked,
   FileText,
   Mail
@@ -46,6 +49,11 @@ const navItems = [
       { label: "Benefits", path: "/mcp/benefits" },
       { label: "Context Management", path: "/mcp/context-management" },
       { label: "Implementation", path: "/mcp/implementation" },
+      { label: "Building Servers", path: "/building-servers" },
+      { label: "Server Architecture", path: "/servers/architecture" },
+      { label: "Server Implementation", path: "/servers/implementation" },
+      { label: "Server Security", path: "/servers/security" },
+      { label: "Server Examples", path: "/servers/examples" },
     ]
   },
   {
@@ -62,20 +70,6 @@ const navItems = [
       { label: "Practical LLM Usage", path: "/best-practices/practical-llm-usage" },
       { label: "Project Customization", path: "/best-practices/project-customization" },
       { label: "Coding Standards", path: "/best-practices/coding-standards" },
-    ]
-  },
-  {
-    path: "/servers",
-    label: "MCP Servers",
-    icon: <Wrench className="w-4 h-4 mr-2" />,
-    dropdown: [
-      { label: "Overview", path: "/servers" },
-      { label: "Architecture", path: "/servers/architecture" },
-      { label: "Implementation", path: "/servers/implementation" },
-      { label: "— Node.js", path: "/servers/implementation/nodejs" },
-      { label: "— Python", path: "/servers/implementation/python" },
-      { label: "Security", path: "/servers/security" },
-      { label: "Examples", path: "/servers/examples" },
     ]
   },
   {
@@ -211,7 +205,7 @@ export function Header() {
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -10 }}
                           transition={{ duration: 0.15 }}
-                          className="absolute left-0 mt-1 w-48 rounded-md shadow-lg bg-background border border-border z-10"
+                          className="absolute left-0 mt-1 w-56 rounded-md shadow-lg bg-background border border-border z-10"
                         >
                           <div className="py-1 rounded-md bg-popover">
                             {item.dropdown.map((dropdownItem) => (
@@ -321,6 +315,7 @@ export function Header() {
                                 <Link
                                   key={dropdownItem.path}
                                   href={dropdownItem.path}
+                                  onClick={() => setMobileMenuOpen(false)}
                                   className={cn(
                                     "flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-200",
                                     pathname === dropdownItem.path
@@ -338,6 +333,7 @@ export function Header() {
                     ) : (
                       <Link
                         href={item.path}
+                        onClick={() => setMobileMenuOpen(false)}
                         className={cn(
                           "flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200",
                           pathname === item.path || pathname.startsWith(item.path + "/")
@@ -351,6 +347,11 @@ export function Header() {
                     )}
                   </div>
                 ))}
+                
+                {/* Mobile Auth Buttons */}
+                <div className="mt-4 pt-4 border-t border-border">
+                  <AuthStatus isMobile={true} />
+                </div>
               </nav>
             </div>
           </motion.div>

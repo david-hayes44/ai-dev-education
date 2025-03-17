@@ -3,6 +3,24 @@ import { NextRequest, NextResponse } from "next/server"
 
 // Default Next.js middleware to allow all requests
 export function middleware(request: NextRequest) {
+  const url = request.nextUrl.clone()
+  const { pathname } = url
+
+  // Redirect servers root to MCP page
+  if (pathname === '/servers') {
+    url.pathname = '/mcp'
+    return NextResponse.redirect(url)
+  }
+  
+  // Redirect building-servers to MCP page
+  if (pathname === '/building-servers') {
+    url.pathname = '/mcp'
+    return NextResponse.redirect(url)
+  }
+
+  // Keep subpaths under /servers working to avoid breaking existing links
+  // The UI navigation will now point to these pages through the MCP dropdown
+
   return NextResponse.next()
 }
 
