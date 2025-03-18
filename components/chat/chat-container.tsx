@@ -6,13 +6,14 @@ import { useChat } from "@/contexts/chat-context"
 import { useNavigation, NavigationRecommendation as NavigationRecommendationType } from "@/contexts/navigation-context"
 import { ChatInput } from "@/components/chat/chat-input"
 import ChatMessage from "./chat-message"
-import { Loader2, Info, RefreshCw, ArrowRight, ExternalLink } from "lucide-react"
+import { Loader2, Info, RefreshCw, ArrowRight, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { ContentReferences } from "./content-references"
 import { NavigationSuggestions } from "./navigation-suggestion"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import dynamic from "next/dynamic"
+import { FileAttachment } from "@/lib/chat-service"
 
 // Temporary inline implementation to avoid import issues
 function NavigationRecommendation({ recommendation }: { recommendation: NavigationRecommendationType }) {
@@ -93,7 +94,12 @@ export default function ChatContainer() {
     relevantContent, 
     isSearchingContent,
     navigationSuggestions,
-    sendMessage
+    sendMessage,
+    sendStreamingMessage,
+    totalChunks,
+    currentChunkIndex,
+    navigateToNextChunk,
+    navigateToPreviousChunk
   } = useChat();
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
@@ -102,12 +108,50 @@ export default function ChatContainer() {
   }, [messages, isTyping]);
 
   // Handle sending a message
-  const handleSendMessage = async (content: string) => {
-    await sendMessage(content);
+  const handleSendMessage = async (content: string, attachments?: FileAttachment[]) => {
+    try {
+      if (!content.trim() && (!attachments || attachments.length === 0)) {
+        return; // Don't send empty messages
+      }
+      
+      // Use streaming message for better user experience
+      await sendStreamingMessage(content, attachments);
+    } catch (error) {
+      console.error("Error sending message with attachments:", error);
+    }
   };
 
   return (
     <div className="flex flex-col h-full">
+      {totalChunks > 1 && (
+        <div className="px-4 py-2 border-b flex items-center justify-between bg-muted/30">
+          <div className="text-xs text-muted-foreground">
+            Viewing chunk {currentChunkIndex + 1} of {totalChunks}
+          </div>
+          <div className="flex gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={navigateToPreviousChunk}
+              disabled={currentChunkIndex === 0}
+            >
+              <span className="sr-only">Previous</span>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={navigateToNextChunk}
+              disabled={currentChunkIndex === totalChunks - 1}
+            >
+              <span className="sr-only">Next</span>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
       <ScrollArea className="flex-1 p-4">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">

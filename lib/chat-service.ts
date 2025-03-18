@@ -6,6 +6,16 @@ import { v4 as uuidv4 } from "uuid";
 // Define message types
 export type MessageRole = "user" | "assistant" | "system";
 
+export interface FileAttachment {
+  id: string;
+  name: string;
+  url: string;
+  path: string;
+  type: string;
+  size: number;
+  thumbnailUrl?: string;
+}
+
 export interface Message {
   id: string;
   role: MessageRole;
@@ -13,6 +23,7 @@ export interface Message {
   timestamp: number | Date;
   metadata?: MessageMetadata;
   isStreaming?: boolean;
+  attachments?: FileAttachment[];
 }
 
 export type MessageMetadataType = "streaming" | "error" | "loading" | "thinking" | "suggestion" | "concept_explanation";
@@ -86,6 +97,7 @@ export interface ChatSession {
 // Constants for token management
 const MAX_CONTEXT_TOKENS = 4000; // Conservative maximum tokens for context
 const APPROX_TOKENS_PER_CHAR = 0.33; // Very rough approximation of tokens per character
+const MAX_MESSAGES_PER_CHUNK = 20; // Maximum messages to display in a single chunk
 
 // Add documentation context snippets for injecting relevant content
 interface DocumentationSnippet {
@@ -153,6 +165,13 @@ export class ChatService {
   private openai: OpenAI;
   private config: OpenRouterConfig;
   
+  // Add chunking properties
+  private messageChunks: Message[][] = [];
+  private currentChunkIndex: number = 0;
+  
+  // Add property for debounced saving
+  private saveTimeoutId: NodeJS.Timeout | null = null;
+  
   private constructor() {
     // Initialize with OpenRouter configuration
     this.config = {
@@ -188,18 +207,149 @@ export class ChatService {
     return ChatService.instance;
   }
   
+  // Method to chunk messages for better performance
+  private chunkMessages(messages: Message[]): Message[][] {
+    // If we have fewer messages than the chunk size, just return a single chunk
+    if (messages.length <= MAX_MESSAGES_PER_CHUNK) {
+      return [messages];
+    }
+    
+    // Create chunks of messages
+    const chunks: Message[][] = [];
+    for (let i = 0; i < messages.length; i += MAX_MESSAGES_PER_CHUNK) {
+      chunks.push(messages.slice(i, i + MAX_MESSAGES_PER_CHUNK));
+    }
+    
+    return chunks;
+  }
+  
+  // Get current chunk of messages
+  public getCurrentChunk(): Message[] {
+    if (this.messageChunks.length === 0) {
+      return [];
+    }
+    
+    return this.messageChunks[this.currentChunkIndex];
+  }
+  
+  // Get all messages (useful for API calls)
+  public getAllMessages(): Message[] {
+    return this.messageChunks.flat();
+  }
+  
+  // Navigate to next chunk
+  public nextChunk(): boolean {
+    if (this.currentChunkIndex < this.messageChunks.length - 1) {
+      this.currentChunkIndex++;
+      return true;
+    }
+    return false;
+  }
+  
+  // Navigate to previous chunk
+  public previousChunk(): boolean {
+    if (this.currentChunkIndex > 0) {
+      this.currentChunkIndex--;
+      return true;
+    }
+    return false;
+  }
+  
+  // Get total number of chunks
+  public getTotalChunks(): number {
+    return this.messageChunks.length;
+  }
+  
+  // Get current chunk index
+  public getCurrentChunkIndex(): number {
+    return this.currentChunkIndex;
+  }
+  
   private loadSessions() {
-    if (typeof window !== 'undefined') {
-      const savedSessions = localStorage.getItem('chat-sessions');
-      if (savedSessions) {
-        this.sessions = JSON.parse(savedSessions);
+    if (typeof window === 'undefined') return;
+    
+    try {
+      const sessionsJson = localStorage.getItem('chatSessions');
+      
+      if (sessionsJson) {
+        this.sessions = JSON.parse(sessionsJson);
+        
+        // For backwards compatibility, update any sessions that don't have the model field
+        Object.values(this.sessions).forEach(session => {
+          if (!session.model) {
+            session.model = this.selectedModel;
+          }
+          
+          // Ensure all sessions have proper timestamps
+          if (!session.createdAt) {
+            session.createdAt = Date.now();
+          }
+          
+          if (!session.updatedAt) {
+            session.updatedAt = Date.now();
+          }
+        });
+        
+        // Set current session
+        const currentId = localStorage.getItem('currentSessionId');
+        if (currentId && this.sessions[currentId]) {
+          this.currentSessionId = currentId;
+          
+          // Apply chunking to the current session messages
+          this.messageChunks = this.chunkMessages(this.sessions[currentId].messages);
+          this.currentChunkIndex = this.messageChunks.length - 1; // Start at the most recent chunk
+        }
       }
+      
+      // Handle the case where we have sessions but no current session
+      if (Object.keys(this.sessions).length > 0 && !this.currentSessionId) {
+        // Get the most recently updated session
+        const sortedSessions = Object.entries(this.sessions)
+          .sort(([, a], [, b]) => b.updatedAt - a.updatedAt);
+        
+        if (sortedSessions.length > 0) {
+          this.currentSessionId = sortedSessions[0][0];
+          this.messageChunks = this.chunkMessages(this.sessions[this.currentSessionId].messages);
+          this.currentChunkIndex = this.messageChunks.length - 1;
+          
+          // Also save this to localStorage
+          localStorage.setItem('currentSessionId', this.currentSessionId);
+        }
+      }
+    } catch (e) {
+      console.error('Error loading chat sessions:', e);
+      // If there was an error, clear the localStorage and start fresh
+      localStorage.removeItem('chatSessions');
+      localStorage.removeItem('currentSessionId');
+      this.sessions = {};
+      this.currentSessionId = null;
+      this.messageChunks = [[]];
+      this.currentChunkIndex = 0;
     }
   }
   
   private saveSessions() {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('chat-sessions', JSON.stringify(this.sessions));
+    if (typeof window === 'undefined') return;
+    
+    try {
+      // Ensure all messages from chunks are saved if we have a current session
+      if (this.currentSessionId && this.messageChunks.length > 0) {
+        this.sessions[this.currentSessionId].messages = this.getAllMessages();
+      }
+      
+      // Add debouncing to avoid too frequent saves
+      if (this.saveTimeoutId !== null) {
+        clearTimeout(this.saveTimeoutId);
+      }
+      
+      this.saveTimeoutId = setTimeout(() => {
+        localStorage.setItem('chatSessions', JSON.stringify(this.sessions));
+        if (this.currentSessionId) {
+          localStorage.setItem('currentSessionId', this.currentSessionId);
+        }
+      }, 300); // Debounce by 300ms
+    } catch (e) {
+      console.error('Error saving chat sessions:', e);
     }
   }
   
@@ -468,15 +618,28 @@ export class ChatService {
   
   // Send a message and get a response
   async sendMessage(content: string, context?: ChatContext): Promise<Message> {
-    // Add user message
+    if (!this.currentSessionId) {
+      this.createSession();
+    }
+    
+    if (!this.currentSessionId) {
+      throw new Error("Failed to create session");
+    }
+    
+    const session = this.sessions[this.currentSessionId];
+
+    // Create the user message
     const userMessage: Message = {
       id: uuidv4(),
-      role: "user",
+      role: 'user',
       content,
-      timestamp: Date.now(),
+      timestamp: Date.now()
     };
-    this.messages.push(userMessage);
-
+    
+    // Add user message to the conversation
+    session.messages.push(userMessage);
+    session.updatedAt = Date.now();
+    
     try {
       // Call our server-side API route instead of OpenRouter directly
       const response = await fetch('/api/chat', {
@@ -510,6 +673,11 @@ export class ChatService {
       };
       
       this.messages.push(assistantMessage);
+      
+      // After adding the new messages, rechunk
+      this.messageChunks = this.chunkMessages(this.sessions[this.currentSessionId].messages);
+      this.currentChunkIndex = this.messageChunks.length - 1; // Navigate to the last chunk
+      
       return assistantMessage;
     } catch (error) {
       console.error("Error calling chat API:", error);
@@ -520,19 +688,24 @@ export class ChatService {
   /**
    * Creates a placeholder message for the assistant's response during streaming
    */
-  public createAssistantMessagePlaceholder(userContent: string): Message {
+  public createAssistantMessagePlaceholder(userContent: string, attachments?: FileAttachment[]): Message {
     if (!this.currentSessionId) {
       this.createSession();
     }
     
-    const session = this.sessions[this.currentSessionId!];
+    if (!this.currentSessionId) {
+      throw new Error("Failed to create session");
+    }
+    
+    const session = this.sessions[this.currentSessionId];
     
     // Add user message
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
       content: userContent,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      attachments
     };
     
     // Add placeholder assistant message
@@ -581,10 +754,18 @@ export class ChatService {
       this.createSession();
     }
     
-    const session = this.sessions[this.currentSessionId!];
+    const session = this.currentSessionId ? this.sessions[this.currentSessionId] : null;
+    if (!session) {
+      throw new Error("Failed to get or create session");
+    }
     
-    // Apply context window and documentation injection
-    const messagesToSend = this.getApiMessages(content);
+    // Get last user message to check for attachments
+    const userMessages = session.messages.filter(m => m.role === 'user');
+    const lastUserMessage = userMessages.length > 0 ? userMessages[userMessages.length - 1] : null;
+    const attachments = lastUserMessage?.attachments;
+    
+    // Apply context window and documentation injection (with attachments if any)
+    const messagesToSend = this.getApiMessagesWithAttachments(content, attachments);
     
     // Add or update system message with relevant content
     if (relevantContent.length > 0) {
@@ -724,6 +905,12 @@ export class ChatService {
         }
       );
       
+      // After adding the new messages, rechunk
+      if (this.currentSessionId) {
+        this.messageChunks = this.chunkMessages(this.sessions[this.currentSessionId].messages);
+        this.currentChunkIndex = this.messageChunks.length - 1; // Navigate to the last chunk
+      }
+      
       return assistantMessage;
     } catch (error) {
       console.error('Error sending streaming message:', error);
@@ -771,7 +958,16 @@ export class ChatService {
   }
   
   public getCurrentSession(): ChatSession | null {
-    return this.currentSessionId ? this.sessions[this.currentSessionId] || null : null;
+    if (!this.currentSessionId) return null;
+    
+    const session = { ...this.sessions[this.currentSessionId] };
+    
+    // If we're using chunking, only return the current chunk of messages
+    if (this.messageChunks.length > 0) {
+      session.messages = this.getCurrentChunk();
+    }
+    
+    return session;
   }
   
   public setCurrentSession(id: string): boolean {
@@ -825,15 +1021,18 @@ export class ChatService {
    * Reset the current chat session by clearing messages
    */
   public resetChat(): void {
-    this.messages = [];
+    if (!this.currentSessionId) return;
     
-    // If there's a current session, clear its messages too
-    if (this.currentSessionId) {
-      const currentSession = this.sessions[this.currentSessionId];
-      if (currentSession) {
-        currentSession.messages = [];
-        this.saveSessions();
-      }
+    const session = this.sessions[this.currentSessionId];
+    if (session) {
+      session.messages = [];
+      session.updatedAt = Date.now();
+      
+      // Reset chunks
+      this.messageChunks = [[]];
+      this.currentChunkIndex = 0;
+      
+      this.saveSessions();
     }
   }
   
@@ -899,6 +1098,41 @@ ${chunk.content}
     }
 
     return contextMessage;
+  }
+
+  /**
+   * Get file content summary to include in context
+   */
+  private getFileContentSummary(attachments?: FileAttachment[]): string {
+    if (!attachments || attachments.length === 0) {
+      return "";
+    }
+    
+    return attachments.map(attachment => {
+      const fileType = attachment.type.split('/').pop();
+      return `[File attached: ${attachment.name} (${fileType}) - ${Math.round(attachment.size / 1024)} KB]`;
+    }).join('\n');
+  }
+  
+  /**
+   * Get API messages with file attachments
+   */
+  private getApiMessagesWithAttachments(userContent?: string, attachments?: FileAttachment[]): ChatMessage[] {
+    const messages = this.getApiMessages(userContent);
+    
+    // If there are attachments, add them to the context
+    if (attachments && attachments.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage && lastMessage.role === 'user') {
+        // Add file summaries to the content
+        const fileContent = this.getFileContentSummary(attachments);
+        if (fileContent) {
+          lastMessage.content = `${lastMessage.content}\n\n${fileContent}`;
+        }
+      }
+    }
+    
+    return messages;
   }
 }
 

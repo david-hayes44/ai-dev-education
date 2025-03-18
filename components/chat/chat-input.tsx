@@ -1,13 +1,15 @@
 "use client"
 
 import * as React from "react"
-import { Send, PaperclipIcon } from "lucide-react"
+import { Send, Paperclip, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { FileAttachment } from "@/lib/chat-service"
+import FileUpload from "./FileUpload"
 
 interface ChatInputProps {
-  onSubmit: (content: string) => Promise<void>
+  onSubmit: (content: string, attachments?: FileAttachment[]) => Promise<void>
   isLoading: boolean
   isStreaming?: boolean
   placeholder?: string
@@ -22,16 +24,19 @@ export function ChatInput({
   className,
 }: ChatInputProps) {
   const [content, setContent] = React.useState("")
+  const [showFileUpload, setShowFileUpload] = React.useState(false)
+  const [attachments, setAttachments] = React.useState<FileAttachment[]>([])
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!content.trim() || isLoading || isStreaming) return
+    if ((!content.trim() && attachments.length === 0) || isLoading || isStreaming) return
     
     try {
-      await onSubmit(content.trim())
+      await onSubmit(content.trim(), attachments.length > 0 ? attachments : undefined)
       setContent("")
+      setAttachments([])
       
       // Focus the textarea after submission
       setTimeout(() => {
@@ -58,12 +63,75 @@ export function ChatInput({
     }
   }, [content])
 
+  const handleFileUploaded = (fileData: { path: string; url: string; name: string; size: number; type: string; }) => {
+    // Convert to our FileAttachment type by adding an ID
+    const attachment: FileAttachment = {
+      ...fileData,
+      id: `file-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+    };
+    setAttachments(prev => [...prev, attachment]);
+    setShowFileUpload(false);
+  }
+
+  const removeAttachment = (attachmentId: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== attachmentId))
+  }
+
   return (
     <div className="border-t bg-background p-0">
-      {/* Future attachment preview area */}
-      <div className="px-4 py-2">
-        {/* This will be populated with file previews in the future */}
-      </div>
+      {/* File attachment area */}
+      {(showFileUpload || attachments.length > 0) && (
+        <div className="px-4 py-2 border-b">
+          {showFileUpload ? (
+            <div className="mb-2">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium">Add attachment</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={() => setShowFileUpload(false)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <FileUpload
+                onFileUploaded={handleFileUploaded}
+                userId="anonymous"
+              />
+            </div>
+          ) : null}
+          
+          {attachments.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium">Attachments</h3>
+              <div className="flex flex-wrap gap-2">
+                {attachments.map((attachment) => (
+                  <div
+                    key={attachment.id}
+                    className="relative flex items-center gap-2 border rounded-md p-2 bg-muted/50 max-w-[200px]"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{attachment.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {Math.round(attachment.size / 1024)} KB
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 opacity-70 hover:opacity-100"
+                      onClick={() => removeAttachment(attachment.id)}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       
       <form
         onSubmit={handleSubmit}
@@ -80,24 +148,22 @@ export function ChatInput({
             disabled={isLoading || isStreaming}
           />
           <div className="absolute right-2 bottom-2 flex gap-2">
-            {/* Placeholder for future attachment button */}
-            {/*
             <Button
               type="button"
               size="icon"
               variant="ghost"
               className="h-10 w-10 rounded-full opacity-70 hover:opacity-100"
               disabled={isLoading || isStreaming}
+              onClick={() => setShowFileUpload(!showFileUpload)}
             >
-              <PaperclipIcon className="h-5 w-5" />
+              <Paperclip className="h-5 w-5" />
               <span className="sr-only">Add attachment</span>
             </Button>
-            */}
             
             <Button
               type="submit"
               size="icon"
-              disabled={!content.trim() || isLoading || isStreaming}
+              disabled={(content.trim() === "" && attachments.length === 0) || isLoading || isStreaming}
               className="h-10 w-10 shrink-0 rounded-full bg-primary"
             >
               <Send className="h-5 w-5" />
@@ -115,9 +181,11 @@ export function ChatInput({
           </span>
           <span className={cn(
             "transition-opacity",
-            content.length > 0 ? "opacity-100" : "opacity-0"
+            (content.length > 0 || attachments.length > 0) ? "opacity-100" : "opacity-0"
           )}>
-            {content.length} characters
+            {attachments.length > 0 && `${attachments.length} attachment${attachments.length > 1 ? 's' : ''}`}
+            {content.length > 0 && attachments.length > 0 && " • "}
+            {content.length > 0 && `${content.length} characters`}
           </span>
         </div>
       </form>

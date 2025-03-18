@@ -1,7 +1,7 @@
 "use client"
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { ChatService, Message, ChatSession, AIModel } from '@/lib/chat-service';
+import { ChatService, Message, ChatSession, AIModel, FileAttachment } from '@/lib/chat-service';
 import { usePathname } from 'next/navigation';
 import { ContentChunk } from '@/lib/content-indexing-service';
 import { useContentSearch } from "@/hooks/use-content-search";
@@ -19,7 +19,7 @@ interface ChatContextType {
   relevantContent: ContentChunk[];
   isSearchingContent: boolean;
   sendMessage: (content: string) => Promise<void>;
-  sendStreamingMessage: (content: string) => Promise<void>;
+  sendStreamingMessage: (content: string, attachments?: FileAttachment[]) => Promise<void>;
   createSession: (initialTopic?: string) => void;
   switchSession: (id: string) => void;
   deleteSession: (id: string) => void;
@@ -33,6 +33,10 @@ interface ChatContextType {
   setInputValue: (value: string) => void;
   resetChat: () => void;
   navigationSuggestions: NavigationSuggestion[];
+  totalChunks: number;
+  currentChunkIndex: number;
+  navigateToNextChunk: () => boolean;
+  navigateToPreviousChunk: () => boolean;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -57,6 +61,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const { searchContent, results, isSearching } = useContentSearch();
   const [navigationSuggestions, setNavigationSuggestions] = useState<NavigationSuggestion[]>([]);
   const navigation = useNavigation();
+  const [totalChunks, setTotalChunks] = useState<number>(1);
+  const [currentChunkIndex, setCurrentChunkIndex] = useState<number>(0);
   
   // Track current page
   useEffect(() => {
@@ -86,6 +92,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setSessionsByCategory(service.getSessionsByCategory());
       setSelectedModel(service.getSelectedModel());
       setAvailableModels(AVAILABLE_MODELS);
+      
+      // Set chunking information
+      setTotalChunks(service.getTotalChunks());
+      setCurrentChunkIndex(service.getCurrentChunkIndex());
       
       // Set current page
       if (pathname) {
@@ -198,17 +208,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [results, searchContent, navigation, processNavigationIntents, chatService]);
   
   // Update the streaming message function
-  const sendStreamingMessage = async (content: string) => {
+  const sendStreamingMessage = async (content: string, attachments?: FileAttachment[]) => {
     if (!chatService) return;
     
     setIsStreaming(true);
+    setIsTyping(true);
     try {
       // Fetch relevant content first
       const contentResults = await fetchRelevantContent(content);
       setRelevantContent(contentResults);
       
-      // Create a placeholder for the assistant's response
-      chatService.createAssistantMessagePlaceholder(content);
+      // Process navigation intents
+      await processNavigationIntents(content);
+      
+      // Create a placeholder for the assistant's response with attachments
+      chatService.createAssistantMessagePlaceholder(content, attachments);
       setCurrentSession(chatService.getCurrentSession());
       
       // Start streaming with the enriched context
@@ -220,6 +234,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // Update sessions after streaming is complete
       setSessions(chatService.getSessions());
       setSessionsByCategory(chatService.getSessionsByCategory());
+      
+      // Update chunking information
+      setTotalChunks(chatService.getTotalChunks());
+      setCurrentChunkIndex(chatService.getCurrentChunkIndex());
     } catch (error) {
       console.error('Error sending streaming message:', error);
       // Ensure the error is shown to the user
@@ -227,24 +245,29 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setCurrentSession(chatService.getCurrentSession());
     } finally {
       setIsStreaming(false);
+      setIsTyping(false);
     }
   };
   
-  const createSession = (initialTopic?: string) => {
+  const createSession = useCallback((initialTopic?: string) => {
     if (!chatService) return;
     
     chatService.createSession(initialTopic);
     setCurrentSession(chatService.getCurrentSession());
     setSessions(chatService.getSessions());
     setSessionsByCategory(chatService.getSessionsByCategory());
-  };
+    setTotalChunks(chatService.getTotalChunks());
+    setCurrentChunkIndex(chatService.getCurrentChunkIndex());
+  }, [chatService]);
   
-  const switchSession = (id: string) => {
+  const switchSession = useCallback((id: string) => {
     if (!chatService) return;
     
     chatService.setCurrentSession(id);
     setCurrentSession(chatService.getCurrentSession());
-  };
+    setTotalChunks(chatService.getTotalChunks());
+    setCurrentChunkIndex(chatService.getCurrentChunkIndex());
+  }, [chatService]);
   
   const deleteSession = (id: string) => {
     if (!chatService) return;
@@ -288,11 +311,38 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   };
   
   const resetChat = useCallback(() => {
-    setMessages([]);
-    if (chatService && typeof chatService.resetChat === 'function') {
-      chatService.resetChat();
-    }
+    if (!chatService) return;
+    
+    chatService.resetChat();
+    setCurrentSession(chatService.getCurrentSession());
+    setTotalChunks(chatService.getTotalChunks());
+    setCurrentChunkIndex(chatService.getCurrentChunkIndex());
     setNavigationSuggestions([]);
+  }, [chatService]);
+  
+  // Add chunk navigation functions
+  const navigateToNextChunk = useCallback(() => {
+    if (!chatService) return false;
+    
+    const success = chatService.nextChunk();
+    if (success) {
+      setCurrentSession(chatService.getCurrentSession());
+      setCurrentChunkIndex(chatService.getCurrentChunkIndex());
+      return true;
+    }
+    return false;
+  }, [chatService]);
+  
+  const navigateToPreviousChunk = useCallback(() => {
+    if (!chatService) return false;
+    
+    const success = chatService.previousChunk();
+    if (success) {
+      setCurrentSession(chatService.getCurrentSession());
+      setCurrentChunkIndex(chatService.getCurrentChunkIndex());
+      return true;
+    }
+    return false;
   }, [chatService]);
   
   // Provide default values during SSR to prevent hydration mismatches
@@ -321,7 +371,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     inputValue,
     setInputValue,
     resetChat,
-    navigationSuggestions
+    navigationSuggestions,
+    totalChunks,
+    currentChunkIndex,
+    navigateToNextChunk,
+    navigateToPreviousChunk,
   };
   
   return (

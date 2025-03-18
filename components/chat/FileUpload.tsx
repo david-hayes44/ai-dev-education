@@ -173,7 +173,7 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
                 <span className="font-semibold">Click to upload</span> or drag and drop
               </p>
               <p className="text-xs text-gray-500">
-                Files up to 10MB
+                PDF, docs, images, code files, and more (up to 10MB)
               </p>
             </div>
             <input
@@ -182,7 +182,7 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
               className="hidden"
               onChange={handleFileChange}
               ref={fileInputRef}
-              accept="image/*,.pdf,.doc,.docx,.txt"
+              accept="image/*,.pdf,.doc,.docx,.txt,.csv,.json,.js,.ts,.jsx,.tsx,.html,.css,.md,.xml,.yaml,.yml,.py,.java,.rb,.c,.cpp,.h,.hpp,.cs,.go,.php,.sql,.swift"
             />
           </label>
         </div>

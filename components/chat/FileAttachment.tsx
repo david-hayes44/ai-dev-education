@@ -1,5 +1,6 @@
 import Image from 'next/image';
-import { FileText, Download, Image as ImageIcon } from 'lucide-react';
+import { FileText, Download, Image as ImageIcon, FileCode, Database, File } from 'lucide-react';
+import { getFileTypeCategory } from '@/lib/utils';
 
 interface FileAttachmentProps {
   file: {
@@ -13,6 +14,7 @@ interface FileAttachmentProps {
 
 export default function FileAttachment({ file, onDownload }: FileAttachmentProps) {
   const isImage = file.type.startsWith('image/');
+  const fileCategory = getFileTypeCategory(file.type, file.name);
   
   const formatFileSize = (bytes?: number): string => {
     if (!bytes) return '';
@@ -30,6 +32,21 @@ export default function FileAttachment({ file, onDownload }: FileAttachmentProps
     }
   };
   
+  const getFileIcon = () => {
+    switch (fileCategory) {
+      case 'image':
+        return <ImageIcon className="h-6 w-6 text-blue-500" />;
+      case 'document':
+        return <FileText className="h-6 w-6 text-amber-500" />;
+      case 'code':
+        return <FileCode className="h-6 w-6 text-purple-500" />;
+      case 'data':
+        return <Database className="h-6 w-6 text-green-500" />;
+      default:
+        return <File className="h-6 w-6 text-gray-500" />;
+    }
+  };
+  
   return (
     <div className="max-w-xs sm:max-w-sm md:max-w-md border rounded-lg overflow-hidden bg-white shadow-sm">
       {isImage ? (
@@ -44,7 +61,7 @@ export default function FileAttachment({ file, onDownload }: FileAttachmentProps
       ) : (
         <div className="py-4 px-3 flex items-center">
           <div className="bg-gray-100 p-3 rounded-lg mr-3">
-            <FileText className="h-6 w-6 text-gray-500" />
+            {getFileIcon()}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-gray-900 truncate">
@@ -65,7 +82,7 @@ export default function FileAttachment({ file, onDownload }: FileAttachmentProps
           className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
         >
           <Download className="h-3.5 w-3.5" />
-          {isImage ? 'View' : 'Download'}
+          {isImage ? 'View' : fileCategory === 'document' || fileCategory === 'code' ? 'Open' : 'Download'}
         </button>
       </div>
     </div>
