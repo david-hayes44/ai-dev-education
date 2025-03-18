@@ -65,10 +65,19 @@ export function ChatInput({
 
   const handleFileUploaded = (fileData: { path: string; url: string; name: string; size: number; type: string; }) => {
     // Convert to our FileAttachment type by adding an ID
+    console.log("File uploaded successfully:", fileData);
+    
+    // Ensure we have a valid URL
+    if (!fileData.url) {
+      console.error("Missing URL in uploaded file data", fileData);
+      return;
+    }
+    
     const attachment: FileAttachment = {
       ...fileData,
       id: `file-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
     };
+    
     setAttachments(prev => [...prev, attachment]);
     setShowFileUpload(false);
   }

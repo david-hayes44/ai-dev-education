@@ -1,7 +1,7 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
-import { UploadCloud, X, FileText, Image as ImageIcon } from 'lucide-react';
-import { uploadFile } from '@/lib/supabase';
+import { UploadCloud, X, FileText, Image as ImageIcon, AlertCircle } from 'lucide-react';
+import { uploadFile, getFileUrl } from '@/lib/supabase';
 
 interface FileUploadProps {
   onFileUploaded: (fileData: {
@@ -20,7 +20,18 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [fileInfo, setFileInfo] = useState<File | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    // Clear debug info after 10 seconds
+    if (debugInfo) {
+      const timer = setTimeout(() => {
+        setDebugInfo(null);
+      }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [debugInfo]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -28,6 +39,7 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
 
     setFileInfo(file);
     setError(null);
+    setDebugInfo(null);
 
     // Create preview for images
     if (file.type.startsWith('image/')) {
@@ -48,31 +60,52 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
       setUploading(true);
       setProgress(0);
       setError(null);
+      setDebugInfo(null);
 
       // Upload to specific folder per user
-      const path = `users/${userId}/${fileInfo.name}`;
+      const path = `users/${userId}/${Date.now()}-${fileInfo.name.replace(/[^a-zA-Z0-9-_.]/g, '_')}`;
       
       // Handle progress updates
       const onProgressUpdate = (progress: number) => {
-        setProgress(progress);
+        setProgress(Math.round(progress * 100));
       };
 
+      // Log info for debugging
+      setDebugInfo(`Starting upload to bucket: attachments, path: ${path}`);
+
       const result = await uploadFile("attachments", path, fileInfo, onProgressUpdate);
-      if (result) {
-        onFileUploaded({
-          path: result.path || path,
-          url: result.fullPath || `attachments/${path}`,
-          name: fileInfo.name,
-          size: fileInfo.size,
-          type: fileInfo.type
-        });
+      
+      if (!result) {
+        throw new Error("Upload failed - no result returned");
       }
+      
+      setDebugInfo(`Upload successful, generating public URL for: ${result.path || path}`);
+      
+      // Get the public URL for the file
+      const fileUrl = getFileUrl("attachments", result.path || path);
+      
+      if (!fileUrl) {
+        throw new Error("Failed to generate public URL for file");
+      }
+      
+      setDebugInfo(`File uploaded successfully with URL: ${fileUrl}`);
+      
+      // Send the file data back to the parent component
+      onFileUploaded({
+        path: result.path || path,
+        url: fileUrl,
+        name: fileInfo.name,
+        size: fileInfo.size,
+        type: fileInfo.type
+      });
       
       // Reset after successful upload
       resetUpload();
     } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to upload file';
       console.error('Upload error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to upload file');
+      setError(errorMessage);
+      setDebugInfo(`Error during upload: ${errorMessage}`);
     } finally {
       setUploading(false);
     }
@@ -82,6 +115,7 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
     setFileInfo(null);
     setPreview(null);
     setProgress(0);
+    setError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -102,8 +136,16 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
   return (
     <div className="w-full">
       {error && (
-        <div className="mb-2 text-sm text-red-500 bg-red-50 p-2 rounded-md">
-          {error}
+        <div className="mb-2 text-sm text-red-500 bg-red-50 p-2 rounded-md flex items-start gap-2">
+          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+      
+      {debugInfo && (
+        <div className="mb-2 text-xs text-blue-500 bg-blue-50 p-2 rounded-md">
+          <div className="font-medium">Debug Info:</div>
+          <div>{debugInfo}</div>
         </div>
       )}
 

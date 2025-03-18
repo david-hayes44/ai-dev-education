@@ -144,8 +144,28 @@ export async function uploadFile(
  * @param path The path to the file (including filename)
  */
 export function getFileUrl(bucket: string, path: string): string {
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-  return data.publicUrl;
+  if (!bucket || !path) {
+    console.error('Invalid bucket or path provided to getFileUrl', { bucket, path });
+    return '';
+  }
+  
+  try {
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+    
+    if (!data || !data.publicUrl) {
+      console.error('Failed to generate public URL', { bucket, path, data });
+      return '';
+    }
+    
+    return data.publicUrl;
+  } catch (error) {
+    console.error('Error generating public URL:', error);
+    // Fallback to constructing URL manually (not ideal but helps in some cases)
+    if (supabaseUrl) {
+      return `${supabaseUrl}/storage/v1/object/public/${bucket}/${encodeURIComponent(path)}`;
+    }
+    return '';
+  }
 }
 
 /**
