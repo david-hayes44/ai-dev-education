@@ -1,4 +1,9 @@
 ---
+description: 
+globs: 
+alwaysApply: true
+---
+---
 description: Apply these rules when creating the project
 globs:
 alwaysApply: true
