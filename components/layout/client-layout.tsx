@@ -3,6 +3,7 @@
 import { ReactNode, useState, useEffect } from "react"
 import { Sidebar } from "@/components/navigation/Sidebar"
 import { MainLayout } from "@/components/layout/main-layout"
+import { FloatingChat } from "@/components/chat/floating-chat"
 
 export default function ClientLayout({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
@@ -35,6 +36,9 @@ export default function ClientLayout({ children }: { children: ReactNode }) {
       <MainLayout>
         {children}
       </MainLayout>
+      
+      {/* Floating chat widget */}
+      <FloatingChat />
     </>
   )
 } 

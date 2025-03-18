@@ -8,8 +8,6 @@ import TanstackClientProvider from "@/components/providers/tanstack-client-provi
 import ClientLayout from "@/components/layout/client-layout"
 import { NavigationProvider } from "@/contexts/navigation-context"
 import { ChatProvider } from "@/contexts/chat-context"
-import { FloatingChat } from "@/components/chat/floating-chat"
-import { Header } from "@/components/layout/header"
 
 const fontSans = FontSans({
   subsets: ["latin"],
@@ -55,9 +53,7 @@ export default function RootLayout({
               <NavigationProvider>
                 <ChatProvider>
                   <ClientLayout>
-                    <Header />
                     <div className="flex-1">{children}</div>
-                    <FloatingChat />
                   </ClientLayout>
                 </ChatProvider>
               </NavigationProvider>
