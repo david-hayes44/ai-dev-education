@@ -8,6 +8,11 @@
 import fs from 'fs';
 import path from 'path';
 import fetch from 'node-fetch';
+import { 
+  scanContentPages, 
+  extractContentFromPage,
+  extractContentMetadata
+} from './utils';
 
 // Interface for content chunks that will be indexed and searched
 export interface ContentChunk {
@@ -146,7 +151,6 @@ function calculateCosineSimilarity(a: number[], b: number[]): number {
 
 /**
  * Index all content pages and generate embeddings
- * This is a mock implementation for demonstration
  */
 export async function indexAllContent({ 
   useAPI = true 
@@ -160,198 +164,164 @@ export async function indexAllContent({
   // Reset content chunks
   contentChunks = [];
   
-  // For this implementation, we'll use mock data
-  // In a real implementation, we'd scan content files
-  const mockPages = [
-    { 
-      title: 'Introduction to AI-Assisted Development',
-      path: '/introduction',
-      section: 'Getting Started',
-      content: 'AI-assisted development is revolutionizing how developers write code...',
-      sections: [
-        { id: 'benefits', title: 'Benefits', content: 'Improved productivity and code quality...' },
-        { id: 'getting-started', title: 'Getting Started', content: 'To get started with AI-assisted development...' }
-      ]
-    },
-    {
-      title: 'Understanding MCP',
-      path: '/mcp',
-      section: 'Core Concepts',
-      content: 'The Model Context Protocol defines how to structure context for AI models...',
-      sections: [
-        { id: 'core-concepts', title: 'Core Concepts', content: 'MCP is built around several key concepts...' },
-        { id: 'implementation', title: 'Implementation', content: 'Implementing MCP in your workflow...' }
-      ]
+  try {
+    // Scan for actual content pages instead of using mock data
+    const contentFiles = await scanContentPages();
+    console.log(`Found ${contentFiles.length} content pages to index`);
+    
+    let chunksCreated = 0;
+    let vectorsStored = 0;
+    
+    // Process each file
+    for (const filePath of contentFiles) {
+      // Extract chunks from this page
+      const pageChunks = await extractContentFromPage(filePath);
+      
+      // Generate embeddings for each chunk
+      for (const chunk of pageChunks) {
+        chunk.embedding = useAPI 
+          ? await generateOpenRouterEmbedding(chunk.content)
+          : generateSimpleEmbedding(chunk.content);
+          
+        // Add to the chunks array
+        contentChunks.push(chunk);
+        chunksCreated++;
+        vectorsStored++;
+      }
+      
+      console.log(`Indexed ${filePath} - created ${pageChunks.length} chunks`);
     }
-  ];
-  
-  let chunksCreated = 0;
-  let vectorsStored = 0;
-  
-  // Process each page
-  for (const page of mockPages) {
-    // Add the main page
-    const pageChunk: ContentChunk = {
-      id: `page:${page.path}`,
-      title: page.title,
-      content: page.content,
-      path: page.path,
-      source: page.title,
-      section: page.section,
-      keywords: [page.title, page.section],
-      priority: 1,
-      embedding: useAPI 
-        ? await generateOpenRouterEmbedding(page.content)
-        : generateSimpleEmbedding(page.content)
-    };
     
-    contentChunks.push(pageChunk);
-    chunksCreated++;
-    vectorsStored++;
-    
-    // Add each section
-    for (const section of page.sections) {
-      const sectionChunk: ContentChunk = {
-        id: `section:${page.path}:${section.id}`,
-        title: `${page.title} - ${section.title}`,
-        content: section.content,
-        path: page.path,
-        source: page.title,
-        section: page.section,
-        keywords: [page.title, section.title],
-        priority: 1,
-        sectionId: section.id,
-        embedding: useAPI 
-          ? await generateOpenRouterEmbedding(section.content)
-          : generateSimpleEmbedding(section.content)
+    // Add mock cursor content until we have a real page for it
+    if (!contentChunks.some(chunk => chunk.path === '/cursor')) {
+      const cursorPage = {
+        id: `page:/cursor`,
+        title: 'Using Cursor for AI-Assisted Development',
+        content: 'Cursor is an AI-first code editor designed to enhance developer productivity through built-in AI assistance. It provides features like code completion, refactoring help, and natural language explanations of code.',
+        path: '/cursor',
+        source: 'Using Cursor for AI-Assisted Development',
+        section: 'AI Tools',
+        keywords: ['cursor', 'code editor', 'ai', 'development', 'ide', 'tool'],
+        priority: 1
       };
       
-      contentChunks.push(sectionChunk);
-      chunksCreated++;
-      vectorsStored++;
-    }
-  }
-  
-  // Add detailed Cursor content - this ensures the AI can find Cursor-related content
-  const cursorPage = {
-    id: `page:/cursor`,
-    title: 'Using Cursor for AI-Assisted Development',
-    content: 'Cursor is an AI-first code editor designed to enhance developer productivity through built-in AI assistance. It provides features like code completion, refactoring help, and natural language explanations of code.',
-    path: '/cursor',
-    source: 'Using Cursor for AI-Assisted Development',
-    section: 'AI Tools',
-    keywords: ['cursor', 'code editor', 'ai', 'development', 'ide', 'tool'],
-    priority: 1
-  };
-  
-  const cursorContent = `
-    Cursor is an intelligent code editor with built-in AI capabilities that helps developers write, understand, and transform code efficiently.
-    
-    Key features of Cursor include:
-    
-    1. AI-Powered Code Completion - Write code faster with context-aware suggestions
-    2. Natural Language Commands - Ask questions about your code in plain English
-    3. Code Explanation - Get detailed explanations of complex code segments
-    4. Refactoring Assistance - Intelligent help with code restructuring
-    5. Error Resolution - Get help fixing bugs and resolving errors
-    
-    Keyboard shortcuts in Cursor:
-    - Ctrl+Enter (Cmd+Enter on Mac): Send a message to the AI assistant
-    - Ctrl+K: Open command palette
-    - Ctrl+/ (Cmd+/ on Mac): Toggle comment
-    
-    Getting Started with Cursor:
-    1. Download and install Cursor from cursor.so
-    2. Open your project or create a new one
-    3. Use Ctrl+Enter to interact with the AI assistant
-    4. Ask questions about your code or request code generation
-  `;
-  
-  // Create the main page chunk
-  const cursorPageChunk: ContentChunk = {
-    ...cursorPage,
-    embedding: useAPI 
-      ? await generateOpenRouterEmbedding(cursorPage.content)
-      : generateSimpleEmbedding(cursorPage.content)
-  };
-  
-  contentChunks.push(cursorPageChunk);
-  chunksCreated++;
-  vectorsStored++;
-  
-  // Add detailed sections for Cursor
-  const cursorSections = [
-    {
-      id: 'features',
-      title: 'Key Features',
-      content: `Cursor offers a range of AI-powered features:
-        - Intelligent code completion that understands context
-        - Natural language interface for code generation
-        - Built-in AI chat for answering coding questions
-        - Code refactoring suggestions
-        - Explanation of complex code blocks
-        - Automatic bug fixing assistance`
-    },
-    {
-      id: 'shortcuts',
-      title: 'Keyboard Shortcuts',
-      content: `Cursor keyboard shortcuts:
+      const cursorContent = `
+        Cursor is an intelligent code editor with built-in AI capabilities that helps developers write, understand, and transform code efficiently.
+        
+        Key features of Cursor include:
+        
+        1. AI-Powered Code Completion - Write code faster with context-aware suggestions
+        2. Natural Language Commands - Ask questions about your code in plain English
+        3. Code Explanation - Get detailed explanations of complex code segments
+        4. Refactoring Assistance - Intelligent help with code restructuring
+        5. Error Resolution - Get help fixing bugs and resolving errors
+        
+        Keyboard shortcuts in Cursor:
         - Ctrl+Enter (Cmd+Enter on Mac): Send a message to the AI assistant
         - Ctrl+K: Open command palette
         - Ctrl+/ (Cmd+/ on Mac): Toggle comment
-        - Ctrl+Space: Trigger AI code completion
-        - Ctrl+Shift+A: Ask AI about selected code`
-    },
-    {
-      id: 'getting-started',
-      title: 'Getting Started',
-      content: `To get started with Cursor:
-        1. Download Cursor from cursor.so
-        2. Install and open the application
-        3. Open an existing project or create a new one
-        4. Use Ctrl+Enter to activate the AI assistant
-        5. Begin asking questions or requesting code generation`
+        
+        Getting Started with Cursor:
+        1. Download and install Cursor from cursor.so
+        2. Open your project or create a new one
+        3. Use Ctrl+Enter to interact with the AI assistant
+        4. Ask questions about your code or request code generation
+      `;
+      
+      // Create the main page chunk
+      const cursorPageChunk: ContentChunk = {
+        ...cursorPage,
+        embedding: useAPI 
+          ? await generateOpenRouterEmbedding(cursorPage.content)
+          : generateSimpleEmbedding(cursorPage.content)
+      };
+      
+      contentChunks.push(cursorPageChunk);
+      chunksCreated++;
+      vectorsStored++;
+      
+      // Add detailed sections for Cursor
+      const cursorSections = [
+        {
+          id: 'features',
+          title: 'Key Features',
+          content: `Cursor offers a range of AI-powered features:
+            - Intelligent code completion that understands context
+            - Natural language interface for code generation
+            - Built-in AI chat for answering coding questions
+            - Code refactoring suggestions
+            - Explanation of complex code blocks
+            - Automatic bug fixing assistance`
+        },
+        {
+          id: 'shortcuts',
+          title: 'Keyboard Shortcuts',
+          content: `Cursor keyboard shortcuts:
+            - Ctrl+Enter (Cmd+Enter on Mac): Send a message to the AI assistant
+            - Ctrl+K: Open command palette
+            - Ctrl+/ (Cmd+/ on Mac): Toggle comment
+            - Ctrl+Space: Trigger AI code completion
+            - Ctrl+Shift+A: Ask AI about selected code`
+        },
+        {
+          id: 'getting-started',
+          title: 'Getting Started',
+          content: `To get started with Cursor:
+            1. Download Cursor from cursor.so
+            2. Install and open the application
+            3. Open an existing project or create a new one
+            4. Use Ctrl+Enter to activate the AI assistant
+            5. Begin asking questions or requesting code generation`
+        }
+      ];
+      
+      // Add each section for Cursor
+      for (const section of cursorSections) {
+        const sectionChunk: ContentChunk = {
+          id: `section:/cursor:${section.id}`,
+          title: `Using Cursor - ${section.title}`,
+          content: section.content,
+          path: '/cursor',
+          source: 'Using Cursor for AI-Assisted Development',
+          section: 'AI Tools',
+          keywords: ['cursor', 'code editor', section.title.toLowerCase()],
+          priority: 1,
+          sectionId: section.id,
+          embedding: useAPI 
+            ? await generateOpenRouterEmbedding(section.content)
+            : generateSimpleEmbedding(section.content)
+        };
+        
+        contentChunks.push(sectionChunk);
+        chunksCreated++;
+        vectorsStored++;
+      }
+      
+      console.log('Added mock Cursor content with 4 chunks');
     }
-  ];
-  
-  // Add each section for Cursor
-  for (const section of cursorSections) {
-    const sectionChunk: ContentChunk = {
-      id: `section:/cursor:${section.id}`,
-      title: `Using Cursor - ${section.title}`,
-      content: section.content,
-      path: '/cursor',
-      source: 'Using Cursor for AI-Assisted Development',
-      section: 'AI Tools',
-      keywords: ['cursor', 'code editor', section.title.toLowerCase()],
-      priority: 1,
-      sectionId: section.id,
-      embedding: useAPI 
-        ? await generateOpenRouterEmbedding(section.content)
-        : generateSimpleEmbedding(section.content)
+    
+    // Update stats
+    const contentPages = new Set(contentChunks.map(chunk => chunk.path)).size;
+    
+    indexingStats = {
+      totalPages: contentPages,
+      totalChunks: chunksCreated,
+      totalVectors: vectorsStored,
+      lastIndexed: new Date().toISOString()
     };
     
-    contentChunks.push(sectionChunk);
-    chunksCreated++;
-    vectorsStored++;
+    // Save the stats
+    saveIndexingStats();
+    
+    return {
+      pagesIndexed: contentPages,
+      chunksCreated,
+      vectorsStored
+    };
+  } catch (error) {
+    console.error('Error indexing content:', error);
+    throw error;
   }
-  
-  // Update stats
-  indexingStats = {
-    totalPages: mockPages.length + 1, // Add 1 for the Cursor page
-    totalChunks: chunksCreated,
-    totalVectors: vectorsStored,
-    lastIndexed: new Date().toISOString()
-  };
-  
-  // Save the stats
-  saveIndexingStats();
-  
-  return {
-    pagesIndexed: mockPages.length + 1, // Add 1 for the Cursor page
-    chunksCreated,
-    vectorsStored
-  };
 }
 
 /**
@@ -401,9 +371,25 @@ export async function semanticSearch(
     limit?: number;
     threshold?: number;
     useAPI?: boolean;
+    section?: string;
+    boostFields?: {
+      title?: number;
+      keywords?: number;
+      priority?: number;
+    };
   } = {}
 ): Promise<ContentChunk[]> {
-  const { limit = 5, threshold = 0.5, useAPI = true } = options;
+  const { 
+    limit = 5, 
+    threshold = 0.5, 
+    useAPI = true,
+    section,
+    boostFields = {
+      title: 0.2,
+      keywords: 0.1,
+      priority: 0.05
+    } 
+  } = options;
   
   if (contentChunks.length === 0) {
     return [];
@@ -414,13 +400,47 @@ export async function semanticSearch(
     ? await generateOpenRouterEmbedding(query) 
     : generateSimpleEmbedding(query);
   
-  // Calculate similarity for each chunk
-  const results = contentChunks.map(chunk => {
-    const similarity = calculateCosineSimilarity(queryEmbedding, chunk.embedding || []);
-    return { chunk, similarity };
-  });
+  // Calculate improved relevance score for each chunk
+  const results = contentChunks
+    // Filter by section if provided
+    .filter(chunk => !section || chunk.section === section)
+    .map(chunk => {
+      // Base score from vector similarity
+      const vectorSimilarity = calculateCosineSimilarity(queryEmbedding, chunk.embedding || []);
+      
+      // Calculate additional relevance signals
+      let finalScore = vectorSimilarity;
+      
+      // Boost for title matches
+      if (boostFields.title && 
+          chunk.title.toLowerCase().includes(query.toLowerCase())) {
+        finalScore += boostFields.title;
+      }
+      
+      // Boost for keyword matches
+      if (boostFields.keywords) {
+        const keywordMatch = chunk.keywords.some(keyword => 
+          query.toLowerCase().includes(keyword.toLowerCase()) || 
+          keyword.toLowerCase().includes(query.toLowerCase())
+        );
+        
+        if (keywordMatch) {
+          finalScore += boostFields.keywords;
+        }
+      }
+      
+      // Boost based on content priority
+      if (boostFields.priority) {
+        finalScore += chunk.priority * boostFields.priority;
+      }
+      
+      // Cap at 1.0
+      finalScore = Math.min(finalScore, 1.0);
+      
+      return { chunk, similarity: finalScore };
+    });
   
-  // Sort by similarity and return top results
+  // Sort by relevance score and return top results
   return results
     .filter(result => result.similarity >= threshold)
     .sort((a, b) => b.similarity - a.similarity)
@@ -429,6 +449,161 @@ export async function semanticSearch(
       ...result.chunk,
       relevance: result.similarity
     }));
+}
+
+/**
+ * Perform a keyword search on indexed content
+ */
+export async function keywordSearch(
+  query: string,
+  options: {
+    limit?: number;
+    threshold?: number;
+    section?: string;
+  } = {}
+): Promise<ContentChunk[]> {
+  const { limit = 5, threshold = 0.3, section } = options;
+  
+  if (contentChunks.length === 0) {
+    return [];
+  }
+  
+  // Break query into keywords
+  const keywords = query.toLowerCase().split(/\W+/).filter(k => k.length > 2);
+  
+  // Calculate keyword match score for each chunk
+  const results = contentChunks
+    // Filter by section if provided
+    .filter(chunk => !section || chunk.section === section)
+    .map(chunk => {
+      // Calculate what percentage of keywords are found in the content
+      const contentText = chunk.content.toLowerCase();
+      const titleText = chunk.title.toLowerCase();
+      
+      let matchCount = 0;
+      for (const keyword of keywords) {
+        if (contentText.includes(keyword) || titleText.includes(keyword)) {
+          matchCount++;
+        }
+      }
+      
+      // Calculate match percentage (0 to 1)
+      const matchScore = keywords.length > 0 
+        ? matchCount / keywords.length 
+        : 0;
+        
+      // Boost exact title matches significantly
+      let finalScore = matchScore;
+      if (titleText.includes(query.toLowerCase())) {
+        finalScore += 0.3;
+      }
+      
+      // Boost by priority
+      finalScore += chunk.priority * 0.05;
+      
+      // Cap at 1.0
+      finalScore = Math.min(finalScore, 1.0);
+      
+      return { chunk, similarity: finalScore };
+    });
+  
+  // Sort by match score and return top results
+  return results
+    .filter(result => result.similarity >= threshold)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, limit)
+    .map(result => ({
+      ...result.chunk,
+      relevance: result.similarity
+    }));
+}
+
+/**
+ * Hybrid search combining semantic and keyword search
+ */
+export async function hybridSearch(
+  query: string,
+  options: {
+    limit?: number;
+    threshold?: number;
+    useAPI?: boolean;
+    section?: string;
+    weightVector?: number;
+    weightKeyword?: number;
+  } = {}
+): Promise<ContentChunk[]> {
+  const { 
+    limit = 5, 
+    threshold = 0.3, 
+    useAPI = true,
+    section,
+    weightVector = 0.7,
+    weightKeyword = 0.3
+  } = options;
+  
+  // Get semantic search results
+  const semanticResults = await semanticSearch(query, { 
+    limit: limit * 2,
+    threshold: threshold / 2, // Lower threshold to get more candidates
+    useAPI,
+    section
+  });
+  
+  // Get keyword search results
+  const keywordResults = await keywordSearch(query, {
+    limit: limit * 2,
+    threshold: threshold / 2, // Lower threshold to get more candidates
+    section
+  });
+  
+  // Create a map of all results by ID
+  const resultsMap = new Map<string, ContentChunk>();
+  
+  // Process semantic results
+  semanticResults.forEach(chunk => {
+    const id = chunk.id;
+    const existingChunk = resultsMap.get(id);
+    
+    if (existingChunk) {
+      // If already exists, use weighted average of scores
+      existingChunk.relevance = (
+        (existingChunk.relevance || 0) + 
+        weightVector * (chunk.relevance || 0)
+      );
+    } else {
+      // Otherwise add with weighted score
+      resultsMap.set(id, {
+        ...chunk,
+        relevance: weightVector * (chunk.relevance || 0)
+      });
+    }
+  });
+  
+  // Process keyword results
+  keywordResults.forEach(chunk => {
+    const id = chunk.id;
+    const existingChunk = resultsMap.get(id);
+    
+    if (existingChunk) {
+      // If already exists, add weighted keyword score
+      existingChunk.relevance = (
+        (existingChunk.relevance || 0) + 
+        weightKeyword * (chunk.relevance || 0)
+      );
+    } else {
+      // Otherwise add with weighted score
+      resultsMap.set(id, {
+        ...chunk,
+        relevance: weightKeyword * (chunk.relevance || 0)
+      });
+    }
+  });
+  
+  // Convert map to array, filter, sort and limit
+  return Array.from(resultsMap.values())
+    .filter(chunk => (chunk.relevance || 0) >= threshold)
+    .sort((a, b) => (b.relevance || 0) - (a.relevance || 0))
+    .slice(0, limit);
 }
 
 /**
@@ -480,9 +655,46 @@ export class ContentIndexingService {
       limit?: number;
       threshold?: number;
       useAPI?: boolean;
+      section?: string;
+      boostFields?: {
+        title?: number;
+        keywords?: number;
+        priority?: number;
+      };
     } = {}
   ): Promise<ContentChunk[]> {
     return semanticSearch(query, options);
+  }
+  
+  /**
+   * Perform keyword search across indexed content
+   */
+  async keywordSearch(
+    query: string,
+    options: {
+      limit?: number;
+      threshold?: number;
+      section?: string;
+    } = {}
+  ): Promise<ContentChunk[]> {
+    return keywordSearch(query, options);
+  }
+  
+  /**
+   * Perform hybrid search combining semantic and keyword search
+   */
+  async hybridSearch(
+    query: string,
+    options: {
+      limit?: number;
+      threshold?: number;
+      useAPI?: boolean;
+      section?: string;
+      weightVector?: number;
+      weightKeyword?: number;
+    } = {}
+  ): Promise<ContentChunk[]> {
+    return hybridSearch(query, options);
   }
 
   /**
