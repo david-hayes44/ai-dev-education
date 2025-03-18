@@ -12,9 +12,10 @@ export interface Message {
   content: string;
   timestamp: number | Date;
   metadata?: MessageMetadata;
+  isStreaming?: boolean;
 }
 
-export type MessageMetadataType = "streaming" | "error" | "loading" | "thinking" | "suggestion";
+export type MessageMetadataType = "streaming" | "error" | "loading" | "thinking" | "suggestion" | "concept_explanation";
 
 export interface MessageMetadata {
   type?: MessageMetadataType;
