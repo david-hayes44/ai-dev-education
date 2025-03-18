@@ -29,6 +29,8 @@ interface NavigationContextType {
   currentPage: string;
   pageTitle: string;
   pageDescription: string;
+  recommendations: NavigationSuggestion[];
+  isLoading: boolean;
   search: (query: string) => Promise<NavigationSuggestion[]>;
   getSiteStructure: () => Promise<{[key: string]: string[]}>;
   getNavigationSuggestions: (content: string) => Promise<NavigationSuggestion[]>;
@@ -46,6 +48,8 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
   const [currentPage, setCurrentPage] = useState<string>('');
   const [pageTitle, setPageTitle] = useState<string>('');
   const [pageDescription, setPageDescription] = useState<string>('');
+  const [recommendations, setRecommendations] = useState<NavigationSuggestion[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   
   // Update current page info when pathname changes
   useEffect(() => {
@@ -68,6 +72,8 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
   const search = async (query: string): Promise<NavigationSuggestion[]> => {
     if (!query.trim()) return [];
     
+    setIsLoading(true);
+    
     try {
       // Use our content search API to find relevant pages
       const response = await fetch(`/api/content-search?query=${encodeURIComponent(query)}&limit=5`);
@@ -79,15 +85,20 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
       const data = await response.json();
       
       // Convert content chunks to navigation suggestions
-      return (data.results || []).map((chunk: ContentChunk) => ({
+      const results = (data.results || []).map((chunk: ContentChunk) => ({
         title: chunk.title,
         path: chunk.path,
         description: chunk.content.substring(0, 120) + '...',
         confidence: 0.85 // In a real implementation, this would be calculated
       }));
+      
+      setRecommendations(results);
+      return results;
     } catch (err) {
       console.error('Error searching for pages:', err);
       return [];
+    } finally {
+      setIsLoading(false);
     }
   };
   
@@ -148,6 +159,8 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
       currentPage,
       pageTitle,
       pageDescription,
+      recommendations,
+      isLoading,
       search,
       getSiteStructure,
       getNavigationSuggestions
