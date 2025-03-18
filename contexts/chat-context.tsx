@@ -209,7 +209,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   
   // Update the streaming message function
   const sendStreamingMessage = async (content: string, attachments?: FileAttachment[]) => {
-    if (!chatService) return;
+    if (!chatService) {
+      console.error("Chat service not initialized");
+      return;
+    }
     
     setIsStreaming(true);
     setIsTyping(true);
@@ -218,6 +221,39 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (attachments && attachments.length > 0) {
         console.log(`Processing message with ${attachments.length} attachments:`, 
           attachments.map(a => ({ name: a.name, type: a.type, size: a.size })));
+        
+        // Add client-side validation for token estimation
+        const estimatedTokens = attachments.reduce((acc, file) => {
+          // Roughly estimate tokens based on file size and type
+          let tokenEstimate = 0;
+          
+          if (file.type.startsWith('image/')) {
+            // Images are usually described in a few hundred tokens
+            tokenEstimate = 1000;
+          } else if (file.type.includes('text') || 
+                    file.name.match(/\.(txt|md|json|csv|js|py|html|css|tsx?)$/i)) {
+            // Text files: ~4 chars per token, add 20% overhead
+            tokenEstimate = Math.ceil((file.size / 4) * 1.2);
+          } else if (file.name.match(/\.(pdf|doc|docx)$/i)) {
+            // Documents: more overhead due to formatting
+            tokenEstimate = Math.ceil((file.size / 3) * 1.5);
+          } else {
+            // Generic binary files
+            tokenEstimate = 500; // Placeholder for metadata description
+          }
+          
+          return acc + tokenEstimate;
+        }, 0);
+        
+        const userQueryTokens = Math.ceil(content.length / 4);
+        const totalEstimatedTokens = estimatedTokens + userQueryTokens;
+        
+        console.log(`Estimated tokens: ~${totalEstimatedTokens} (${userQueryTokens} from query, ${estimatedTokens} from attachments)`);
+        
+        // Warn if approaching token limits (16K is a common limit)
+        if (totalEstimatedTokens > 12000) {
+          console.warn('Warning: Approaching token limits with this file. The model may struggle to process it completely.');
+        }
       }
       
       // Fetch relevant content first
@@ -252,9 +288,39 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setMessages(chatService.getCurrentChunk());
     } catch (error) {
       console.error('Error sending streaming message:', error);
+      // Format the error message for display
+      let errorMessage = "I encountered an error processing your request.";
+      
+      if (error instanceof Error) {
+        console.error('Error details:', error.message);
+        
+        if (attachments && attachments.length > 0) {
+          if (error.message.toLowerCase().includes('token') || 
+              error.message.toLowerCase().includes('limit')) {
+            errorMessage = "The file you uploaded is too large for the AI to process. Please try with a smaller file or extract the key information.";
+          } else if (error.message.toLowerCase().includes('url') || 
+                    error.message.toLowerCase().includes('access')) {
+            errorMessage = "There was a problem accessing your uploaded file. The URL might be invalid or the file format isn't supported.";
+          }
+        }
+      }
+      
+      // Create a custom error message
+      const errorResponseMessage: Message = {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: errorMessage,
+        timestamp: Date.now(),
+        metadata: { type: "error" }
+      };
+      
+      // Add it to the messages
+      setMessages(prev => [...prev, errorResponseMessage]);
+      
       // Ensure the error is shown to the user
       chatService.updateAssistantMessageWithError(error);
       setCurrentSession(chatService.getCurrentSession());
+      
       // Also update messages state to show the error
       setMessages(chatService.getCurrentChunk());
     } finally {

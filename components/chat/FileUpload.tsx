@@ -248,34 +248,60 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
   };
 
   return (
-    <div className="w-full">
-      {error && (
-        <div className="mb-2 text-sm text-red-500 bg-red-50 p-2 rounded-md flex items-start gap-2">
-          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-      
+    <div className="space-y-4">
       {isAnonymous && (
-        <div className="mb-2 text-sm text-amber-600 bg-amber-50 p-2 rounded-md flex items-start gap-2">
-          <LogIn className="h-4 w-4 mt-0.5 flex-shrink-0" />
-          <div className="flex flex-col">
-            <span>Sign in to enable cloud storage for files</span>
-            <Button
-              variant="link"
-              className="h-auto p-0 text-amber-700 font-medium text-left"
+        <div className="flex items-center bg-orange-50 dark:bg-orange-950/50 text-orange-800 dark:text-orange-300 rounded-md p-2 text-xs gap-2 mb-2">
+          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+          <div>
+            <p>Sign in for full file storage capabilities</p>
+            <button 
               onClick={handleSignIn}
+              className="inline-flex items-center text-orange-600 dark:text-orange-400 hover:underline mt-1 gap-1"
             >
-              Sign in now
-            </Button>
+              <LogIn className="h-3 w-3" />
+              <span>Sign in</span>
+            </button>
           </div>
         </div>
       )}
-      
+
+      {/* Add AI file support information */}
+      <div className="text-xs text-muted-foreground mb-2">
+        <p className="font-medium mb-1">Supported file types:</p>
+        <ul className="list-disc list-inside space-y-0.5">
+          <li>Text files (.txt, .md, .csv)</li>
+          <li>Code files (.js, .py, .ts, etc.)</li>
+          <li>Images (.jpg, .png, .gif)</li>
+          <li>PDFs (.pdf) - text extraction only</li>
+        </ul>
+        <p className="mt-1 text-amber-600 dark:text-amber-400">
+          <AlertCircle className="h-3 w-3 inline mr-1" />
+          Large files may exceed token limits
+        </p>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300 rounded-md p-2 text-xs flex items-start gap-2">
+          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+          <div>
+            <p>{error}</p>
+            {showFallback && (
+              <Button 
+                variant="link" 
+                size="sm" 
+                className="text-xs p-0 h-auto mt-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                onClick={handleFallbackAttachment}
+              >
+                Use local attachment instead
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       {debugInfo && (
-        <div className="mb-2 text-xs text-blue-500 bg-blue-50 p-2 rounded-md">
-          <div className="font-medium">Debug Info:</div>
-          <div>{debugInfo}</div>
+        <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 rounded-md p-2 text-xs">
+          <p className="font-mono text-[10px] break-all">{debugInfo}</p>
         </div>
       )}
 

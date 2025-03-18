@@ -774,7 +774,7 @@ export class ChatService {
       if (userMessage.attachments && userMessage.attachments.length > 0) {
         console.log(`Starting streaming message with ${userMessage.attachments.length} file attachments:`);
         userMessage.attachments.forEach((attachment, index) => {
-          console.log(`File ${index+1}: ${attachment.name} (${attachment.type}), Size: ${Math.round(attachment.size/1024)}KB`);
+          console.log(`File ${index+1}: ${attachment.name} (${attachment.type}), Size: ${Math.round(attachment.size/1024)}KB, URL: ${attachment.url.substring(0, 50)}...`);
           // Check if URL is accessible
           fetch(attachment.url, { method: 'HEAD' })
             .then(response => {
@@ -809,23 +809,48 @@ export class ChatService {
       const streamingMessage = { ...placeholderMessage };
       
       try {
+        // Validate model availability and API key
+        if (!process.env.NEXT_PUBLIC_OPENROUTER_API_KEY) {
+          throw new Error("OpenRouter API key is missing");
+        }
+        
         // Debug model information
         console.log(`Sending streaming message using model: ${this.selectedModel}`);
         
+        // Add model validation logic
+        const validModels = AVAILABLE_MODELS.map(m => m.id);
+        if (!validModels.includes(this.selectedModel)) {
+          console.warn(`Selected model ${this.selectedModel} not in known models list. Using default model instead.`);
+          this.selectedModel = 'anthropic/claude-3.7-sonnet:beta'; // Fallback to a reliable model
+        }
+        
         // Stream the response
+        console.log('Sending API request to OpenRouter with', apiMessages.length, 'messages.');
+        if (userMessage.attachments?.length) {
+          console.log('Request includes file attachments, may affect token count.');
+        }
+        
         const response = await sendChatCompletion({
           messages: apiMessages,
           model: this.selectedModel,
           stream: true,
           temperature: 0.7,
           max_tokens: 4000,
+          safe_mode: 'none', // Disable content filtering since we're dealing with file content
         }) as ReadableStream;
+        
+        console.log('Successfully received OpenRouter stream response');
         
         await processStreamingResponse(
           response,
           (chunk: ChatCompletionChunk) => {
             // Extract content from the chunk
             const content = chunk.choices[0]?.delta?.content || "";
+            
+            // Check for error indicators in the content
+            if (content.toLowerCase().includes('sorry') && content.toLowerCase().includes('cannot access') && userMessage.attachments?.length) {
+              console.warn('Model indicates inability to access file:', content);
+            }
             
             // Append to accumulated response
             responseContent += content;
@@ -865,8 +890,14 @@ export class ChatService {
             
             if (error instanceof Error) {
               errorMessage += ` Error details: ${error.message}`;
+              console.error('Error object:', error);
             } else if (typeof error === 'string') {
               errorMessage += ` Error details: ${error}`;
+            }
+            
+            // Additional context for file-related errors
+            if (userMessage.attachments?.length && errorMessage.toLowerCase().includes('token')) {
+              errorMessage += " The uploaded file may be too large for processing. Try with a smaller file or summarize its content in your message.";
             }
             
             // Update the streaming message with the error
@@ -889,9 +920,27 @@ export class ChatService {
         console.error("Streaming API call failed:", streamError);
         
         // Create a fallback error message
-        streamingMessage.content = `I'm sorry, I encountered an error while processing your request. ${
-          streamError instanceof Error ? `Error: ${streamError.message}` : 'Please try again later.'
-        }`;
+        let errorContent = `I'm sorry, I encountered an error while processing your request.`;
+        
+        if (streamError instanceof Error) {
+          console.error('Stream error object:', streamError);
+          errorContent += ` Error: ${streamError.message}`;
+          
+          // Special handling for file-related errors
+          if (userMessage.attachments?.length) {
+            if (streamError.message.toLowerCase().includes('token') || 
+                streamError.message.toLowerCase().includes('limit')) {
+              errorContent += " The file you uploaded may be too large to process. Please try with a smaller file or extract the specific parts you want to discuss.";
+            } else if (streamError.message.toLowerCase().includes('url') || 
+                       streamError.message.toLowerCase().includes('access')) {
+              errorContent += " I couldn't access the file you shared. The URL might be invalid or the file format isn't supported.";
+            }
+          }
+        } else {
+          errorContent += ' Please try again later.';
+        }
+        
+        streamingMessage.content = errorContent;
         streamingMessage.metadata = { type: "error" };
         streamingMessage.isStreaming = false;
         
@@ -1115,32 +1164,99 @@ ${chunk.content}
       
       let fileDescription = `File: ${file.name} (${Math.round(file.size/1024)} KB, ${file.type})`;
       
-      // Add specific file type context
+      // Add specific file type context and instructions based on file type
       if (isImage) {
         fileDescription += "\nThis is an image file. Please analyze the visual content and provide observations.";
+        fileDescription += "\nInstructions: Describe what you see in the image, including any text, objects, people, or scenes.";
+        fileDescription += "\nIf you cannot access the image, please inform the user that you're unable to view the image.";
+      } else if (isCode) {
+        fileDescription += "\nThis is a code file. Please analyze the code and provide insights.";
+        fileDescription += "\nInstructions: Explain what the code does, identify any potential issues, and suggest improvements if appropriate.";
+        fileDescription += `\nThis appears to be ${this.getLanguageFromExtension(fileExt)} code.`;
+      } else if (isDocument) {
+        fileDescription += "\nThis is a document file. Please try to extract and analyze the text content.";
+        fileDescription += "\nInstructions: Summarize the key points from the document, focusing on the main topics and important details.";
+        fileDescription += "\nIf you cannot access the document content, please inform the user.";
       } else if (isText) {
         fileDescription += "\nThis is a text file. Please analyze the content and provide insights.";
-      } else if (isDocument) {
-        fileDescription += "\nThis is a document file. Please extract and analyze the text content.";
-      } else if (isCode) {
-        fileDescription += "\nThis is a code file. Please analyze the code and provide feedback or explanations.";
+        fileDescription += "\nInstructions: Read the text and provide analysis, answering any questions the user has about its content.";
+      } else {
+        fileDescription += "\nPlease analyze this file to the best of your ability.";
+        fileDescription += "\nIf you cannot access or process this file type, please inform the user.";
       }
       
-      // Add the URL
-      fileDescription += `\nATTACHMENT_URL: ${file.url}`;
+      // Add format-specific instructions for better AI processing
+      if (fileExt === 'json') {
+        fileDescription += "\nThis is a JSON file. Please parse the structure and explain the key properties and values.";
+      } else if (fileExt === 'csv') {
+        fileDescription += "\nThis is a CSV file. Please analyze the data structure, identify columns, and provide a summary of the content.";
+      } else if (fileExt === 'md') {
+        fileDescription += "\nThis is a Markdown file. Please interpret the formatted content and provide an overview.";
+      }
+      
+      // Add data URL with explicit indicator so OpenRouter models can find it
+      fileDescription += `\n\nIMPORTANT - FILE URL: ${file.url}`;
       
       return fileDescription;
-    }).join('\n\n');
+    }).join('\n\n---\n\n');
     
-    const instructions = `
+    let instructions = `
 I've attached the following file(s) to analyze and discuss:
 
 ${fileDetails}
 
-Please analyze the content of the file(s) and respond to my query. If you cannot access or process the file(s), please let me know.
 `;
 
+    // Add specific instructions based on number of files
+    if (attachments.length > 1) {
+      instructions += `
+Please analyze each of the ${attachments.length} files provided and respond to my query.
+If you cannot access any of the files, please let me know which ones you can and cannot access.
+`;
+    } else {
+      instructions += `
+Please analyze the file and respond to my query.
+If you cannot access or process the file, please let me know.
+`;
+    }
+
     return instructions;
+  }
+  
+  /**
+   * Helper function to get programming language name from file extension
+   */
+  private getLanguageFromExtension(ext: string): string {
+    const languageMap: Record<string, string> = {
+      'js': 'JavaScript',
+      'jsx': 'React JavaScript',
+      'ts': 'TypeScript',
+      'tsx': 'React TypeScript',
+      'py': 'Python',
+      'java': 'Java',
+      'c': 'C',
+      'cpp': 'C++',
+      'cs': 'C#',
+      'go': 'Go',
+      'rb': 'Ruby',
+      'php': 'PHP',
+      'swift': 'Swift',
+      'kt': 'Kotlin',
+      'rs': 'Rust',
+      'dart': 'Dart',
+      'sh': 'Shell',
+      'sql': 'SQL',
+      'html': 'HTML',
+      'css': 'CSS',
+      'scss': 'SCSS',
+      'json': 'JSON',
+      'md': 'Markdown',
+      'yml': 'YAML',
+      'yaml': 'YAML',
+      'xml': 'XML'
+    };
+    
+    return languageMap[ext] || 'unknown';
   }
   
   /**
