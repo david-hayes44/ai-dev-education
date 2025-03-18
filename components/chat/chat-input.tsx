@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { FileAttachment } from "@/lib/chat-service"
 import FileUpload from "./FileUpload"
+import { useAuthContext } from '@/components/providers/auth-provider'
 
 interface ChatInputProps {
   onSubmit: (content: string, attachments?: FileAttachment[]) => Promise<void>
@@ -27,6 +28,7 @@ export function ChatInput({
   const [showFileUpload, setShowFileUpload] = React.useState(false)
   const [attachments, setAttachments] = React.useState<FileAttachment[]>([])
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+  const { user } = useAuthContext();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -118,7 +120,7 @@ export function ChatInput({
               </div>
               <FileUpload
                 onFileUploaded={handleFileUploaded}
-                userId="anonymous"
+                userId={user?.id || "anonymous"}
               />
             </div>
           ) : null}

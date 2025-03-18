@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
-import { UploadCloud, X, FileText, Image as ImageIcon, AlertCircle, Link } from 'lucide-react';
+import { UploadCloud, X, FileText, Image as ImageIcon, AlertCircle, Link, LogIn } from 'lucide-react';
 import { uploadFile, getFileUrl } from '@/lib/supabase';
+import { Button } from '@/components/ui/button';
 
 interface FileUploadProps {
   onFileUploaded: (fileData: {
@@ -23,6 +24,8 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
   const [showFallback, setShowFallback] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isAnonymous = userId === 'anonymous';
 
   useEffect(() => {
     // Clear debug info after 10 seconds
@@ -137,7 +140,7 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
       }
 
       // Log info for debugging
-      setDebugInfo(`Starting upload to bucket: attachments, path: ${path}`);
+      setDebugInfo(`Starting upload to bucket: attachments, path: ${path}, user: ${userId}`);
 
       try {
         const result = await uploadFile("attachments", path, fileInfo, onProgressUpdate);
@@ -181,10 +184,20 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
           return;
         }
         
-        if (errorMessage.includes('Unauthorized') || errorMessage.includes('not allowed') || 
-            errorMessage.includes('row-level security policy') || errorMessage.includes('violates row-level security')) {
-          setDebugInfo('Security policy error: Your account does not have permission to upload files to storage.');
-          setError('You do not have permission to upload files. Please use the "Attach Locally" option instead.');
+        if (errorMessage.includes('need to be logged in') || errorMessage.includes('sign in')) {
+          setDebugInfo('Authentication required: You need to be logged in to upload files.');
+          setError('You need to be signed in to upload files to cloud storage. Please sign in or use local attachment.');
+          setShowFallback(true);
+          return;
+        }
+        
+        if (errorMessage.includes('permission') || 
+            errorMessage.includes('Unauthorized') || 
+            errorMessage.includes('not allowed') || 
+            errorMessage.includes('row-level security policy') || 
+            errorMessage.includes('violates row-level security')) {
+          setDebugInfo(`Security policy error: User ${userId} does not have permission to upload files to storage.`);
+          setError('Your account does not have permission to upload files. Please use the "Attach Locally" option instead.');
           setShowFallback(true);
           return;
         }
@@ -228,12 +241,34 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
     return <FileText className="h-6 w-6" />;
   };
 
+  // Add sign-in handler
+  const handleSignIn = () => {
+    // Redirect to login page
+    window.location.href = '/auth/login';
+  };
+
   return (
     <div className="w-full">
       {error && (
         <div className="mb-2 text-sm text-red-500 bg-red-50 p-2 rounded-md flex items-start gap-2">
           <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
           <span>{error}</span>
+        </div>
+      )}
+      
+      {isAnonymous && (
+        <div className="mb-2 text-sm text-amber-600 bg-amber-50 p-2 rounded-md flex items-start gap-2">
+          <LogIn className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <div className="flex flex-col">
+            <span>Sign in to enable cloud storage for files</span>
+            <Button
+              variant="link"
+              className="h-auto p-0 text-amber-700 font-medium text-left"
+              onClick={handleSignIn}
+            >
+              Sign in now
+            </Button>
+          </div>
         </div>
       )}
       
@@ -301,12 +336,24 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
             )}
             <button
               onClick={handleUpload}
-              disabled={uploading || showFallback}
+              disabled={uploading || showFallback || (isAnonymous && !userId.includes('admin'))}
               className="inline-flex items-center px-3 py-1.5 text-sm rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
             >
               {uploading ? 'Uploading...' : 'Upload'}
             </button>
           </div>
+          
+          {!isAnonymous && error && error.includes('not have permission') && (
+            <div className="mt-2 text-xs text-gray-600 bg-gray-100 p-2 rounded">
+              <p className="font-medium">For administrators:</p>
+              <p>To enable cloud uploads, set up proper Row-Level Security (RLS) policies in Supabase:</p>
+              <ol className="list-decimal ml-4 mt-1">
+                <li>Go to Supabase dashboard → Storage → Policies</li>
+                <li>Add a policy for INSERT to authenticated users</li>
+                <li>Add condition: <code>auth.uid() = owner</code></li>
+              </ol>
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex items-center justify-center w-full">

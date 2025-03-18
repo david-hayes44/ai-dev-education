@@ -105,7 +105,7 @@ export async function uploadFile(
     // Validate inputs
     if (!bucket || !path || !file) {
       console.error('Invalid parameters for uploadFile', { bucket, path, fileExists: !!file });
-      return null;
+      throw new Error('Missing required parameters for file upload');
     }
     
     // Check if Supabase is properly initialized
@@ -114,11 +114,19 @@ export async function uploadFile(
       throw new Error('Storage configuration missing. Please check environment variables.');
     }
     
+    // Get current user session to verify authentication
+    const { data: sessionData } = await supabase.auth.getSession();
+    const isAuthenticated = !!sessionData?.session?.user;
+    
     console.log(`Attempting to upload file to ${bucket}/${path}`, { 
       fileSize: file.size, 
       fileType: file.type,
-      supabaseConfigured: !!supabase
+      authenticated: isAuthenticated,
+      userId: sessionData?.session?.user?.id || 'anonymous'
     });
+
+    // Create bucket if it doesn't exist
+    await createBucketIfNotExists(bucket);
 
     // Create an upload event handler that works with the progress callback
     const options: {
@@ -140,9 +148,6 @@ export async function uploadFile(
       };
     }
 
-    // Create bucket if it doesn't exist
-    await createBucketIfNotExists(bucket);
-
     // Perform the upload
     const { data, error } = await supabase.storage
       .from(bucket)
@@ -150,6 +155,17 @@ export async function uploadFile(
 
     if (error) {
       console.error('Supabase storage error:', error);
+      
+      // Check for RLS policy errors
+      if (error.message.includes('row-level security') || 
+          error.message.includes('policy')) {
+        if (!isAuthenticated) {
+          throw new Error('You need to be logged in to upload files. Please sign in and try again.');
+        } else {
+          throw new Error('Your account does not have permission to upload files to this storage bucket.');
+        }
+      }
+      
       throw new Error(`Storage error: ${error.message}`);
     }
 
@@ -290,15 +306,40 @@ export async function createBucketIfNotExists(bucket: string): Promise<boolean> 
     const bucketExists = buckets.some((b: {name: string}) => b.name === bucket);
     
     if (!bucketExists) {
+      console.log(`Creating bucket: ${bucket}`);
       const { error } = await supabase.storage.createBucket(bucket, {
         public: bucket === AVATARS_BUCKET, // Only avatars bucket should be public
-        fileSizeLimit: bucket === EXPORTS_BUCKET ? 50000000 : 5000000, // 50MB for exports, 5MB for others
+        fileSizeLimit: bucket === EXPORTS_BUCKET ? 50000000 : 10000000, // 50MB for exports, 10MB for others
       });
       
       if (error) {
         console.error('Error creating bucket:', error.message);
         return false;
       }
+      
+      // Add RLS policies for the bucket
+      // These are SQL policies - they would actually need to be applied in Supabase dashboard or via migration
+      console.log(`Setting up RLS policies for bucket ${bucket}`);
+      
+      // Note: This is for documentation purposes, as RLS policies need to be set up
+      // in the Supabase dashboard or via database migrations
+      const sqlPolicies = [
+        // Allow authenticated users to upload files
+        `CREATE POLICY "Allow authenticated uploads" ON storage.objects
+         FOR INSERT TO authenticated USING (
+           bucket_id = '${bucket}' AND
+           auth.uid() = owner
+         );`,
+         
+        // Allow users to access their own files
+        `CREATE POLICY "Allow access to own files" ON storage.objects
+         FOR SELECT TO authenticated USING (
+           bucket_id = '${bucket}' AND
+           auth.uid() = owner
+         );`
+      ];
+      
+      console.log("SQL policies that need to be set up manually:", sqlPolicies);
     }
     
     return true;
