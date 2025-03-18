@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { contentIndexingService } from '@/lib/content-indexing-service';
+import { semanticSearch, contentIndexingService } from '@/lib/content-indexing-service';
 
 export async function GET(req: NextRequest) {
   try {
     // Parse search query from URL
     const searchParams = req.nextUrl.searchParams;
     const query = searchParams.get('query');
-    const limit = parseInt(searchParams.get('limit') || '5', 10);
+    const limitParam = searchParams.get('limit');
+    const limit = limitParam ? parseInt(limitParam, 10) : 5;
     
     if (!query) {
       return NextResponse.json(
@@ -16,12 +17,13 @@ export async function GET(req: NextRequest) {
     }
     
     // Ensure content is indexed
-    if (!contentIndexingService.isIndexed) {
-      await contentIndexingService.indexContent();
+    const indexingStats = await contentIndexingService.getIndexingStats();
+    if (!indexingStats.lastIndexed) {
+      await contentIndexingService.indexAllContent();
     }
     
-    // Search for content chunks matching the query
-    const results = contentIndexingService.search(query, limit);
+    // Perform semantic search with the query
+    const results = await semanticSearch(query, { limit });
     
     return NextResponse.json({
       query,
@@ -41,7 +43,7 @@ export async function POST(req: NextRequest) {
   try {
     // Parse search parameters from request body
     const body = await req.json();
-    const { query, limit = 5, section } = body;
+    const { query, limit = 5, section, threshold = 0.5 } = body;
     
     if (!query) {
       return NextResponse.json(
@@ -51,12 +53,13 @@ export async function POST(req: NextRequest) {
     }
     
     // Ensure content is indexed
-    if (!contentIndexingService.isIndexed) {
-      await contentIndexingService.indexContent();
+    const indexingStats = await contentIndexingService.getIndexingStats();
+    if (!indexingStats.lastIndexed) {
+      await contentIndexingService.indexAllContent();
     }
     
-    // Search for content chunks matching the query
-    let results = contentIndexingService.search(query, limit);
+    // Perform semantic search with the query
+    let results = await semanticSearch(query, { limit, threshold });
     
     // Filter by section if provided
     if (section) {
