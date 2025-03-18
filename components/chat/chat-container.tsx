@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation"
 import { useChat } from "@/contexts/chat-context"
 import { useNavigation, NavigationRecommendation as NavigationRecommendationType } from "@/contexts/navigation-context"
 import { ChatInput } from "@/components/chat/chat-input"
-import { ChatMessage, MessageType } from "@/components/chat/chat-message"
+import ChatMessage from "./chat-message"
 import { Loader2, Info, RefreshCw, ArrowRight, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { ContentReferences } from "@/components/chat/content-references"
+import { ContentReferences } from "./content-references"
 import { NavigationSuggestions } from "./navigation-suggestion"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import dynamic from "next/dynamic"
@@ -148,4 +148,7 @@ export default function ChatContainer() {
       )}
     </div>
   );
-} 
+}
+
+// Named export for compatibility with existing imports
+export { ChatContainer }; 

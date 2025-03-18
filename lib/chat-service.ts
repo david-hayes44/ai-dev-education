@@ -18,7 +18,7 @@ export type MessageMetadataType = "streaming" | "error" | "loading" | "thinking"
 
 export interface MessageMetadata {
   type?: MessageMetadataType;
-  [key: string]: any;
+  [key: string]: MessageMetadataType | string | number | boolean | undefined;
 }
 
 // Context information for the chat

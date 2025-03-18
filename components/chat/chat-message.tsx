@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { Message, MessageMetadata } from "@/lib/chat-service"
+import { Message } from "@/lib/chat-service"
 import { Avatar } from "@/components/ui/avatar"
 import { User, Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -71,4 +71,7 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
       </div>
     </div>
   )
-} 
+}
+
+// For backwards compatibility with existing imports
+export { ChatMessage } 
