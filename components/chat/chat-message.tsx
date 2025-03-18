@@ -83,7 +83,7 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
   const isSuggestion = message.metadata?.type === "suggestion";
   const isConceptExplanation = message.metadata?.type === "concept_explanation";
   const isRechunking = Boolean(message.metadata?.rechunking);
-  const isStreaming = message.isStreaming;
+  const isStreaming = Boolean(message.isStreaming);
   const hasContentReferences = message.contentReferences && message.contentReferences.length > 0;
   const { sendMessage } = useChat();
   const { navigateTo } = useNavigation();
@@ -242,6 +242,43 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
     }
   }, [message, isAssistant, isStreaming, isLoading, isRechunking]);
 
+  // Helper function to determine what status indicator to show
+  const getStatusIndicator = () => {
+    if (isStreaming) {
+      return (
+        <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary animate-pulse">
+          Streaming...
+        </span>
+      );
+    } 
+    
+    if (isLoading) {
+      return (
+        <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary animate-pulse">
+          Loading...
+        </span>
+      );
+    }
+    
+    if (isThinking) {
+      return (
+        <span className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground animate-pulse">
+          Thinking...
+        </span>
+      );
+    }
+    
+    if (isRechunking) {
+      return (
+        <span className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground animate-pulse">
+          Processing...
+        </span>
+      );
+    }
+    
+    return null;
+  };
+
   return (
     <div
       className={cn(
@@ -261,16 +298,7 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
         <div className="flex-1 space-y-2">
           <div className="text-sm font-medium flex items-center gap-2">
             {isUser ? "You" : "AI Tutor"}
-            {isStreaming && (
-              <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary animate-pulse">
-                Streaming...
-              </span>
-            )}
-            {!isStreaming && isLoading && (
-              <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary animate-pulse">
-                Loading...
-              </span>
-            )}
+            {getStatusIndicator()}
             {displayAttachments.length > 0 && (
               <span className="text-xs flex items-center gap-1 text-muted-foreground">
                 <Paperclip className="h-3 w-3" />
@@ -286,7 +314,7 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
             isRechunking && "text-muted-foreground",
             isError && "text-destructive"
           )}>
-            {isLoading && !isStreaming ? (
+            {isLoading ? (
               <div className="flex items-center space-x-2">
                 <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }}></div>
                 <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '200ms' }}></div>
@@ -299,10 +327,14 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
               </div>
             ) : isStreaming ? (
               <div className={cn("transition-all duration-200", isStreaming ? "border-l-2 border-primary pl-2" : "")}>
-                <ReactMarkdown>{message.content || "Generating response..."}</ReactMarkdown>
+                {message.content ? (
+                  <ReactMarkdown>{message.content}</ReactMarkdown>
+                ) : (
+                  <span className="text-muted-foreground">Generating response...</span>
+                )}
               </div>
             ) : (
-              <ReactMarkdown>{message.content}</ReactMarkdown>
+              <ReactMarkdown>{message.content || ""}</ReactMarkdown>
             )}
           </div>
           

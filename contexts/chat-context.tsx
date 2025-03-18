@@ -217,11 +217,24 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     // Check if we're already streaming - don't allow a new streaming request
     if (isStreaming) {
       console.warn("Already processing a streaming message, please wait");
+      // Create a visual indication that the request was ignored due to ongoing streaming
+      if (typeof window !== 'undefined') {
+        // Flash the chat input to indicate the request was ignored
+        const chatInputElement = document.querySelector('.chat-input-container');
+        if (chatInputElement) {
+          chatInputElement.classList.add('flash-warning');
+          setTimeout(() => {
+            chatInputElement.classList.remove('flash-warning');
+          }, 1000);
+        }
+      }
       return;
     }
     
+    // Set streaming state immediately to prevent double clicks
     setIsStreaming(true);
     setIsTyping(true);
+    
     try {
       // Log attachment info for debugging
       if (attachments && attachments.length > 0) {
@@ -269,12 +282,25 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
       
+      // Generate a unique ID for this streaming request to track it
+      const streamingRequestId = `req-${Date.now()}`;
+      
       // Fetch relevant content first
       const contentResults = await fetchRelevantContent(content);
       setRelevantContent(contentResults);
       
       // Process navigation intents
       await processNavigationIntents(content);
+      
+      // Before creating a new message, update the current session to get the latest state
+      const latestSession = chatService.getCurrentSession();
+      setCurrentSession(latestSession);
+      
+      // Check again if we're still streaming (could have changed during async operations)
+      if (isStreaming && latestSession?.messages.some(m => m.isStreaming)) {
+        console.warn("Another streaming operation started during preparation");
+        return;
+      }
       
       // Create a placeholder for the assistant's response with attachments
       const assistantPlaceholder = chatService.createAssistantMessagePlaceholder(content, attachments);
@@ -298,7 +324,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             setIsStreaming(false);
           }
         }
-      });
+      }, attachments);
       
       // Update sessions after streaming is complete
       setSessions(chatService.getSessions());
@@ -356,6 +382,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setMessages(chatService.getCurrentChunk());
     } finally {
       setIsTyping(false);
+      setIsStreaming(false); // Ensure streaming state is reset
     }
   };
   

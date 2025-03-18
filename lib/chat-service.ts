@@ -770,6 +770,9 @@ export class ChatService {
     
     const session = this.sessions[this.currentSessionId];
     
+    // Clear any existing streaming states first to avoid multiple streaming indicators
+    this.clearAllStreamingStates(session);
+    
     // Check if a user message with the same content and attachments already exists
     // This prevents duplicate messages when handling image uploads
     const existingUserMessage = session.messages.find(msg => {
@@ -804,24 +807,26 @@ export class ChatService {
     if (existingUserMessage) {
       const userMessageIndex = session.messages.findIndex(msg => msg.id === existingUserMessage.id);
       
-      // Check if this user message already has an assistant response
-      if (userMessageIndex >= 0 && userMessageIndex < session.messages.length - 1) {
-        const nextMessage = session.messages[userMessageIndex + 1];
-        if (nextMessage.role === 'assistant') {
-          // Reset the streaming state on the existing assistant message
-          nextMessage.isStreaming = true;
-          nextMessage.content = '';
-          nextMessage.metadata = { type: "loading" };
-          
-          // Update the session
-          session.updatedAt = Date.now();
-          this.saveSessions();
-          
-          // Update message chunks
-          this.messageChunks = this.chunkMessages(session.messages);
-          this.currentChunkIndex = this.messageChunks.length - 1;
-          
-          return nextMessage;
+      // Check if there's any assistant message after this user message
+      if (userMessageIndex >= 0) {
+        for (let i = userMessageIndex + 1; i < session.messages.length; i++) {
+          const nextMessage = session.messages[i];
+          if (nextMessage.role === 'assistant') {
+            // Reset the streaming state on the existing assistant message
+            nextMessage.isStreaming = true;
+            nextMessage.content = '';
+            nextMessage.metadata = { type: "loading" };
+            
+            // Update the session
+            session.updatedAt = Date.now();
+            this.saveSessions();
+            
+            // Update message chunks
+            this.messageChunks = this.chunkMessages(session.messages);
+            this.currentChunkIndex = this.messageChunks.length - 1;
+            
+            return nextMessage;
+          }
         }
       }
     }
@@ -863,15 +868,60 @@ export class ChatService {
   }
   
   /**
+   * Helper method to clear streaming state from all messages in a session
+   */
+  private clearAllStreamingStates(session: ChatSession): void {
+    if (!session || !session.messages) return;
+    
+    // Find any messages with streaming state and reset them
+    let foundStreaming = false;
+    
+    session.messages.forEach(msg => {
+      if (msg.isStreaming) {
+        // If a message was left in streaming state, mark it as an error
+        if (msg.role === 'assistant') {
+          msg.isStreaming = false;
+          msg.metadata = { type: "error" };
+          
+          // If content is empty, add error message
+          if (!msg.content || msg.content.trim() === '') {
+            msg.content = "A previous response was interrupted. Please try again.";
+          }
+        } else {
+          // Just clear streaming state for non-assistant messages
+          msg.isStreaming = false;
+        }
+        foundStreaming = true;
+      }
+    });
+    
+    // If we found and fixed any streaming messages, save the changes
+    if (foundStreaming) {
+      session.updatedAt = Date.now();
+      this.saveSessions();
+    }
+  }
+  
+  /**
    * Updates the assistant message with an error when streaming fails
    */
   public updateAssistantMessageWithError(error: unknown): void {
     if (!this.currentSessionId) return;
     
     const session = this.sessions[this.currentSessionId];
-    const lastMessage = session.messages[session.messages.length - 1];
     
-    if (lastMessage && lastMessage.role === 'assistant') {
+    // Find the last assistant message with streaming state
+    let assistantMessageIndex = -1;
+    for (let i = session.messages.length - 1; i >= 0; i--) {
+      if (session.messages[i].role === 'assistant' && session.messages[i].isStreaming) {
+        assistantMessageIndex = i;
+        break;
+      }
+    }
+    
+    // If we found one, update it
+    if (assistantMessageIndex >= 0) {
+      const lastMessage = session.messages[assistantMessageIndex];
       lastMessage.content = `I'm sorry, I encountered an error while generating a response. ${error instanceof Error ? error.message : 'Please try again later.'}`;
       lastMessage.isStreaming = false;
       lastMessage.metadata = { type: "error" }; // Explicitly mark as error type
@@ -882,6 +932,21 @@ export class ChatService {
       
       session.updatedAt = Date.now();
       this.saveSessions();
+    } else {
+      // If no streaming assistant message was found, look for the last assistant message
+      for (let i = session.messages.length - 1; i >= 0; i--) {
+        if (session.messages[i].role === 'assistant') {
+          session.messages[i].isStreaming = false;
+          if (!session.messages[i].content || session.messages[i].content.trim() === '') {
+            session.messages[i].content = `I'm sorry, I encountered an error while generating a response. ${error instanceof Error ? error.message : 'Please try again later.'}`;
+            session.messages[i].metadata = { type: "error" };
+          }
+          
+          session.updatedAt = Date.now();
+          this.saveSessions();
+          break;
+        }
+      }
     }
   }
   
@@ -904,15 +969,25 @@ export class ChatService {
       const sessionId = this.currentSessionId as string;
       const session = this.sessions[sessionId];
 
+      // Clear any stuck streaming states before proceeding
+      this.clearAllStreamingStates(session);
+
       // Create a placeholder message that will be updated with streaming content
       const placeholderMessage = this.createAssistantMessagePlaceholder(content, attachments);
       
-      // Add the placeholder to the current session
-      session.messages.push(placeholderMessage);
-      session.updatedAt = Date.now();
+      // Add index of the placeholder for later updating
+      let placeholderMessageIndex = -1;
+      for (let i = session.messages.length - 1; i >= 0; i--) {
+        if (session.messages[i].id === placeholderMessage.id) {
+          placeholderMessageIndex = i;
+          break;
+        }
+      }
       
-      // Get index of the placeholder for later updating
-      const placeholderMessageIndex = session.messages.length - 1;
+      if (placeholderMessageIndex === -1) {
+        console.error("Failed to find placeholder message in session");
+        throw new Error("Failed to prepare assistant message");
+      }
       
       // Create a mutable copy for streaming updates
       const streamingMessage = { ...placeholderMessage };
