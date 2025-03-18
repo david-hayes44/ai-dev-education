@@ -234,7 +234,19 @@ export class ChatService {
   
   // Get all messages (useful for API calls)
   public getAllMessages(): Message[] {
-    return this.messageChunks.flat();
+    // If we have a current session, use its messages
+    if (this.currentSessionId && this.sessions[this.currentSessionId]) {
+      return this.sessions[this.currentSessionId].messages;
+    }
+    
+    // Otherwise, use the chunked messages if available
+    if (this.messageChunks.length > 0) {
+      return this.messageChunks.flat();
+    }
+    
+    // Fallback to legacy this.messages array
+    console.warn('Using fallback messages array - this should be rare');
+    return this.messages;
   }
   
   // Navigate to next chunk
@@ -332,9 +344,17 @@ export class ChatService {
     if (typeof window === 'undefined') return;
     
     try {
-      // Ensure all messages from chunks are saved if we have a current session
-      if (this.currentSessionId && this.messageChunks.length > 0) {
-        this.sessions[this.currentSessionId].messages = this.getAllMessages();
+      // Ensure the current session is properly updated if we have one
+      if (this.currentSessionId && this.sessions[this.currentSessionId]) {
+        const session = this.sessions[this.currentSessionId];
+        
+        // Make sure the messages are up-to-date from the chunks if needed
+        if (this.messageChunks.length > 0) {
+          session.messages = this.getAllMessages();
+        }
+        
+        // Update the timestamp
+        session.updatedAt = Date.now();
       }
       
       // Add debouncing to avoid too frequent saves
@@ -347,6 +367,7 @@ export class ChatService {
         if (this.currentSessionId) {
           localStorage.setItem('currentSessionId', this.currentSessionId);
         }
+        console.log('Sessions saved to localStorage');
       }, 300); // Debounce by 300ms
     } catch (e) {
       console.error('Error saving chat sessions:', e);
@@ -714,11 +735,17 @@ export class ChatService {
       role: 'assistant',
       content: '',
       timestamp: Date.now(),
-      isStreaming: true
+      isStreaming: true,
+      metadata: { type: "loading" } // Explicitly set the loading metadata
     };
     
     session.messages.push(userMessage, assistantPlaceholder);
     session.updatedAt = Date.now();
+    
+    // Update message chunks based on session messages
+    this.messageChunks = this.chunkMessages(session.messages);
+    this.currentChunkIndex = this.messageChunks.length - 1; // Navigate to the last chunk
+    
     this.saveSessions();
     
     return assistantPlaceholder;
@@ -736,6 +763,11 @@ export class ChatService {
     if (lastMessage && lastMessage.role === 'assistant') {
       lastMessage.content = `I'm sorry, I encountered an error while generating a response. ${error instanceof Error ? error.message : 'Please try again later.'}`;
       lastMessage.isStreaming = false;
+      lastMessage.metadata = { type: "error" }; // Explicitly mark as error type
+      
+      // Update message chunks based on session messages
+      this.messageChunks = this.chunkMessages(session.messages);
+      this.currentChunkIndex = this.messageChunks.length - 1;
       
       session.updatedAt = Date.now();
       this.saveSessions();
@@ -758,7 +790,8 @@ export class ChatService {
       }
 
       // Get the latest placeholder message (which should be the one we just created)
-      const messages = this.getAllMessages();
+      const session = this.sessions[this.currentSessionId!];
+      const messages = session.messages;
       const placeholderMessageIndex = messages.findIndex(
         m => m.role === "assistant" && m.metadata?.type === "loading"
       );
@@ -826,7 +859,7 @@ export class ChatService {
       
       // Create a response string to accumulate the streamed response
       let responseContent = "";
-      const streamingMessage = { ...placeholderMessage };
+      let streamingMessage = { ...placeholderMessage };
       
       try {
         // API Key validation
@@ -884,8 +917,8 @@ export class ChatService {
             streamingMessage.content = responseContent;
             streamingMessage.isStreaming = true;
             
-            // Replace the message in the array
-            this.messages[placeholderMessageIndex] = streamingMessage;
+            // Replace the message in the current session's messages array
+            session.messages[placeholderMessageIndex] = streamingMessage;
             
             // Call the provided callback
             onChunk(streamingMessage);
@@ -910,10 +943,11 @@ export class ChatService {
             
             streamingMessage.isStreaming = false;
             streamingMessage.content = responseContent;
-            this.messages[placeholderMessageIndex] = streamingMessage;
+            session.messages[placeholderMessageIndex] = streamingMessage;
             
             // Rechunk messages if needed
-            this.messageChunks = this.chunkMessages(this.messages);
+            this.messageChunks = this.chunkMessages(session.messages);
+            this.currentChunkIndex = this.messageChunks.length - 1; // Navigate to latest chunk
             
             // Save sessions
             this.saveSessions();
@@ -952,10 +986,11 @@ export class ChatService {
             streamingMessage.content = errorMessage;
             streamingMessage.metadata = { type: "error" };
             streamingMessage.isStreaming = false;
-            this.messages[placeholderMessageIndex] = streamingMessage;
+            session.messages[placeholderMessageIndex] = streamingMessage;
             
             // Rechunk messages
-            this.messageChunks = this.chunkMessages(this.messages);
+            this.messageChunks = this.chunkMessages(session.messages);
+            this.currentChunkIndex = this.messageChunks.length - 1;
             
             // Save sessions
             this.saveSessions();
@@ -996,18 +1031,19 @@ export class ChatService {
         streamingMessage.metadata = { type: "error" };
         streamingMessage.isStreaming = false;
         
-        // Update the message
-        this.messages[placeholderMessageIndex] = streamingMessage;
+        // Update the message in the session
+        session.messages[placeholderMessageIndex] = streamingMessage;
         
         // Rechunk and save
-        this.messageChunks = this.chunkMessages(this.messages);
+        this.messageChunks = this.chunkMessages(session.messages);
+        this.currentChunkIndex = this.messageChunks.length - 1;
         this.saveSessions();
         
         // Call the callback
         onChunk(streamingMessage);
       }
       
-      return this.messages[placeholderMessageIndex];
+      return session.messages[placeholderMessageIndex];
     } catch (error) {
       console.error("Error in sendStreamingMessage:", error);
       throw error;
