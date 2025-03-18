@@ -147,7 +147,7 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
   }, [pathname]);
   
   /**
-   * Search for pages matching a query
+   * Enhanced search method that uses semantic search API
    */
   const search = async (query: string): Promise<NavigationSuggestion[]> => {
     if (!query.trim()) return [];
@@ -155,23 +155,40 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
     setIsLoading(true);
     
     try {
-      // Use our content search API to find relevant pages
-      const response = await fetch(`/api/content-search?query=${encodeURIComponent(query)}&limit=5`);
+      // First try semantic search for better results
+      const semanticResponse = await fetch(`/api/semantic-search?query=${encodeURIComponent(query)}&limit=5`);
       
-      if (!response.ok) {
-        throw new Error(`Search failed with status: ${response.status}`);
+      let results: NavigationSuggestion[] = [];
+      
+      if (semanticResponse.ok) {
+        const semanticData = await semanticResponse.json();
+        
+        // Convert search results to navigation suggestions
+        results = (semanticData.results || []).map((result: any) => ({
+          title: result.title,
+          path: result.path,
+          description: result.content?.substring(0, 120) + '...',
+          confidence: result.score || 0.7, // Use the similarity score as confidence
+          sectionId: result.section?.toLowerCase().replace(/\s+/g, '-')
+        }));
+      } else {
+        // Fallback to regular content search if semantic search fails
+        console.warn('Semantic search failed, falling back to regular search');
+        const response = await fetch(`/api/content-search?query=${encodeURIComponent(query)}&limit=5`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Convert content chunks to navigation suggestions
+          results = (data.results || []).map((chunk: any) => ({
+            title: chunk.title,
+            path: chunk.path,
+            description: chunk.content?.substring(0, 120) + '...',
+            confidence: 0.6, // Lower confidence for regular search
+            sectionId: chunk.section?.toLowerCase().replace(/\s+/g, '-')
+          }));
+        }
       }
-      
-      const data = await response.json();
-      
-      // Convert content chunks to navigation suggestions
-      const results = (data.results || []).map((chunk: ContentChunk) => ({
-        title: chunk.title,
-        path: chunk.path,
-        description: chunk.content.substring(0, 120) + '...',
-        confidence: 0.85, // In a real implementation, this would be calculated
-        sectionId: chunk.section.toLowerCase().replace(/\s+/g, '-') // Add section ID for deep linking
-      }));
       
       setRecommendations(results);
       return results;
@@ -218,8 +235,7 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
   };
   
   /**
-   * Enhanced navigation intent detection
-   * Detects if a message is asking for navigation and where to navigate to
+   * Enhanced navigation intent detection with better pattern matching and topic extraction
    */
   const detectNavigationIntent = async (content: string): Promise<{
     isNavigation: boolean;
@@ -229,7 +245,7 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
   }> => {
     const lowerContent = content.toLowerCase();
     
-    // Check for explicit navigation intents
+    // Enhanced patterns for more natural language detection
     const navigationPatterns = [
       /show me (?:information about|details on|) (.*)/i,
       /where can I find (?:information about|details on|) (.*)/i,
@@ -240,7 +256,13 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
       /how do I get to (.*)/i,
       /can you show (.*)/i,
       /link to (.*)/i,
-      /bring up (.*)/i
+      /bring up (.*)/i,
+      /find (.*) in the documentation/i,
+      /what does (.*) mean/i,
+      /explain (.*) to me/i,
+      /tell me about (.*)/i,
+      /search for (.*)/i,
+      /looking for (.*)/i
     ];
     
     // Check each pattern for a match
@@ -249,112 +271,148 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
       if (match && match[1]) {
         const topic = match[1].trim().toLowerCase();
         
-        // Check direct mappings first
-        for (const [key, value] of Object.entries(TOPIC_TO_PATH_MAPPING)) {
-          if (topic === key || topic.includes(key)) {
-            return {
-              isNavigation: true,
-              path: value.path,
-              sectionId: value.sectionId,
-              confidence: 0.9
-            };
-          }
-        }
-        
-        // If no direct match, search for related content
-        const searchResults = await search(topic);
-        if (searchResults.length > 0) {
-          const bestMatch = searchResults[0];
+        // First check if we have a direct mapping for this topic
+        if (TOPIC_TO_PATH_MAPPING[topic]) {
           return {
             isNavigation: true,
-            path: bestMatch.path,
-            sectionId: bestMatch.sectionId,
-            confidence: bestMatch.confidence || 0.7
+            path: TOPIC_TO_PATH_MAPPING[topic].path,
+            sectionId: TOPIC_TO_PATH_MAPPING[topic].sectionId,
+            confidence: 0.95 // High confidence for direct mapping
           };
         }
-      }
-    }
-    
-    // Fall back to fuzzy matching for implicit navigation requests
-    if (
-      lowerContent.includes('find') ||
-      lowerContent.includes('where') ||
-      lowerContent.includes('show') ||
-      lowerContent.includes('page for')
-    ) {
-      // Extract potential topics from the message
-      const words = lowerContent.split(/\s+/);
-      
-      // Look for significant words that might be topics
-      for (const word of words) {
-        if (word.length > 3 && !['find', 'where', 'show', 'page', 'about', 'the', 'and', 'for'].includes(word)) {
-          // Search for this potential topic
-          const searchResults = await search(word);
+        
+        // If no direct mapping, use semantic search to find the best page
+        try {
+          const searchResults = await search(topic);
+          
           if (searchResults.length > 0) {
             const bestMatch = searchResults[0];
             return {
               isNavigation: true,
               path: bestMatch.path,
               sectionId: bestMatch.sectionId,
-              confidence: 0.6 // Lower confidence for fuzzy matching
+              confidence: bestMatch.confidence || 0.7
+            };
+          }
+        } catch (error) {
+          console.error('Error during semantic search for navigation intent:', error);
+        }
+      }
+    }
+    
+    // No explicit navigation intent detected
+    // Check for implicit navigation by performing a semantic search on the entire message
+    // This handles cases where users ask questions that don't match our patterns
+    if (lowerContent.length > 5) {
+      try {
+        const searchResults = await search(content);
+        
+        if (searchResults.length > 0) {
+          const bestMatch = searchResults[0];
+          
+          // Only consider this navigation if the confidence is high enough
+          if (bestMatch.confidence && bestMatch.confidence > 0.75) {
+            return {
+              isNavigation: true,
+              path: bestMatch.path,
+              sectionId: bestMatch.sectionId,
+              confidence: bestMatch.confidence * 0.8 // Slightly lower confidence for implicit navigation
             };
           }
         }
+      } catch (error) {
+        console.error('Error during semantic search for implicit navigation:', error);
       }
     }
     
-    return { isNavigation: false, confidence: 0 };
+    return {
+      isNavigation: false,
+      confidence: 0
+    };
   };
   
   /**
-   * Get navigation suggestions based on user message content
+   * Enhanced method to get navigation suggestions from content
    */
   const getNavigationSuggestions = async (content: string): Promise<NavigationSuggestion[]> => {
-    const navigationIntent = await detectNavigationIntent(content);
+    // Extract potential navigation topics from message
+    const potentialTopics: string[] = [];
     
-    if (!navigationIntent.isNavigation) {
-      return [];
-    }
+    // Check for explicit topic mentions
+    const topicPatterns = [
+      /about ([\w\s]+)/gi,
+      /learn (?:about|more about) ([\w\s]+)/gi,
+      /understand ([\w\s]+)/gi,
+      /help with ([\w\s]+)/gi,
+      /information on ([\w\s]+)/gi,
+      /details about ([\w\s]+)/gi
+    ];
     
-    // If we have a direct navigation path, just return that
-    if (navigationIntent.path) {
-      // Get the page title from the path
-      const pathSegments = navigationIntent.path.split('/');
-      const pageName = pathSegments[pathSegments.length - 1] || 'home';
-      const title = pageName.charAt(0).toUpperCase() + pageName.slice(1).replace(/-/g, ' ');
-      
-      // Get section title if available
-      let sectionTitle = '';
-      if (navigationIntent.sectionId) {
-        const sections = await getPageSections(navigationIntent.path);
-        const section = sections.find(s => s.id === navigationIntent.sectionId);
-        if (section) {
-          sectionTitle = section.title;
+    // Extract all potential topics
+    for (const pattern of topicPatterns) {
+      let match;
+      while ((match = pattern.exec(content)) !== null) {
+        if (match[1] && match[1].trim().length > 3) {
+          potentialTopics.push(match[1].trim().toLowerCase());
         }
       }
-      
-      const suggestion: NavigationSuggestion = {
-        title: sectionTitle ? `${title} - ${sectionTitle}` : title,
-        path: navigationIntent.path,
-        description: `Navigate to ${sectionTitle || title} page`,
-        confidence: navigationIntent.confidence,
-        sectionId: navigationIntent.sectionId
-      };
-      
-      return [suggestion];
     }
     
-    // Otherwise search for related content
-    const words = content.split(/\s+/);
-    const significantWords = words.filter(word => 
-      word.length > 3 && !['find', 'where', 'show', 'page', 'about', 'the', 'and'].includes(word.toLowerCase())
-    );
+    // Add any direct keywords mentioned that match our known topics
+    Object.keys(TOPIC_TO_PATH_MAPPING).forEach(topic => {
+      if (content.toLowerCase().includes(topic)) {
+        potentialTopics.push(topic);
+      }
+    });
     
-    if (significantWords.length > 0) {
-      return await search(significantWords.join(' '));
+    // If we found potential topics, search for them
+    if (potentialTopics.length > 0) {
+      try {
+        // Remove duplicates and limit to top 3 topics
+        const uniqueTopics = [...new Set(potentialTopics)].slice(0, 3);
+        
+        // Get search results for each topic
+        const results = await Promise.all(
+          uniqueTopics.map(async (topic) => {
+            const searchResults = await search(topic);
+            return {
+              topic,
+              results: searchResults
+            };
+          })
+        );
+        
+        // Flatten and sort by confidence
+        const allSuggestions: NavigationSuggestion[] = results
+          .flatMap(r => r.results)
+          .sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+        
+        // Remove duplicates by path
+        const uniqueResults: NavigationSuggestion[] = [];
+        const seenPaths = new Set<string>();
+        
+        for (const suggestion of allSuggestions) {
+          const pathWithSection = `${suggestion.path}#${suggestion.sectionId || ''}`;
+          if (!seenPaths.has(pathWithSection)) {
+            seenPaths.add(pathWithSection);
+            uniqueResults.push(suggestion);
+          }
+        }
+        
+        return uniqueResults.slice(0, 3); // Limit to top 3 suggestions
+      } catch (error) {
+        console.error('Error generating navigation suggestions:', error);
+      }
     }
     
-    return [];
+    // If no topics found or search failed, perform a semantic search on the entire message
+    try {
+      const results = await search(content);
+      return results.slice(0, 2); // Limit to top 2 for full-message search
+    } catch (error) {
+      console.error('Error in fallback search for navigation suggestions:', error);
+      return [];
+    }
   };
   
   return (

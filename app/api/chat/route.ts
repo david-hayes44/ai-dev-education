@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendChatCompletion, ChatMessage, ChatCompletionRequest, enrichMessagesWithContext, createEnhancedConceptSchema } from '@/lib/openrouter';
 import OpenAI from 'openai';
-import { ContentChunk } from '@/lib/content-indexing-service';
+import { ContentChunk, contentIndexingService } from '@/lib/content-indexing-service';
 import { NavigationSuggestion } from '@/components/chat/navigation-suggestion';
+import { vectorEmbeddingService } from '@/lib/vector-embedding-service';
+import { ContentReference } from '@/components/chat/content-references';
 
 // List of AI-related topics we can provide structured explanations for
 const AI_TOPICS = [
@@ -19,11 +21,14 @@ const AI_TOPICS = [
 const apiKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY;
 const model = 'anthropic/claude-3-opus:1:0';
 
+// Specify role type explicitly to match the expected literal union type
+type MessageRole = 'user' | 'assistant' | 'system';
+
 // Define types
 interface ChatRequest {
   message: string;
   messages: Array<{
-    role: 'user' | 'assistant' | 'system';
+    role: MessageRole;
     content: string;
   }>;
   context?: {
@@ -44,6 +49,7 @@ interface ChatResponse {
     isNavigationRequest?: boolean;
     navigationSuggestions?: NavigationSuggestion[];
     followUpQuestions?: string[];
+    contentReferences?: ContentReference[];
   };
 }
 
@@ -134,7 +140,41 @@ function isNavigationRequest(query: string): boolean {
     !lowerQuery.includes("how does");
 }
 
-// Generate navigation suggestions based on the query
+// Enhanced search function that uses semantic search when available
+async function searchContent(query: string, limit: number = 5): Promise<ContentChunk[]> {
+  try {
+    // First try semantic search
+    try {
+      // Ensure the vector service is initialized
+      if (!vectorEmbeddingService.isInitialized) {
+        await vectorEmbeddingService.initialize();
+      }
+      
+      // Perform semantic search
+      const semanticResults = await vectorEmbeddingService.semanticSearch(query, limit);
+      
+      // If we got results, return them
+      if (semanticResults && semanticResults.length > 0) {
+        console.log(`Semantic search found ${semanticResults.length} results for '${query}'`);
+        return semanticResults.map(result => result.chunk);
+      }
+    } catch (error) {
+      console.warn('Semantic search failed, falling back to keyword search:', error);
+    }
+    
+    // Fall back to basic content search
+    if (!contentIndexingService.isIndexed) {
+      await contentIndexingService.indexContent();
+    }
+    
+    return contentIndexingService.search(query, limit);
+  } catch (error) {
+    console.error('Content search error:', error);
+    return [];
+  }
+}
+
+// Enhanced function to generate navigation suggestions using semantic search
 async function generateNavigationSuggestions(query: string): Promise<NavigationSuggestion[]> {
   // Extract potential topic from navigation query
   const navigationPatterns = [
@@ -159,22 +199,17 @@ async function generateNavigationSuggestions(query: string): Promise<NavigationS
   }
   
   try {
-    // Search for content related to the topic
-    const response = await fetch(`${process.env.BASE_URL || 'http://localhost:3000'}/api/content-search?query=${encodeURIComponent(topic)}`);
-    
-    if (!response.ok) {
-      throw new Error(`Content search failed with status: ${response.status}`);
-    }
-    
-    const data = await response.json();
+    // First try to use semantic search for better results
+    const chunks = await searchContent(topic, 3);
     
     // Convert search results to navigation suggestions
-    return (data.results || []).slice(0, 3).map((chunk: ContentChunk) => ({
+    return chunks.map((chunk) => ({
       title: chunk.title,
       path: chunk.path,
       description: chunk.content.substring(0, 100) + '...',
-      confidence: 0.8,
-      sectionId: chunk.section.toLowerCase().replace(/\s+/g, '-')
+      confidence: 0.85,
+      sectionId: chunk.section?.toLowerCase().replace(/\s+/g, '-'),
+      isSemanticMatch: true
     }));
   } catch (error) {
     console.error('Error generating navigation suggestions:', error);
@@ -199,7 +234,7 @@ ${chunk.content}
     .join("\n\n");
 }
 
-// Generate context message
+// Enhanced context message generation that provides more structured data
 function generateContextMessage(context?: ChatRequest['context']): string {
   let contextMessage = "";
 
@@ -220,22 +255,23 @@ function generateContextMessage(context?: ChatRequest['context']): string {
 
   // Add relevant content if available
   if (context?.relevantContent && context.relevantContent.length > 0) {
-    contextMessage += `\nRELEVANT CONTENT:\n${formatContentContext(context.relevantContent)}\n`;
+    contextMessage += `\nRELEVANT CONTENT (Use this information to provide accurate answers):\n${formatContentContext(context.relevantContent)}\n`;
   }
 
   return contextMessage;
 }
 
-// Get system prompt for initializing the chat
+// Enhanced system prompt that instructs the model on how to use references
 function getSystemPrompt(): string {
   return `You are AITutor, an educational assistant for the AI Dev Education platform. Your purpose is to help users understand AI development concepts and navigate the platform resources.
 
 When responding:
 - Be concise and informative, focusing on providing accurate information
-- When referencing platform resources, mention them specifically
+- When referencing platform resources, mention them specifically and cite your sources
 - Adapt your responses based on the current page context provided
 - Provide context-aware help based on the user's current location in the documentation
-- Suggest relevant pages when appropriate based on the user's questions
+- When you use information from RELEVANT CONTENT, explicitly reference it in your answer
+- For navigation requests, guide users to the most relevant sections
 
 The platform covers topics including:
 - Model Context Protocol (MCP)
@@ -300,78 +336,172 @@ function extractTopics(query: string, response: string): string[] {
   return [...new Set(foundTopics)];
 }
 
+// Extract content references from a response
+function extractContentReferences(query: string, relevantContent: ContentChunk[]): ContentReference[] {
+  if (!relevantContent || relevantContent.length === 0) {
+    return [];
+  }
+
+  // Convert ContentChunk[] to ContentReference[]
+  return relevantContent.map((chunk, index) => {
+    // Calculate a simple relevance score - in a real implementation,
+    // this would use semantic similarity
+    let relevance = 0.5 + (0.5 / (index + 1));
+    
+    return {
+      title: chunk.title,
+      path: chunk.path,
+      sectionId: chunk.section?.toLowerCase().replace(/\s+/g, '-'),
+      excerpt: chunk.content.substring(0, 120) + '...',
+      relevance: relevance,
+    };
+  });
+}
+
+// Enhanced POST handler that integrates semantic search and content references
 export async function POST(req: NextRequest) {
   try {
-    // Parse the request body
-    const requestData = await req.json() as ChatRequest;
-    const { message, messages, context } = requestData;
-
-    // Check if this is a navigation request
+    const { message, messages = [], context = {} } = await req.json() as ChatRequest;
+    
+    if (!message) {
+      return NextResponse.json(
+        { error: "Missing message parameter" },
+        { status: 400 }
+      );
+    }
+    
+    // Detect if this is a concept explanation query
+    const conceptExplanation = isConceptExplanationQuery(message);
+    
+    // Detect if this is a navigation request
     const isNavRequest = isNavigationRequest(message);
     
-    // Create messages array
-    const apiMessages = [
-      {
-        role: 'system' as const,
-        content: getSystemPrompt()
-      },
-      ...messages
+    // Prepare context data
+    let relevantContent: ContentChunk[] = context.relevantContent || [];
+    
+    // If we don't have relevant content yet, search for it
+    if (relevantContent.length === 0) {
+      relevantContent = await searchContent(message, 5);
+    }
+    
+    // Update context with relevant content
+    const enhancedContext = {
+      ...context,
+      relevantContent
+    };
+    
+    // Generate context message with relevant content
+    const contextMessage = generateContextMessage(enhancedContext);
+    
+    // Prepare system message
+    const systemPrompt = getSystemPrompt();
+    
+    // Prepare messages array for the chat completion
+    const chatMessages = [
+      { role: 'system' as MessageRole, content: systemPrompt },
+      ...(contextMessage ? [{ role: 'system' as MessageRole, content: contextMessage }] : []),
+      ...messages.map(m => ({ role: m.role, content: m.content })),
+      { role: 'user' as MessageRole, content: message }
     ];
-
-    // Add context message if available
-    const contextMessage = generateContextMessage(context);
-    if (contextMessage) {
-      apiMessages.push({
-        role: 'system' as const,
-        content: `Here is the current context for this conversation: ${contextMessage}`
+    
+    // If this is a concept explanation, provide a schema to the LLM
+    let response;
+    if (conceptExplanation.isConceptExplanation) {
+      const knowledgeLevel = detectKnowledgeLevel(message);
+      const includeCode = isCodeExampleRequested(message);
+      
+      const functionName = 'generateConceptExplanation';
+      // Get the concept schema which returns a Record<string, unknown>
+      const schema = createEnhancedConceptSchema();
+      
+      // Use the OpenAI SDK types directly instead of our ChatCompletionRequest
+      response = await openai.chat.completions.create({
+        model: model,
+        messages: chatMessages,
+        temperature: 0.7,
+        max_tokens: 2048,
+        functions: [{ // Use 'functions' for OpenRouter API which matches OpenAI v1 API
+          name: functionName,
+          description: "Generate a structured explanation of an AI concept",
+          parameters: schema // The schema will be used as the parameters object
+        }],
+        function_call: { name: functionName } // Use function_call for OpenRouter API
+      });
+    } else {
+      // Regular chat completion
+      response = await openai.chat.completions.create({
+        model: model,
+        messages: chatMessages,
+        temperature: 0.7,
+        max_tokens: 2048
       });
     }
     
-    // For navigation requests, add a special system message
-    if (isNavRequest) {
-      apiMessages.push({
-        role: 'system' as const,
-        content: `The user seems to be asking for navigation assistance. If they're looking for specific content or pages, help them by mentioning relevant sections and pages they should visit.`
-      });
-    }
-
-    // Call OpenRouter API (via OpenAI client)
-    const response = await openai.chat.completions.create({
-      model: model,
-      messages: apiMessages,
-      temperature: 0.7,
-    });
-
-    // Extract assistant message
-    const assistantContent = response.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response.";
+    // Extract response from OpenAI
+    let content = '';
+    let functionResponse = null;
     
-    // For navigation requests, generate navigation suggestions
+    if (response.choices[0].message.tool_calls && response.choices[0].message.tool_calls.length > 0) {
+      const toolCall = response.choices[0].message.tool_calls[0];
+      if (toolCall.type === 'function' && toolCall.function.arguments) {
+        functionResponse = JSON.parse(toolCall.function.arguments);
+        
+        // Format the concept explanation
+        const concept = functionResponse.concept;
+        const explanation = functionResponse.explanation[detectKnowledgeLevel(message)];
+        const examples = functionResponse.examples || [];
+        const related = functionResponse.relatedConcepts || [];
+        
+        content = `## ${concept}\n\n${explanation}\n\n`;
+        
+        if (examples.length > 0) {
+          content += `### Example\n\`\`\`\n${examples[0]}\n\`\`\`\n\n`;
+        }
+        
+        if (related.length > 0) {
+          content += `### Related Concepts\n`;
+          related.forEach((r: any) => {
+            content += `- ${r.name}\n`;
+          });
+        }
+      }
+    } else if (response.choices[0].message.content) {
+      content = response.choices[0].message.content;
+    }
+    
+    // Generate navigation suggestions if needed
     let navigationSuggestions: NavigationSuggestion[] = [];
     if (isNavRequest) {
       navigationSuggestions = await generateNavigationSuggestions(message);
     }
     
     // Generate follow-up questions
-    const followUpQuestions = generateFollowUpQuestions(message, assistantContent);
+    const followUpQuestions = generateFollowUpQuestions(message, content);
     
-    // Create enhanced response with metadata
+    // Extract content references
+    const contentReferences = extractContentReferences(message, relevantContent);
+    
+    // Prepare the response
     const chatResponse: ChatResponse = {
       role: 'assistant',
-      content: assistantContent,
+      content,
       timestamp: Date.now(),
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       metadata: {
         isNavigationRequest: isNavRequest,
-        navigationSuggestions: navigationSuggestions.length > 0 ? navigationSuggestions : undefined,
-        followUpQuestions: followUpQuestions.length > 0 ? followUpQuestions : undefined
+        type: conceptExplanation.isConceptExplanation ? 'concept' : 'answer',
+        navigationSuggestions,
+        followUpQuestions,
+        contentReferences
       }
     };
     
     return NextResponse.json(chatResponse);
+    
   } catch (error) {
-    console.error("Error calling OpenRouter API:", error);
+    console.error('Chat error:', error);
     return NextResponse.json(
-      { error: 'Failed to generate response' },
+      { error: "Failed to process chat message" },
       { status: 500 }
     );
   }

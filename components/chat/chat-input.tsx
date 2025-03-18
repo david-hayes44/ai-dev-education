@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { forwardRef, useImperativeHandle } from "react"
 import { Send, Paperclip, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -17,17 +18,23 @@ interface ChatInputProps {
   className?: string
 }
 
-export function ChatInput({
+// Convert to forwardRef to allow parent components to access the textarea
+export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(({
   onSubmit,
   isLoading,
   isStreaming = false,
   placeholder = "Ask about AI development or MCP...",
   className,
-}: ChatInputProps) {
+}, ref) => {
   const [content, setContent] = React.useState("")
   const [showFileUpload, setShowFileUpload] = React.useState(false)
   const [attachments, setAttachments] = React.useState<FileAttachment[]>([])
-  const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+  // Use an internal ref and forward it
+  const internalRef = React.useRef<HTMLTextAreaElement>(null)
+  
+  // Forward the internal ref to the parent component
+  useImperativeHandle(ref, () => internalRef.current as HTMLTextAreaElement);
+  
   const { user } = useAuthContext();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -42,7 +49,7 @@ export function ChatInput({
       
       // Focus the textarea after submission
       setTimeout(() => {
-        textareaRef.current?.focus()
+        internalRef.current?.focus()
       }, 0)
     } catch (error) {
       console.error("Error submitting chat:", error)
@@ -58,7 +65,7 @@ export function ChatInput({
 
   // Auto-resize the textarea based on content
   React.useEffect(() => {
-    const textarea = textareaRef.current
+    const textarea = internalRef.current
     if (textarea) {
       textarea.style.height = "auto"
       textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`
@@ -101,117 +108,83 @@ export function ChatInput({
   }
 
   return (
-    <div className="border-t bg-background p-0">
-      {/* File attachment area */}
-      {(showFileUpload || attachments.length > 0) && (
-        <div className="px-4 py-2 border-b">
-          {showFileUpload ? (
-            <div className="mb-2">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium">Add attachment</h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  onClick={() => setShowFileUpload(false)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <FileUpload
-                onFileUploaded={handleFileUploaded}
-                userId={user?.id || "anonymous"}
-              />
-            </div>
-          ) : null}
-          
-          {attachments.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium">Attachments</h3>
-              <div className="flex flex-wrap gap-2">
-                {attachments.map((attachment) => (
-                  <div
-                    key={attachment.id}
-                    className="relative flex items-center gap-2 border rounded-md p-2 bg-muted/50 max-w-[200px]"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium truncate">{attachment.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {Math.round(attachment.size / 1024)} KB
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0 opacity-70 hover:opacity-100"
-                      onClick={() => removeAttachment(attachment.id)}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+    <div className={cn("rounded-lg border bg-card", className)}>
+      {/* File upload UI */}
+      {showFileUpload && (
+        <div className="p-4 border-b">
+          <div className="flex justify-between items-center">
+            <h3 className="text-sm font-semibold">Add file</h3>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setShowFileUpload(false)}
+              aria-label="Close file upload"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <FileUpload 
+            onFileUploaded={handleFileUploaded} 
+            userId={user?.id || 'anonymous'}
+          />
         </div>
       )}
       
-      <form
-        onSubmit={handleSubmit}
-        className={cn("flex flex-col gap-2 px-4 pb-4", className)}
-      >
-        <div className="relative">
-          <Textarea
-            ref={textareaRef}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            className="min-h-[80px] max-h-[200px] resize-none bg-background pr-14 py-4 text-base rounded-xl border-muted"
-            disabled={isLoading || isStreaming}
-          />
-          <div className="absolute right-2 bottom-2 flex gap-2">
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="h-10 w-10 rounded-full opacity-70 hover:opacity-100"
-              disabled={isLoading || isStreaming}
-              onClick={() => setShowFileUpload(!showFileUpload)}
+      {/* Attachments list */}
+      {attachments.length > 0 && (
+        <div className="p-2 flex flex-wrap gap-2 border-b">
+          {attachments.map(file => (
+            <div 
+              key={file.id} 
+              className="flex items-center gap-1.5 py-0.5 pl-2 pr-1 rounded-full bg-muted text-xs max-w-[200px]"
             >
-              <Paperclip className="h-5 w-5" />
-              <span className="sr-only">Add attachment</span>
-            </Button>
-            
-            <Button
-              type="submit"
-              size="icon"
-              disabled={(content.trim() === "" && attachments.length === 0) || isLoading || isStreaming}
-              className="h-10 w-10 shrink-0 rounded-full bg-primary"
-            >
-              <Send className="h-5 w-5" />
-              <span className="sr-only">Send</span>
-            </Button>
-          </div>
+              <span className="truncate">{file.name}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-4 w-4 rounded-full"
+                onClick={() => removeAttachment(file.id)}
+                aria-label={`Remove ${file.name}`}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          ))}
         </div>
-        
-        <div className="text-xs text-muted-foreground flex justify-between px-1">
-          <span>
-            {isLoading || isStreaming ? 
-              "Processing..." : 
-              "Press Ctrl+Enter to send"
-            }
-          </span>
-          <span className={cn(
-            "transition-opacity",
-            (content.length > 0 || attachments.length > 0) ? "opacity-100" : "opacity-0"
-          )}>
-            {attachments.length > 0 && `${attachments.length} attachment${attachments.length > 1 ? 's' : ''}`}
-            {content.length > 0 && attachments.length > 0 && " • "}
-            {content.length > 0 && `${content.length} characters`}
-          </span>
-        </div>
+      )}
+      
+      {/* Input area */}
+      <form onSubmit={handleSubmit} className="flex items-end p-2 gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={() => setShowFileUpload(!showFileUpload)}
+          className="shrink-0"
+          disabled={isLoading || isStreaming}
+          aria-label="Attach file"
+        >
+          <Paperclip className="h-5 w-5" />
+        </Button>
+        <Textarea
+          ref={internalRef}
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          disabled={isLoading || isStreaming}
+          className="min-h-10 resize-none"
+          rows={content.split("\n").length > 3 ? content.split("\n").length : 1}
+        />
+        <Button 
+          type="submit" 
+          size="icon" 
+          disabled={isLoading || isStreaming || !content.trim()}
+          aria-label="Send message"
+        >
+          <Send className="h-5 w-5" />
+        </Button>
       </form>
     </div>
   )
-} 
+}) 

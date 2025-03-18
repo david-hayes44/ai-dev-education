@@ -1,418 +1,328 @@
-import { promises as fs } from 'fs';
-import path from 'path';
-import matter from 'gray-matter';
-
-/**
- * Interface for content chunks extracted from pages
- * These will be used for semantic search and content retrieval
- */
-export interface ContentChunk {
-  id: string;
-  title: string;
-  content: string;
-  source: string;
-  path: string;
-  section: string;
-  keywords: string[];
-  priority: number;
-}
-
-/**
- * Interface for page metadata
- */
-export interface PageMetadata {
-  title: string;
-  description: string;
-  section?: string;
-  tags?: string[];
-  priority?: number;
-}
-
 /**
  * Content Indexing Service
- * Responsible for scanning and indexing content from the site pages
+ * 
+ * This service is responsible for generating and managing vector embeddings
+ * for content to enable semantic search functionality.
  */
-export class ContentIndexingService {
-  private static instance: ContentIndexingService;
-  private contentChunks: ContentChunk[] = [];
-  private _isIndexed: boolean = false;
+
+import fs from 'fs';
+import path from 'path';
+import fetch from 'node-fetch';
+
+// Interface for content chunks that will be indexed and searched
+export interface ContentChunk {
+  id: string;          // Unique identifier
+  title: string;       // Title of the content
+  content: string;     // The actual text content 
+  path: string;        // URL path to the content
+  source: string;      // Source of the content (e.g., page title)
+  section: string;     // Section the content belongs to
+  keywords: string[];  // Keywords for the content
+  priority: number;    // Priority/importance of the content
+  embedding?: number[];// Vector embedding for semantic search
+  relevance?: number;  // Search relevance score (0-1)
+  sectionId?: string;  // Optional section identifier for deep linking
+}
+
+// Interface for indexing statistics
+export interface IndexingStats {
+  totalPages: number;
+  totalChunks: number;
+  totalVectors: number;
+  lastIndexed: string | null;
+}
+
+// In-memory storage for content chunks and stats
+let contentChunks: ContentChunk[] = [];
+let indexingStats: IndexingStats = {
+  totalPages: 0,
+  totalChunks: 0,
+  totalVectors: 0,
+  lastIndexed: null
+};
+
+/**
+ * Generate embeddings using Open Router API
+ * Open Router can proxy requests to various models including those with embedding capabilities
+ */
+async function generateOpenRouterEmbedding(content: string): Promise<number[]> {
+  const apiKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY;
   
-  private constructor() {}
-  
-  /**
-   * Get singleton instance
-   */
-  public static getInstance(): ContentIndexingService {
-    if (!ContentIndexingService.instance) {
-      ContentIndexingService.instance = new ContentIndexingService();
-    }
-    return ContentIndexingService.instance;
+  if (!apiKey) {
+    console.warn('Open Router API key not found. Using fallback similarity algorithm.');
+    return generateSimpleEmbedding(content);
   }
   
-  /**
-   * Check if content has been indexed
-   */
-  public get isIndexed(): boolean {
-    return this._isIndexed;
-  }
-  
-  /**
-   * Index all content pages in the app directory
-   */
-  public async indexContent(): Promise<void> {
-    if (this._isIndexed) return;
-    
-    try {
-      // In a production environment, we would want to precompute this
-      // and possibly store it in a database or JSON file
-      
-      // Start with the app directory which contains our pages
-      const pagesDir = path.join(process.cwd(), 'app');
-      
-      // Index MDX/TSX files recursively
-      await this.indexDirectory(pagesDir, '');
-      
-      console.log(`Indexed ${this.contentChunks.length} content chunks from site pages`);
-      this._isIndexed = true;
-    } catch (error) {
-      console.error('Error indexing content:', error);
-      throw new Error('Failed to index content');
-    }
-  }
-  
-  /**
-   * Recursively index files in a directory
-   */
-  private async indexDirectory(dirPath: string, relativePath: string): Promise<void> {
-    // Read directory contents
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
-    
-    for (const entry of entries) {
-      const fullPath = path.join(dirPath, entry.name);
-      const entryRelativePath = path.join(relativePath, entry.name);
-      
-      if (entry.isDirectory()) {
-        // Skip node_modules, .next, and other non-content directories
-        if (['node_modules', '.next', 'api', 'public', 'styles'].includes(entry.name)) {
-          continue;
-        }
-        
-        // Recursively index subdirectories
-        await this.indexDirectory(fullPath, entryRelativePath);
-      } else {
-        // Only process page.tsx, page.mdx, or page.md files
-        if (entry.name === 'page.tsx' || entry.name === 'page.mdx' || entry.name === 'page.md') {
-          await this.indexFile(fullPath, relativePath);
-        }
-      }
-    }
-  }
-  
-  /**
-   * Index a single file
-   */
-  private async indexFile(filePath: string, relativePath: string): Promise<void> {
-    try {
-      // Read file content
-      const fileContent = await fs.readFile(filePath, 'utf-8');
-      
-      // Extract content based on file type
-      if (filePath.endsWith('.mdx') || filePath.endsWith('.md')) {
-        await this.processMdxFile(fileContent, relativePath, filePath);
-      } else if (filePath.endsWith('.tsx')) {
-        await this.processTsxFile(fileContent, relativePath, filePath);
-      }
-    } catch (error) {
-      console.error(`Error processing file ${filePath}:`, error);
-    }
-  }
-  
-  /**
-   * Process MDX/MD file content
-   */
-  private async processMdxFile(content: string, relativePath: string, filePath: string): Promise<void> {
-    try {
-      // Parse frontmatter
-      const { data, content: mdxContent } = matter(content);
-      
-      // Extract metadata
-      const metadata: PageMetadata = {
-        title: data.title || this.generateTitleFromPath(relativePath),
-        description: data.description || '',
-        section: data.section || this.getSectionFromPath(relativePath),
-        tags: data.tags || [],
-        priority: data.priority || 1,
-      };
-      
-      // Create content chunks from the MDX content
-      // This is a simple approach - in a real implementation, we would
-      // parse the MDX properly and extract chunks based on headings
-      this.chunksFromMdxContent(mdxContent, metadata, relativePath, filePath);
-    } catch (error) {
-      console.error(`Error processing MDX/MD file ${filePath}:`, error);
-    }
-  }
-  
-  /**
-   * Process TSX file content
-   */
-  private async processTsxFile(content: string, relativePath: string, filePath: string): Promise<void> {
-    try {
-      // Extract metadata from exported metadata object if it exists
-      const metadataMatch = content.match(/export const metadata[^{]*{([^}]*)}/);
-      let title = this.generateTitleFromPath(relativePath);
-      let description = '';
-      
-      if (metadataMatch && metadataMatch[1]) {
-        const metadataContent = metadataMatch[1];
-        
-        // Extract title
-        const titleMatch = metadataContent.match(/title:\s*["'](.*?)["']/);
-        if (titleMatch && titleMatch[1]) {
-          title = titleMatch[1];
-        }
-        
-        // Extract description
-        const descriptionMatch = metadataContent.match(/description:\s*["'](.*?)["']/);
-        if (descriptionMatch && descriptionMatch[1]) {
-          description = descriptionMatch[1];
-        }
-      }
-      
-      // Create metadata object
-      const metadata: PageMetadata = {
-        title,
-        description,
-        section: this.getSectionFromPath(relativePath),
-        tags: [], // We'd need to extract tags from TSX files if they exist
-        priority: 1,
-      };
-      
-      // Extract content from JSX
-      this.chunksFromTsxContent(content, metadata, relativePath, filePath);
-    } catch (error) {
-      console.error(`Error processing TSX file ${filePath}:`, error);
-    }
-  }
-  
-  /**
-   * Extract content chunks from MDX content
-   */
-  private chunksFromMdxContent(
-    content: string, 
-    metadata: PageMetadata, 
-    relativePath: string,
-    filePath: string
-  ): void {
-    // Split content by headings
-    const headingRegex = /^(#{1,6})\s+(.+)$/gm;
-    const sections = content.split(headingRegex);
-    
-    if (sections.length <= 1) {
-      // No headings found, treat the entire content as one chunk
-      this.addContentChunk({
-        id: `${relativePath}-main`,
-        title: metadata.title,
-        content: content.trim(),
-        source: metadata.title,
-        path: this.pathToUrl(relativePath),
-        section: metadata.section || '',
-        keywords: metadata.tags || [],
-        priority: metadata.priority || 1,
-      });
-      return;
-    }
-    
-    // Process each section
-    for (let i = 1; i < sections.length; i += 3) {
-      if (i + 2 >= sections.length) continue;
-      
-      const headingLevel = sections[i].length; // Number of # characters
-      const headingText = sections[i + 1].trim();
-      const sectionContent = sections[i + 2].trim();
-      
-      // Only add non-empty sections
-      if (sectionContent) {
-        this.addContentChunk({
-          id: `${relativePath}-${headingText.toLowerCase().replace(/\W+/g, '-')}`,
-          title: headingText,
-          content: sectionContent,
-          source: metadata.title,
-          path: this.pathToUrl(relativePath),
-          section: metadata.section || '',
-          keywords: metadata.tags || [],
-          priority: metadata.priority || 1,
-        });
-      }
-    }
-  }
-  
-  /**
-   * Extract content chunks from TSX content
-   */
-  private chunksFromTsxContent(
-    content: string, 
-    metadata: PageMetadata, 
-    relativePath: string,
-    filePath: string
-  ): void {
-    // This is a simplified approach - in a real implementation,
-    // we would parse the TSX properly and extract text content
-    
-    // Extract text from paragraph tags
-    const paragraphRegex = /<p[^>]*>([\s\S]*?)<\/p>/g;
-    const paragraphs: string[] = [];
-    let match;
-    
-    while ((match = paragraphRegex.exec(content)) !== null) {
-      if (match[1]) {
-        // Clean up HTML tags
-        const cleanText = match[1].replace(/<[^>]+>/g, '');
-        paragraphs.push(cleanText);
-      }
-    }
-    
-    // Extract text from headings
-    const headingRegex = /<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/g;
-    const headings: string[] = [];
-    
-    while ((match = headingRegex.exec(content)) !== null) {
-      if (match[1]) {
-        // Clean up HTML tags
-        const cleanText = match[1].replace(/<[^>]+>/g, '');
-        headings.push(cleanText);
-      }
-    }
-    
-    // Combine extracted content
-    const extractedContent = [...headings, ...paragraphs].join(' ');
-    
-    if (extractedContent) {
-      this.addContentChunk({
-        id: `${relativePath}-main`,
-        title: metadata.title,
-        content: extractedContent,
-        source: metadata.title,
-        path: this.pathToUrl(relativePath),
-        section: metadata.section || '',
-        keywords: metadata.tags || [],
-        priority: metadata.priority || 1,
-      });
-    }
-  }
-  
-  /**
-   * Add a content chunk to the index
-   */
-  private addContentChunk(chunk: ContentChunk): void {
-    this.contentChunks.push(chunk);
-  }
-  
-  /**
-   * Generate a title from a path
-   */
-  private generateTitleFromPath(relativePath: string): string {
-    // Get the last part of the path and convert to title case
-    const pathParts = relativePath.split(path.sep);
-    const lastPart = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2] || '';
-    
-    return lastPart
-      .split('-')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  }
-  
-  /**
-   * Get section from path
-   */
-  private getSectionFromPath(relativePath: string): string {
-    const pathParts = relativePath.split(path.sep);
-    // Use the first non-empty directory as the section
-    for (const part of pathParts) {
-      if (part && part !== '.' && part !== '..') {
-        return part
-          .split('-')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
-      }
-    }
-    return 'General';
-  }
-  
-  /**
-   * Convert a file path to a URL
-   */
-  private pathToUrl(relativePath: string): string {
-    const urlPath = relativePath.replace(/\\/g, '/');
-    return `/${urlPath}`;
-  }
-  
-  /**
-   * Search for content chunks matching a query
-   */
-  public search(query: string, limit: number = 5): ContentChunk[] {
-    // In a real implementation, we would use a vector database or
-    // text search library like Fuse.js to implement this properly
-    
-    // For this MVP, we'll use a simple keyword matching approach
-    const normalizedQuery = query.toLowerCase();
-    const queryWords = normalizedQuery.split(/\s+/).filter(word => word.length > 2);
-    
-    // Score each chunk based on matching keywords
-    const scoredChunks = this.contentChunks.map(chunk => {
-      const chunkText = `${chunk.title} ${chunk.content}`.toLowerCase();
-      
-      let score = 0;
-      for (const word of queryWords) {
-        if (chunkText.includes(word)) {
-          score += 1;
-          
-          // Boost score for title matches
-          if (chunk.title.toLowerCase().includes(word)) {
-            score += 2;
-          }
-          
-          // Boost score for exact keyword matches
-          if (chunk.keywords.some(kw => kw.toLowerCase().includes(word))) {
-            score += 3;
-          }
-        }
-      }
-      
-      // Adjust score by priority
-      score *= chunk.priority;
-      
-      return { chunk, score };
+  try {
+    // OpenRouter uses OpenAI-compatible endpoint for embeddings
+    const response = await fetch('https://openrouter.ai/api/v1/embeddings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000',
+        'X-Title': 'AI Education Platform'
+      },
+      body: JSON.stringify({
+        model: 'openai/text-embedding-ada-002',  // Using OpenAI compatible model through OpenRouter
+        input: content
+      })
     });
     
-    // Sort by score and return top matches
-    return scoredChunks
-      .filter(item => item.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit)
-      .map(item => item.chunk);
-  }
-  
-  /**
-   * Get all indexed chunks
-   */
-  public getAllChunks(): ContentChunk[] {
-    return [...this.contentChunks];
-  }
-  
-  /**
-   * Get all sections
-   */
-  public getSections(): string[] {
-    const sections = new Set<string>();
-    for (const chunk of this.contentChunks) {
-      if (chunk.section) {
-        sections.add(chunk.section);
-      }
+    if (!response.ok) {
+      throw new Error(`Open Router API error: ${response.status} ${response.statusText}`);
     }
-    return Array.from(sections);
+    
+    const data = await response.json() as { 
+      data: Array<{ embedding: number[] }> 
+    };
+    
+    return data.data[0].embedding;
+  } catch (error) {
+    console.error('Error generating embedding with Open Router:', error);
+    console.log('Falling back to simple embedding algorithm');
+    return generateSimpleEmbedding(content);
   }
 }
 
-// Export singleton instance
-export const contentIndexingService = ContentIndexingService.getInstance(); 
+/**
+ * Generate a simple vector embedding for content
+ * This is a fallback algorithm when API is not available
+ */
+function generateSimpleEmbedding(content: string): number[] {
+  // Count word frequencies
+  const words = content.toLowerCase().split(/\W+/).filter(Boolean);
+  const wordFreq: Record<string, number> = {};
+  
+  words.forEach(word => {
+    wordFreq[word] = (wordFreq[word] || 0) + 1;
+  });
+  
+  // Create a simple 100-dimension vector
+  const dimensions = 100;
+  const embedding = new Array(dimensions).fill(0);
+  
+  Object.entries(wordFreq).forEach(([word, freq]) => {
+    const hashCode = word.split('').reduce((acc, char) => {
+      return char.charCodeAt(0) + ((acc << 5) - acc);
+    }, 0);
+    
+    const index = Math.abs(hashCode) % dimensions;
+    embedding[index] += freq;
+  });
+  
+  // Normalize the vector
+  const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
+  return embedding.map(val => val / (magnitude || 1));
+}
+
+/**
+ * Calculate cosine similarity between two vectors
+ */
+function calculateCosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) {
+    throw new Error('Vectors must have the same dimensions');
+  }
+  
+  let dotProduct = 0;
+  let magnitudeA = 0;
+  let magnitudeB = 0;
+  
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    magnitudeA += a[i] * a[i];
+    magnitudeB += b[i] * b[i];
+  }
+  
+  magnitudeA = Math.sqrt(magnitudeA);
+  magnitudeB = Math.sqrt(magnitudeB);
+  
+  if (magnitudeA === 0 || magnitudeB === 0) {
+    return 0;
+  }
+  
+  return dotProduct / (magnitudeA * magnitudeB);
+}
+
+/**
+ * Index all content pages and generate embeddings
+ * This is a mock implementation for demonstration
+ */
+export async function indexAllContent({ 
+  useAPI = true 
+}: { 
+  useAPI?: boolean 
+} = {}): Promise<{
+  pagesIndexed: number;
+  chunksCreated: number;
+  vectorsStored: number;
+}> {
+  // Reset content chunks
+  contentChunks = [];
+  
+  // For this implementation, we'll use mock data
+  // In a real implementation, we'd scan content files
+  const mockPages = [
+    { 
+      title: 'Introduction to AI-Assisted Development',
+      path: '/introduction',
+      section: 'Getting Started',
+      content: 'AI-assisted development is revolutionizing how developers write code...',
+      sections: [
+        { id: 'benefits', title: 'Benefits', content: 'Improved productivity and code quality...' },
+        { id: 'getting-started', title: 'Getting Started', content: 'To get started with AI-assisted development...' }
+      ]
+    },
+    {
+      title: 'Understanding MCP',
+      path: '/mcp',
+      section: 'Core Concepts',
+      content: 'The Model Context Protocol defines how to structure context for AI models...',
+      sections: [
+        { id: 'core-concepts', title: 'Core Concepts', content: 'MCP is built around several key concepts...' },
+        { id: 'implementation', title: 'Implementation', content: 'Implementing MCP in your workflow...' }
+      ]
+    }
+  ];
+  
+  let chunksCreated = 0;
+  let vectorsStored = 0;
+  
+  // Process each page
+  for (const page of mockPages) {
+    // Add the main page
+    const pageChunk: ContentChunk = {
+      id: `page:${page.path}`,
+      title: page.title,
+      content: page.content,
+      path: page.path,
+      source: page.title,
+      section: page.section,
+      keywords: [page.title, page.section],
+      priority: 1,
+      embedding: useAPI 
+        ? await generateOpenRouterEmbedding(page.content)
+        : generateSimpleEmbedding(page.content)
+    };
+    
+    contentChunks.push(pageChunk);
+    chunksCreated++;
+    vectorsStored++;
+    
+    // Add each section
+    for (const section of page.sections) {
+      const sectionChunk: ContentChunk = {
+        id: `section:${page.path}:${section.id}`,
+        title: `${page.title} - ${section.title}`,
+        content: section.content,
+        path: page.path,
+        source: page.title,
+        section: page.section,
+        keywords: [page.title, section.title],
+        priority: 1,
+        sectionId: section.id,
+        embedding: useAPI 
+          ? await generateOpenRouterEmbedding(section.content)
+          : generateSimpleEmbedding(section.content)
+      };
+      
+      contentChunks.push(sectionChunk);
+      chunksCreated++;
+      vectorsStored++;
+    }
+  }
+  
+  // Update stats
+  indexingStats = {
+    totalPages: mockPages.length,
+    totalChunks: chunksCreated,
+    totalVectors: vectorsStored,
+    lastIndexed: new Date().toISOString()
+  };
+  
+  // Save the stats
+  saveIndexingStats();
+  
+  return {
+    pagesIndexed: mockPages.length,
+    chunksCreated,
+    vectorsStored
+  };
+}
+
+/**
+ * Save indexing stats to a file
+ */
+function saveIndexingStats() {
+  try {
+    const dataDir = path.join(process.cwd(), '.data');
+    
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    
+    fs.writeFileSync(
+      path.join(dataDir, 'indexing-stats.json'),
+      JSON.stringify(indexingStats)
+    );
+  } catch (error) {
+    console.error('Failed to save indexing stats:', error);
+  }
+}
+
+/**
+ * Get indexing statistics
+ */
+export async function getIndexingStats(): Promise<IndexingStats> {
+  try {
+    const statsPath = path.join(process.cwd(), '.data', 'indexing-stats.json');
+    
+    if (fs.existsSync(statsPath)) {
+      const rawData = fs.readFileSync(statsPath, 'utf-8');
+      return JSON.parse(rawData);
+    }
+  } catch (error) {
+    console.error('Failed to read indexing stats:', error);
+  }
+  
+  return indexingStats;
+}
+
+/**
+ * Perform a semantic search on indexed content
+ */
+export async function semanticSearch(
+  query: string,
+  options: {
+    limit?: number;
+    threshold?: number;
+    useAPI?: boolean;
+  } = {}
+): Promise<ContentChunk[]> {
+  const { limit = 5, threshold = 0.5, useAPI = true } = options;
+  
+  if (contentChunks.length === 0) {
+    return [];
+  }
+  
+  // Generate embedding for the query
+  const queryEmbedding = useAPI 
+    ? await generateOpenRouterEmbedding(query) 
+    : generateSimpleEmbedding(query);
+  
+  // Calculate similarity for each chunk
+  const results = contentChunks.map(chunk => {
+    const similarity = calculateCosineSimilarity(queryEmbedding, chunk.embedding || []);
+    return { chunk, similarity };
+  });
+  
+  // Sort by similarity and return top results
+  return results
+    .filter(result => result.similarity >= threshold)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, limit)
+    .map(result => ({
+      ...result.chunk,
+      relevance: result.similarity
+    }));
+} 

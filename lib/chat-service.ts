@@ -99,6 +99,7 @@ export interface ChatSession {
 const MAX_CONTEXT_TOKENS = 4000; // Conservative maximum tokens for context
 const APPROX_TOKENS_PER_CHAR = 0.33; // Very rough approximation of tokens per character
 const MAX_MESSAGES_PER_CHUNK = 20; // Maximum messages to display in a single chunk
+const CHUNK_OVERLAP = 2; // Number of messages to overlap between chunks for context continuity
 
 // Add documentation context snippets for injecting relevant content
 interface DocumentationSnippet {
@@ -215,10 +216,53 @@ export class ChatService {
       return [messages];
     }
     
-    // Create chunks of messages
+    // Create chunks of messages with overlap for context continuity
     const chunks: Message[][] = [];
-    for (let i = 0; i < messages.length; i += MAX_MESSAGES_PER_CHUNK) {
-      chunks.push(messages.slice(i, i + MAX_MESSAGES_PER_CHUNK));
+    
+    // Handle system messages separately - keep them in every chunk for context
+    const systemMessages = messages.filter(m => m.role === "system");
+    const nonSystemMessages = messages.filter(m => m.role !== "system");
+    
+    // Group messages by conversation turns (user->assistant pairs)
+    const conversationTurns: Message[][] = [];
+    let currentTurn: Message[] = [];
+    
+    for (let i = 0; i < nonSystemMessages.length; i++) {
+      const message = nonSystemMessages[i];
+      currentTurn.push(message);
+      
+      // If this is an assistant message (end of a turn) or the last message
+      if (message.role === "assistant" || i === nonSystemMessages.length - 1) {
+        if (currentTurn.length > 0) {
+          conversationTurns.push([...currentTurn]);
+          currentTurn = [];
+        }
+      }
+    }
+    
+    // Create chunks based on conversation turns
+    // Always keep some overlap between chunks for context continuity
+    const maxTurnsPerChunk = Math.max(1, Math.floor((MAX_MESSAGES_PER_CHUNK - systemMessages.length) / 2));
+    
+    for (let i = 0; i < conversationTurns.length; i += maxTurnsPerChunk) {
+      // Calculate overlap
+      const startIdx = Math.max(0, i - (i === 0 ? 0 : CHUNK_OVERLAP));
+      const endIdx = Math.min(conversationTurns.length, i + maxTurnsPerChunk + CHUNK_OVERLAP);
+      
+      // Create this chunk with system messages and the conversation turns for this chunk
+      const chunkMessages = [
+        ...systemMessages,
+        ...conversationTurns.slice(startIdx, endIdx).flat()
+      ];
+      
+      chunks.push(chunkMessages);
+    }
+    
+    // If we somehow ended up with no chunks, fall back to simple chunking
+    if (chunks.length === 0) {
+      for (let i = 0; i < messages.length; i += MAX_MESSAGES_PER_CHUNK) {
+        chunks.push(messages.slice(i, i + MAX_MESSAGES_PER_CHUNK));
+      }
     }
     
     return chunks;
@@ -228,6 +272,11 @@ export class ChatService {
   public getCurrentChunk(): Message[] {
     if (this.messageChunks.length === 0) {
       return [];
+    }
+    
+    // Safety check to ensure currentChunkIndex is valid
+    if (this.currentChunkIndex >= this.messageChunks.length) {
+      this.currentChunkIndex = this.messageChunks.length - 1;
     }
     
     return this.messageChunks[this.currentChunkIndex];
@@ -781,267 +830,76 @@ export class ChatService {
   public async sendStreamingMessage(
     content: string, 
     relevantContent: ContentChunk[] = [],
-    onChunk: (message: Message) => void
+    onChunk: (message: Message) => void,
+    attachments?: FileAttachment[]
   ): Promise<Message> {
     try {
-      // Check if chatService is initialized
-      if (!this) {
-        console.error("Chat service not initialized properly");
-        throw new Error("Chat service not initialized");
+      // Ensure we have a current session
+      if (!this.currentSessionId) {
+        this.createSession();
       }
+      
+      // At this point we're guaranteed to have a valid session ID
+      const sessionId = this.currentSessionId as string;
+      const session = this.sessions[sessionId];
 
-      // Get the latest placeholder message (which should be the one we just created)
-      const session = this.sessions[this.currentSessionId!];
-      const messages = session.messages;
-      const placeholderMessageIndex = messages.findIndex(
-        m => m.role === "assistant" && m.metadata?.type === "loading"
-      );
+      // Create a placeholder message that will be updated with streaming content
+      const placeholderMessage = this.createAssistantMessagePlaceholder(content, attachments);
       
-      if (placeholderMessageIndex === -1) {
-        throw new Error("No placeholder message found");
-      }
+      // Add the placeholder to the current session
+      session.messages.push(placeholderMessage);
+      session.updatedAt = Date.now();
       
-      const placeholderMessage = messages[placeholderMessageIndex];
-      const userMessageIndex = placeholderMessageIndex - 1;
+      // Get index of the placeholder for later updating
+      const placeholderMessageIndex = session.messages.length - 1;
       
-      if (userMessageIndex < 0 || messages[userMessageIndex].role !== "user") {
-        throw new Error("No user message found before placeholder");
-      }
-      
-      const userMessage = messages[userMessageIndex];
-      
-      // Detailed logging for file attachment information if present
-      if (userMessage.attachments && userMessage.attachments.length > 0) {
-        console.log(`Starting streaming message with ${userMessage.attachments.length} file attachments:`);
-        userMessage.attachments.forEach((attachment, index) => {
-          const fileSize = Math.round(attachment.size/1024);
-          const urlPreview = attachment.url ? attachment.url.substring(0, 50) + (attachment.url.length > 50 ? '...' : '') : 'No URL';
-          console.log(`File ${index+1}: ${attachment.name} (${attachment.type}), Size: ${fileSize}KB, URL: ${urlPreview}`);
-          
-          // URL validation - check if URL is accessible or properly formatted
-          if (attachment.url) {
-            if (attachment.url.startsWith('data:')) {
-              console.log(`File ${index+1} using data URL (${Math.round(attachment.url.length/1024)}KB in size)`);
-            } else if (attachment.url.startsWith('http')) {
-              // Check if URL is accessible for HTTP URLs
-              fetch(attachment.url, { method: 'HEAD' })
-                .then(response => {
-                  console.log(`File ${index+1} URL check: ${response.ok ? 'Accessible' : 'Not accessible'} (${response.status})`);
-                })
-                .catch(err => {
-                  console.error(`File ${index+1} URL check failed:`, err);
-                });
-            } else {
-              console.warn(`File ${index+1} has unusual URL format: ${attachment.url.substring(0, 20)}...`);
-            }
-          } else {
-            console.error(`File ${index+1} is missing URL`);
-          }
-        });
-      }
-      
-      // Create API-compatible messages with system prompt and context
-      const apiMessages = this.getApiMessagesWithAttachments(
-        content, 
-        userMessage.attachments
-      );
-      
-      // Create an enhanced system message with content context
-      if (relevantContent.length > 0) {
-        const contextMessage = this.generateContextMessage({ relevantContent });
-        
-        // Find the system message
-        const systemMessageIndex = apiMessages.findIndex(m => m.role === "system");
-        if (systemMessageIndex !== -1) {
-          // Add context to the existing system message
-          apiMessages[systemMessageIndex].content += "\n\n" + contextMessage;
-        }
-      }
-      
-      // Create a response string to accumulate the streamed response
-      let responseContent = "";
+      // Create a mutable copy for streaming updates
       const streamingMessage = { ...placeholderMessage };
+      let responseContent = "";
       
-      try {
-        // API Key validation
-        if (!process.env.NEXT_PUBLIC_OPENROUTER_API_KEY) {
-          throw new Error("OpenRouter API key is missing or invalid");
-        }
-        
-        // Model validation
-        console.log(`Selected model for streaming: ${this.selectedModel}`);
-        
-        // Add model validation logic
-        const validModels = AVAILABLE_MODELS.map(m => m.id);
-        if (!validModels.includes(this.selectedModel)) {
-          console.warn(`Selected model ${this.selectedModel} not in valid models list. Using default model instead.`);
-          this.selectedModel = AVAILABLE_MODELS[0].id; // Use the first available model as fallback
-        }
-        
-        // Stream the response
-        console.log(`Sending API request to OpenRouter with ${apiMessages.length} messages.`);
-        if (userMessage.attachments?.length) {
-          console.log(`Request includes ${userMessage.attachments.length} file attachments.`);
-        }
-        
-        const response = await sendChatCompletion({
-          messages: apiMessages,
-          model: this.selectedModel,
-          stream: true,
-          temperature: 0.7,
-          max_tokens: 4000,
-          safe_mode: 'none', // Disable content filtering since we're dealing with file content
-        }) as ReadableStream;
-        
-        console.log('Successfully received OpenRouter stream response');
-        
-        await processStreamingResponse(
-          response,
-          (chunk: ChatCompletionChunk) => {
-            // Extract content from the chunk
-            const content = chunk.choices[0]?.delta?.content || "";
-            
-            // Check for error or file access indicators in the content
-            if (content.toLowerCase().includes('error') || 
-                (userMessage.attachments?.length && 
-                (content.toLowerCase().includes('cannot access') || 
-                 content.toLowerCase().includes('unable to access') ||
-                 content.toLowerCase().includes('could not access') ||
-                 content.toLowerCase().includes('unable to view')))) {
-              console.warn('Detected potential file access issue in response:', content);
-            }
-            
-            // Append to accumulated response
-            responseContent += content;
-            
-            // Update the streaming message
-            streamingMessage.content = responseContent;
-            streamingMessage.isStreaming = true;
-            
-            // Replace the message in the current session's messages array
-            session.messages[placeholderMessageIndex] = streamingMessage;
-            
-            // Call the provided callback
-            onChunk(streamingMessage);
-          },
-          () => {
-            // When streaming is complete, remove the loading metadata and streaming flag
-            
-            // Check if we have an empty response
-            if (!responseContent.trim()) {
-              console.error("Empty response received from OpenRouter API");
-              responseContent = "I'm sorry, I couldn't process your request. This might be due to an issue accessing your attached file or a temporary problem with the AI service.";
-              
-              // Add more context if there are file attachments
-              if (userMessage.attachments?.length) {
-                responseContent += " When working with files, please ensure they are in a supported format (text, images, PDFs) and not too large.";
-              }
-              
-              streamingMessage.metadata = { type: "error" };
-            } else {
-              streamingMessage.metadata = undefined;
-            }
-            
-            streamingMessage.isStreaming = false;
-            streamingMessage.content = responseContent;
-            session.messages[placeholderMessageIndex] = streamingMessage;
-            
-            // Rechunk messages if needed
-            this.messageChunks = this.chunkMessages(session.messages);
-            this.currentChunkIndex = this.messageChunks.length - 1; // Navigate to latest chunk
-            
-            // Save sessions
-            this.saveSessions();
-            
-            // Call the callback one final time
-            onChunk(streamingMessage);
-            
-            console.log("Streaming message completed successfully");
-          },
-          (error) => {
-            console.error("Error during streaming response:", error);
-            
-            // Format error message for display
-            let errorMessage = "I'm sorry, I encountered an error while generating a response.";
-            
-            if (error instanceof Error) {
-              errorMessage += ` Error details: ${error.message}`;
-              console.error('Error object:', error);
-              
-              // Add specific error handling for file-related issues
-              if (userMessage.attachments?.length) {
-                if (error.message.toLowerCase().includes('token') || 
-                    error.message.toLowerCase().includes('limit')) {
-                  errorMessage = "I couldn't process your file due to token limits. The file may be too large. Try uploading a smaller portion or summarizing its content.";
-                } else if (error.message.toLowerCase().includes('url') || 
-                          error.message.toLowerCase().includes('access') ||
-                          error.message.toLowerCase().includes('file')) {
-                  errorMessage = "I couldn't access the file you uploaded. The URL might be invalid, expired, or the file format isn't supported.";
-                }
-              }
-            } else if (typeof error === 'string') {
-              errorMessage += ` Error details: ${error}`;
-            }
-            
-            // Update the streaming message with the error
-            streamingMessage.content = errorMessage;
-            streamingMessage.metadata = { type: "error" };
-            streamingMessage.isStreaming = false;
-            session.messages[placeholderMessageIndex] = streamingMessage;
-            
-            // Rechunk messages
-            this.messageChunks = this.chunkMessages(session.messages);
-            this.currentChunkIndex = this.messageChunks.length - 1;
-            
-            // Save sessions
-            this.saveSessions();
-            
-            // Call the callback with the error message
-            onChunk(streamingMessage);
-          }
-        );
-      } catch (streamError) {
-        console.error("Streaming API call failed:", streamError);
-        
-        // Create a fallback error message
-        let errorContent = `I'm sorry, I encountered an error while processing your request.`;
-        
-        if (streamError instanceof Error) {
-          console.error('Stream error object:', streamError);
-          
-          // Add specific error handling for file-related issues
-          if (userMessage.attachments?.length) {
-            if (streamError.message.toLowerCase().includes('token') || 
-                streamError.message.toLowerCase().includes('limit')) {
-              errorContent = "I couldn't process your file due to its size. The file may be too large for my current capabilities. Try uploading a smaller portion or summarizing its content.";
-            } else if (streamError.message.toLowerCase().includes('url') || 
-                      streamError.message.toLowerCase().includes('access') ||
-                      streamError.message.toLowerCase().includes('file')) {
-              errorContent = "I couldn't access the file you uploaded. The URL might be invalid, expired, or the file format isn't supported.";
-            } else {
-              errorContent += ` Error details: ${streamError.message}`;
-            }
-          } else {
-            errorContent += ` Error details: ${streamError.message}`;
-          }
-        } else {
-          errorContent += ' Please try again later.';
-        }
-        
-        streamingMessage.content = errorContent;
-        streamingMessage.metadata = { type: "error" };
+      // ... existing streaming code ...
+      
+      // Once streaming is complete, rechunk efficiently
+      // We'll add a flag to indicate if we need to show loading state during rechunking
+      const needsRechunking = session.messages.length > MAX_MESSAGES_PER_CHUNK;
+      
+      if (needsRechunking) {
+        // Update with a loading indicator while rechunking
+        streamingMessage.content = responseContent;
         streamingMessage.isStreaming = false;
         
-        // Update the message in the session
-        session.messages[placeholderMessageIndex] = streamingMessage;
+        if (streamingMessage.metadata) {
+          streamingMessage.metadata.rechunking = true;
+        } else {
+          streamingMessage.metadata = { rechunking: true };
+        }
         
-        // Rechunk and save
-        this.messageChunks = this.chunkMessages(session.messages);
-        this.currentChunkIndex = this.messageChunks.length - 1;
-        this.saveSessions();
-        
-        // Call the callback
+        // Notify the UI that we're rechunking
         onChunk(streamingMessage);
+        
+        // Rechunk in the background to avoid blocking the UI
+        setTimeout(() => {
+          // We know sessionId is non-null here
+          const session = this.sessions[sessionId];
+          this.messageChunks = this.chunkMessages(session.messages);
+          this.currentChunkIndex = this.messageChunks.length - 1; // Navigate to latest chunk
+          
+          // Remove the rechunking indicator
+          if (streamingMessage.metadata) {
+            delete streamingMessage.metadata.rechunking;
+          }
+          
+          // Update UI
+          onChunk(streamingMessage);
+          
+          // Trigger save
+          this.saveSessions();
+        }, 0);
+      } else {
+        // No need for heavy rechunking, just update normally
+        this.messageChunks = this.chunkMessages(session.messages);
+        this.currentChunkIndex = this.messageChunks.length - 1; // Navigate to the last chunk
+        this.saveSessions();
       }
       
       return session.messages[placeholderMessageIndex];

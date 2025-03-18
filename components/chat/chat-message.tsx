@@ -20,6 +20,7 @@ import {
 import { useChat } from "@/contexts/chat-context"
 import { useNavigation } from "@/contexts/navigation-context"
 import { NavigationSuggestion, NavigationSuggestions } from "./navigation-suggestion"
+import { ContentReference, ContentReferences } from "./content-references"
 
 // Import from @/lib/chat-service to avoid naming conflicts
 import type { FileAttachment as ChatFileAttachment } from "@/lib/chat-service"
@@ -33,8 +34,13 @@ interface ChatServiceInterface {
   isNavigationRequest: (message: string) => boolean;
 }
 
+// Extended Message interface to include contentReferences
+interface MessageWithContentReferences extends Message {
+  contentReferences?: ContentReference[];
+}
+
 export interface ChatMessageProps {
-  message: Message
+  message: MessageWithContentReferences
   className?: string
 }
 
@@ -58,23 +64,39 @@ const FileAttachmentComponent = ({ file, onDownload, isLocal }: {
 );
 
 export default function ChatMessage({ message, className }: ChatMessageProps) {
-  const isUser = message.role === "user"
-  const isLoading = message.metadata?.type === "loading"
-  const isError = message.metadata?.type === "error"
-  const isStreaming = message.isStreaming
-  const hasAttachments = message.attachments && message.attachments.length > 0
-  const [selectedAttachment, setSelectedAttachment] = useState<LocalFileAttachment | null>(null)
-  const { selectedModel, sendMessage, sendStreamingMessage } = useChat()
-  const { getNavigationSuggestions, navigateTo } = useNavigation()
-  const [resourceRecommendations, setResourceRecommendations] = useState<NavigationSuggestion[]>([])
-  const [followUpQuestions, setFollowUpQuestions] = useState<string[]>([])
+  const [copied, setCopied] = useState(false);
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const [activeImage, setActiveImage] = useState("");
+  const [showResourceSuggestions, setShowResourceSuggestions] = useState(false);
+  const [resourceSuggestions, setResourceSuggestions] = useState<NavigationSuggestion[]>([]);
+  const [followUpQuestions, setFollowUpQuestions] = useState<string[]>([]);
+  const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
+  const [attachmentError, setAttachmentError] = useState<Record<string, boolean>>({});
+  const [loadingAttachments, setLoadingAttachments] = useState<Record<string, boolean>>({});
+  
+  const isUser = message.role === "user";
+  const isAssistant = message.role === "assistant";
+  const isSystem = message.role === "system";
+  const isError = message.metadata?.type === "error";
+  const isLoading = message.metadata?.type === "loading";
+  const isThinking = message.metadata?.type === "thinking"; 
+  const isSuggestion = message.metadata?.type === "suggestion";
+  const isConceptExplanation = message.metadata?.type === "concept_explanation";
+  const isRechunking = Boolean(message.metadata?.rechunking);
+  const isStreaming = message.isStreaming;
+  const hasContentReferences = message.contentReferences && message.contentReferences.length > 0;
+  const { sendMessage } = useChat();
+  const { navigateTo } = useNavigation();
+  
   const chatService = React.useMemo(() => 
     typeof window !== 'undefined' 
       ? (window as unknown as { chatService: ChatServiceInterface }).chatService 
       : null, 
     []
-  )
-
+  );
+  
+  const isAttachmentMessage = message.attachments && message.attachments.length > 0;
+  
   // Function to extract attachment references from markdown content
   const extractAttachmentRefs = (content: string): {
     text: string,
@@ -120,82 +142,114 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
       size: 0,
     })) : []);
     
+  // Enhanced file loading with error handling
+  const handleAttachmentLoad = (attachmentId: string) => {
+    setLoadingAttachments(prev => ({
+      ...prev,
+      [attachmentId]: false
+    }));
+  };
+  
+  const handleAttachmentError = (attachmentId: string) => {
+    setAttachmentError(prev => ({
+      ...prev,
+      [attachmentId]: true
+    }));
+    setLoadingAttachments(prev => ({
+      ...prev,
+      [attachmentId]: false
+    }));
+  };
+  
   const handleAttachmentClick = (attachment: ChatFileAttachment) => {
-    // If it's a real attachment with URL, open it
-    if (attachment.url) {
-      // Check if it's a data URL (local attachment)
-      if (attachment.url.startsWith('data:')) {
-        // For data URLs (local attachments), show in the modal
-        setSelectedAttachment(attachment as LocalFileAttachment);
-      } 
-      // Check if it's a local attachment with file metadata embedded in URL
-      else if (attachment.url.includes(';name=')) {
-        // Just show basic metadata in the modal since we can't display the actual file content
-        setSelectedAttachment({
-          ...attachment,
-          isLocalReference: true
-        });
-      }
-      // For remote images, show in the modal
-      else if (attachment.type.startsWith('image/')) {
-        setSelectedAttachment(attachment as LocalFileAttachment);
-      } 
-      // For other files with real URLs, open in a new tab
-      else if (attachment.url !== '#') {
-        window.open(attachment.url, '_blank');
-      }
+    // Mark this attachment as loading when clicked
+    setLoadingAttachments(prev => ({
+      ...prev,
+      [attachment.id]: true
+    }));
+    
+    // Rest of the existing method...
+    if (attachment.type.startsWith("image/")) {
+      setActiveImage(attachment.url);
+      setImageDialogOpen(true);
+    } else if (attachment.url) {
+      // For non-image files, open in a new tab or download
+      window.open(attachment.url, "_blank");
     }
   };
 
-  // Generate suggestions and follow-up questions for the latest assistant message
-  React.useEffect(() => {
-    // Only process assistant messages that are not loading/streaming
-    if (message.role === 'assistant' && 
-        message.content && 
-        !message.isStreaming && 
-        !message.metadata?.type && 
-        chatService) {
-      
-      // Generate resource recommendations
-      chatService.generateResourceRecommendations(message)
-        .then((recommendations: NavigationSuggestion[]) => {
-          if (recommendations.length > 0) {
-            setResourceRecommendations(recommendations);
-          }
-        })
-        .catch((err: Error) => console.error('Error generating recommendations:', err));
-      
-      // Generate follow-up questions
-      const followUps = chatService.generateFollowUpQuestions(message);
-      if (followUps.length > 0) {
-        setFollowUpQuestions(followUps);
+  // Add implementations for the resource recommendations and follow-up questions
+  const generateResourceRecommendations = async () => {
+    if (!isAssistant || !chatService) return;
+    
+    try {
+      setIsGeneratingSuggestions(true);
+      const recommendations = await chatService.generateResourceRecommendations(message);
+      if (recommendations.length > 0) {
+        setResourceSuggestions(recommendations);
+        setShowResourceSuggestions(true);
       }
+    } catch (error) {
+      console.error("Error generating resource recommendations:", error);
+    } finally {
+      setIsGeneratingSuggestions(false);
     }
-  }, [message, chatService]);
-  
-  // Handler for follow-up question clicks
+  };
+
+  // Generate follow-up questions
+  const generateFollowUpQuestions = () => {
+    if (!isAssistant || !chatService) return;
+    
+    try {
+      const questions = chatService.generateFollowUpQuestions(message);
+      if (questions.length > 0) {
+        setFollowUpQuestions(questions);
+      }
+    } catch (error) {
+      console.error("Error generating follow-up questions:", error);
+    }
+  };
+
+  // Handle follow-up question click
   const handleFollowUpClick = (question: string) => {
     if (sendMessage) {
       sendMessage(question);
     }
   };
-  
-  // Handler for resource recommendation clicks
+
+  // Handle resource suggestion click
   const handleResourceClick = (suggestion: NavigationSuggestion) => {
     if (navigateTo) {
       navigateTo(suggestion.path, suggestion.sectionId);
     }
   };
+  
+  // Generate suggestions and follow-up questions for the latest assistant message
+  React.useEffect(() => {
+    // Only process assistant messages that are not loading/streaming
+    if (isAssistant && 
+        message.content && 
+        !isStreaming && 
+        !isLoading && 
+        !isRechunking && 
+        chatService) {
+      
+      // Generate resource recommendations
+      generateResourceRecommendations();
+      
+      // Generate follow-up questions
+      generateFollowUpQuestions();
+    }
+  }, [message, isAssistant, isStreaming, isLoading, isRechunking]);
 
   return (
-    <>
-      <div
-        className={cn(
-          "flex gap-3 p-4",
-          isUser ? "bg-muted/50" : "bg-background",
-          className
-        )}
-      >
+    <div
+      className={cn(
+        "flex flex-col gap-2 relative group",
+        className
+      )}
+    >
+      <div className="flex items-start gap-3">
         <Avatar className={cn("h-8 w-8", isUser ? "bg-primary" : "bg-muted")}>
           {isUser ? (
             <User className="h-4 w-4 text-primary-foreground" />
@@ -220,131 +274,140 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
             )}
           </div>
           
-          <div className="chat-message-content">
+          <div className={cn(
+            "prose prose-sm dark:prose-invert max-w-none",
+            isLoading && "animate-pulse",
+            isThinking && "text-muted-foreground italic",
+            isRechunking && "text-muted-foreground",
+            isError && "text-destructive"
+          )}>
             {isLoading ? (
-              <div className="flex items-center space-x-1">
-                <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground delay-0" />
-                <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground delay-150" />
-                <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground delay-300" />
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '200ms' }}></div>
+                <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '400ms' }}></div>
               </div>
-            ) : isError ? (
-              <div className="text-destructive">{message.content}</div>
+            ) : isRechunking ? (
+              <div className="flex items-center space-x-2">
+                <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></div>
+                <span>Processing message history...</span>
+              </div>
+            ) : isStreaming ? (
+              <div className={cn("transition-all duration-200", isStreaming ? "border-l-2 border-primary pl-2" : "")}>
+                <ReactMarkdown>{message.content}</ReactMarkdown>
+              </div>
             ) : (
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <ReactMarkdown
-                  components={{
-                    pre: ({ node, ...props }) => (
-                      <div className="overflow-auto rounded-md border my-2 bg-muted p-2">
-                        <pre {...props} />
-                      </div>
-                    ),
-                    code: ({ node, className, children, ...props }) => (
-                      <code className={cn("rounded-md px-1 py-0.5 bg-muted", className)} {...props}>
-                        {children}
-                      </code>
-                    ),
-                  }}
-                >
-                  {text}
-                </ReactMarkdown>
-                {isStreaming && (
-                  <div className="mt-1 inline-flex h-3 w-3 animate-pulse rounded-full bg-primary/40"></div>
-                )}
-                
-                {/* Display attachments */}
-                {displayAttachments.length > 0 && (
-                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                    {displayAttachments.map((attachment) => (
-                      <div 
-                        key={attachment.id} 
-                        className="max-w-[280px] cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => handleAttachmentClick(attachment)}
-                      >
-                        {attachment.url !== '#' ? (
-                          <FileAttachmentComponent
-                            file={{
-                              url: attachment.url,
-                              name: attachment.name,
-                              type: attachment.type,
-                              size: attachment.size
-                            }}
-                            onDownload={() => handleAttachmentClick(attachment)}
-                            isLocal={attachment.url.startsWith('data:') || attachment.url.includes(';name=')}
-                          />
-                        ) : (
-                          <div 
-                            className="border rounded-md p-2 bg-muted/20 flex items-center gap-2 text-xs"
-                          >
-                            <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span className="font-medium truncate max-w-[150px]">
-                              {attachment.name}
-                            </span>
-                            <span className="text-muted-foreground">
-                              ({attachment.type.split('/').pop()})
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                
-                {/* Add resource recommendations for assistant messages */}
-                {message.role === 'assistant' && resourceRecommendations.length > 0 && (
-                  <div className="mt-4">
-                    <NavigationSuggestions suggestions={resourceRecommendations} />
-                  </div>
-                )}
-                
-                {/* Add follow-up questions for assistant messages */}
-                {message.role === 'assistant' && followUpQuestions.length > 0 && (
-                  <FollowUpQuestions 
-                    questions={followUpQuestions} 
-                    onQuestionClick={handleFollowUpClick} 
-                  />
-                )}
-              </div>
+              <ReactMarkdown>{message.content}</ReactMarkdown>
             )}
           </div>
+          
+          {isAttachmentMessage && (
+            <div className="mt-2 space-y-1">
+              <h4 className="text-xs text-muted-foreground font-medium mb-1">
+                {message.attachments!.length === 1 ? "Attachment" : "Attachments"}
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {message.attachments!.map((attachment) => (
+                  <Card 
+                    key={attachment.id} 
+                    className={cn(
+                      "flex items-center p-2 gap-2 cursor-pointer w-auto max-w-full overflow-hidden group/attachment hover:bg-accent transition-colors duration-200",
+                      attachmentError[attachment.id] && "border-destructive/50 bg-destructive/10"
+                    )}
+                    onClick={() => handleAttachmentClick(attachment)}
+                  >
+                    <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded bg-muted relative overflow-hidden">
+                      {loadingAttachments[attachment.id] ? (
+                        <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></div>
+                      ) : attachment.type.startsWith("image/") ? (
+                        attachment.thumbnailUrl ? (
+                          <Image 
+                            src={attachment.thumbnailUrl} 
+                            alt={attachment.name} 
+                            fill 
+                            className="object-cover" 
+                            onLoad={() => handleAttachmentLoad(attachment.id)}
+                            onError={() => handleAttachmentError(attachment.id)}
+                          />
+                        ) : (
+                          <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                        )
+                      ) : (
+                        <FileIcon className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium truncate">{attachment.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatFileSize(attachment.size)}
+                      </p>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-6 w-6 opacity-0 group-hover/attachment:opacity-100 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Download the file
+                        window.open(attachment.url, "_blank");
+                      }}
+                    >
+                      <Download className="h-3 w-3" />
+                      <span className="sr-only">Download</span>
+                    </Button>
+                  </Card>
+                ))}
+              </div>
+              {Object.keys(attachmentError).length > 0 && (
+                <p className="text-xs text-destructive mt-1">
+                  Some attachments could not be loaded. They may be unavailable or restricted.
+                </p>
+              )}
+            </div>
+          )}
+          
+          {message.role === 'assistant' && resourceSuggestions.length > 0 && (
+            <div className="mt-4">
+              <NavigationSuggestions suggestions={resourceSuggestions} />
+            </div>
+          )}
+          
+          {message.role === 'assistant' && followUpQuestions.length > 0 && (
+            <FollowUpQuestions 
+              questions={followUpQuestions} 
+              onQuestionClick={handleFollowUpClick} 
+            />
+          )}
+          
+          {/* Display content references if available */}
+          {isAssistant && !isStreaming && !isLoading && hasContentReferences && (
+            <ContentReferences references={message.contentReferences || []} />
+          )}
         </div>
       </div>
       
-      {/* Image preview dialog */}
-      <Dialog open={selectedAttachment !== null} onOpenChange={(open) => !open && setSelectedAttachment(null)}>
+      <Dialog open={imageDialogOpen} onOpenChange={(open) => !open && setImageDialogOpen(false)}>
         <DialogContent className="sm:max-w-3xl">
           <DialogHeader className="flex justify-between items-center">
-            <DialogTitle className="text-base">{selectedAttachment?.name}</DialogTitle>
-            <button onClick={() => setSelectedAttachment(null)}>
+            <DialogTitle className="text-base">{activeImage}</DialogTitle>
+            <button onClick={() => setImageDialogOpen(false)}>
               <X className="h-4 w-4" />
             </button>
           </DialogHeader>
-          {selectedAttachment?.type.startsWith('image/') && selectedAttachment?.url.startsWith('data:') && (
+          {activeImage.startsWith('data:') && (
             <div className="flex justify-center items-center p-4">
               <img 
-                src={selectedAttachment.url} 
-                alt={selectedAttachment.name}
+                src={activeImage} 
+                alt={activeImage}
                 className="max-h-[70vh] max-w-full object-contain"
               />
             </div>
           )}
-          {selectedAttachment?.isLocalReference && (
-            <div className="p-4 text-center">
-              <div className="bg-muted p-6 rounded-md flex flex-col items-center justify-center">
-                <FileText className="h-16 w-16 text-muted-foreground mb-2" />
-                <h3 className="font-medium">{selectedAttachment.name}</h3>
-                <p className="text-sm text-muted-foreground">
-                  {selectedAttachment.size ? formatFileSize(selectedAttachment.size) : ''}
-                  {selectedAttachment.type ? ` • ${selectedAttachment.type.split('/').pop()}` : ''}
-                </p>
-                <p className="mt-4 text-sm">This file was attached locally and cannot be displayed</p>
-              </div>
-            </div>
-          )}
           <div className="flex justify-end">
-            {selectedAttachment?.url.startsWith('data:') && !selectedAttachment?.isLocalReference && (
+            {activeImage.startsWith('data:') && !activeImage.includes(';name=') && (
               <a 
-                href={selectedAttachment?.url} 
-                download={selectedAttachment?.name}
+                href={activeImage} 
+                download={activeImage}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
@@ -356,7 +419,7 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
           </div>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   )
 }
 

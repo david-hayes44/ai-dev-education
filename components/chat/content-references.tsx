@@ -1,128 +1,153 @@
 "use client"
 
-import * as React from "react"
 import { useState } from "react"
-import { ContentChunk } from "@/lib/content-indexing-service"
-import { ExternalLink, ChevronDown, ChevronUp, BookOpen } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { BookOpen, ArrowRight, ExternalLink, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 
+// Define interface for content reference
+export interface ContentReference {
+  title: string
+  path: string
+  sectionId?: string
+  excerpt?: string
+  relevance?: number // 0-1 indicating how relevant this reference is
+}
+
 interface ContentReferencesProps {
-  references: ContentChunk[]
-  isSearching?: boolean
+  references: ContentReference[]
+  maxVisible?: number
 }
 
 export function ContentReferences({ 
   references, 
-  isSearching = false 
+  maxVisible = 3 
 }: ContentReferencesProps) {
-  const [expanded, setExpanded] = useState(false)
+  const [showAll, setShowAll] = useState(false)
   
-  if (references.length === 0 && !isSearching) {
+  // Filter out duplicates by path
+  const uniqueReferences = Array.from(
+    new Map(references.map(ref => [`${ref.path}${ref.sectionId || ''}`, ref])).values()
+  )
+  
+  // Sort by relevance if available
+  const sortedReferences = [...uniqueReferences].sort((a, b) => 
+    (b.relevance || 0.5) - (a.relevance || 0.5)
+  )
+  
+  // Get visible references
+  const visibleReferences = showAll 
+    ? sortedReferences 
+    : sortedReferences.slice(0, maxVisible)
+  
+  if (references.length === 0) {
     return null
   }
   
   return (
-    <div className="border rounded-md bg-card shadow-sm">
-      <div 
-        className="flex items-center justify-between p-3 cursor-pointer"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <div className="flex items-center gap-2">
-          <BookOpen className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-medium">
-            {isSearching ? (
-              <span className="flex items-center gap-2">
-                <span className="animate-pulse h-2 w-2 bg-primary rounded-full"></span>
-                Searching for relevant content...
-              </span>
-            ) : (
-              `${references.length} content reference${references.length !== 1 ? 's' : ''} found`
-            )}
-          </h3>
-        </div>
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-          {expanded ? (
-            <ChevronUp className="h-4 w-4" />
-          ) : (
-            <ChevronDown className="h-4 w-4" />
-          )}
-        </Button>
+    <div className="content-references border rounded-md p-2 mt-3 mb-1 bg-muted/10">
+      <div className="flex items-center gap-1 mb-2 text-xs text-muted-foreground">
+        <BookOpen className="h-3 w-3" />
+        <span>Content References</span>
       </div>
       
-      {expanded && (
-        <div className="p-3 pt-0 border-t">
-          {references.length === 0 && isSearching ? (
-            <div className="flex items-center justify-center p-4">
-              <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {references.map((reference) => (
-                <ReferenceCard key={reference.id} reference={reference} />
-              ))}
-            </div>
-          )}
-        </div>
+      <div className="space-y-2">
+        {visibleReferences.map((reference, index) => (
+          <ContentReferenceItem key={index} reference={reference} />
+        ))}
+      </div>
+      
+      {sortedReferences.length > maxVisible && (
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="text-xs w-full mt-2"
+          onClick={() => setShowAll(!showAll)}
+        >
+          {showAll ? "Show Less" : `Show ${sortedReferences.length - maxVisible} More References`}
+        </Button>
       )}
     </div>
   )
 }
 
-interface ReferenceCardProps {
-  reference: ContentChunk
+interface ContentReferenceItemProps {
+  reference: ContentReference
 }
 
-function ReferenceCard({ reference }: ReferenceCardProps) {
-  const [contentExpanded, setContentExpanded] = useState(false)
+function ContentReferenceItem({ reference }: ContentReferenceItemProps) {
+  const { title, path, sectionId, excerpt, relevance } = reference
+  const router = useRouter()
+  const [isHovered, setIsHovered] = useState(false)
   
-  // Truncate content for preview
-  const previewContent = reference.content.length > 200
-    ? `${reference.content.substring(0, 200)}...`
-    : reference.content
-    
+  const isExternal = path.startsWith("http")
+  const hasHighRelevance = (relevance || 0) > 0.7
+  
+  // Create the full path with section ID if available
+  const fullPath = sectionId ? `${path}#${sectionId}` : path
+  
+  const handleClick = () => {
+    if (isExternal) {
+      window.open(fullPath, "_blank")
+    } else {
+      router.push(fullPath)
+    }
+  }
+  
   return (
-    <div className="border rounded-md bg-background p-3">
+    <div 
+      className={cn(
+        "border rounded-sm p-1.5 text-xs transition-all cursor-pointer relative",
+        isHovered ? "bg-accent/10" : "bg-transparent",
+        hasHighRelevance ? "border-primary/40" : "border-border"
+      )}
+      onClick={handleClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       <div className="flex justify-between items-start">
-        <h4 className="text-sm font-medium">{reference.title}</h4>
-        <Link 
-          href={reference.path} 
-          className="text-xs text-primary hover:underline flex items-center gap-1"
-          target="_blank"
-        >
-          View <ExternalLink className="h-3 w-3" />
-        </Link>
-      </div>
-      
-      <div className="text-xs text-muted-foreground mt-1">
-        Source: {reference.source}
-        {reference.section && ` • Section: ${reference.section}`}
-      </div>
-      
-      <div className="mt-2">
-        <div 
-          className={cn(
-            "text-xs mt-1", 
-            !contentExpanded && "line-clamp-3"
+        <h5 className="font-medium line-clamp-1">
+          {title}
+          {sectionId && (
+            <span className="font-normal text-muted-foreground">
+              {" → "}
+              {sectionId.replace(/-/g, ' ')}
+            </span>
           )}
-        >
-          {reference.content}
-        </div>
+        </h5>
         
-        {reference.content.length > 200 && (
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="text-xs h-6 mt-1 px-2"
-            onClick={() => setContentExpanded(!contentExpanded)}
-          >
-            {contentExpanded ? "Show less" : "Show more"}
-          </Button>
+        {relevance !== undefined && (
+          <span className={cn(
+            "px-1 ml-1 rounded-full text-[10px] whitespace-nowrap",
+            hasHighRelevance ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+          )}>
+            {Math.round(relevance * 100)}%
+          </span>
+        )}
+      </div>
+      
+      {excerpt && (
+        <p className="mt-1 text-muted-foreground line-clamp-1">
+          {excerpt}
+        </p>
+      )}
+      
+      <div className="flex justify-between items-center mt-1">
+        <span className="truncate text-muted-foreground text-[10px] max-w-[180px]">
+          {fullPath}
+        </span>
+        
+        {isExternal ? (
+          <ExternalLink className="h-3 w-3 text-muted-foreground" />
+        ) : (
+          <ChevronRight className={cn(
+            "h-3 w-3 transition-transform",
+            isHovered ? "translate-x-0.5 text-primary" : "text-muted-foreground"
+          )} />
         )}
       </div>
     </div>
   )
-}
-
-export default ContentReferences 
+} 
