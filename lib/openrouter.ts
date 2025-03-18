@@ -147,8 +147,12 @@ export function createConceptExplanationSchema(
  * Creates a more detailed, hierarchical concept explanation schema
  * with support for different knowledge levels and related resources
  */
-export function createEnhancedConceptSchema(): Record<string, unknown> {
-  return {
+export function createEnhancedConceptSchema(options?: { knowledgeLevel?: string, includeCode?: boolean }): Record<string, unknown> {
+  // Set default values based on options
+  const includeCode = options?.includeCode ?? true;
+  
+  // Basic schema structure
+  const schema: Record<string, unknown> = {
     type: "object",
     properties: {
       concept: { 
@@ -167,10 +171,6 @@ export function createEnhancedConceptSchema(): Record<string, unknown> {
           advanced: { type: "string", description: "Explanation for experts" }
         },
         required: ["beginner", "intermediate", "advanced"]
-      },
-      code_example: { 
-        type: "string", 
-        description: "Relevant code example with markdown formatting" 
       },
       related_concepts: { 
         type: "array", 
@@ -200,6 +200,16 @@ export function createEnhancedConceptSchema(): Record<string, unknown> {
     },
     required: ["concept", "summary", "explanation", "related_concepts", "site_sections"]
   };
+  
+  // Add code_example field if includeCode is true
+  if (includeCode) {
+    (schema.properties as Record<string, unknown>).code_example = { 
+      type: "string", 
+      description: "Relevant code example with markdown formatting" 
+    };
+  }
+  
+  return schema;
 }
 
 /**
@@ -438,12 +448,19 @@ export async function processStreamingResponse(
   let isFirstChunk = true;
   let lastActivityTime = Date.now();
   const TIMEOUT_DURATION = 30000; // 30 seconds timeout
+  let chunkCount = 0;
+  
+  // Log stream start for debugging
+  console.log("Starting to process streaming response");
   
   try {
     // Set up a timeout monitor
     const timeoutId = setInterval(() => {
       const inactiveTime = Date.now() - lastActivityTime;
+      console.log(`Stream activity check: ${inactiveTime}ms since last activity (${chunkCount} chunks received)`);
+      
       if (inactiveTime > TIMEOUT_DURATION) {
+        console.warn(`Stream timeout after ${inactiveTime}ms of inactivity`);
         clearInterval(timeoutId);
         reader.cancel('Stream timeout due to inactivity').catch(console.error);
         if (onError) onError(new Error('Stream timeout: No data received for 30 seconds'));
@@ -451,9 +468,20 @@ export async function processStreamingResponse(
     }, 5000); // Check every 5 seconds
     
     while (true) {
-      const { done, value } = await reader.read();
+      let readResult;
+      try {
+        readResult = await reader.read();
+      } catch (readError) {
+        console.error("Error reading from stream:", readError);
+        if (onError) onError(new Error(`Stream read error: ${readError instanceof Error ? readError.message : String(readError)}`));
+        clearInterval(timeoutId);
+        break;
+      }
+      
+      const { done, value } = readResult;
       
       if (done) {
+        console.log(`Stream completed after ${chunkCount} chunks`);
         clearInterval(timeoutId);
         break;
       }
@@ -462,7 +490,20 @@ export async function processStreamingResponse(
       lastActivityTime = Date.now();
       
       // Decode the chunk
-      const textChunk = decoder.decode(value, { stream: true });
+      let textChunk;
+      try {
+        textChunk = decoder.decode(value, { stream: true });
+        chunkCount++;
+      } catch (decodeError) {
+        console.error("Error decoding chunk:", decodeError);
+        continue; // Try to continue with next chunk
+      }
+      
+      if (isFirstChunk) {
+        console.log("Received first chunk from stream");
+        isFirstChunk = false;
+      }
+      
       buffer += textChunk;
       
       // Split the buffer on double newlines which separate SSE events
@@ -476,14 +517,18 @@ export async function processStreamingResponse(
           const data = line.substring(6);
           
           // Skip [DONE] event
-          if (data === '[DONE]') continue;
+          if (data === '[DONE]') {
+            console.log("Received [DONE] event");
+            continue;
+          }
           
           try {
             const chunk: ChatCompletionChunk = JSON.parse(data);
             
             // Special handling for first chunk to validate the response format
-            if (isFirstChunk) {
-              isFirstChunk = false;
+            if (chunkCount <= 2) {
+              console.log("Processing early chunk:", JSON.stringify(chunk).substring(0, 100) + "...");
+              
               // Check if the first chunk indicates an error
               if (chunk.choices?.[0]?.delta?.content?.includes('error') || 
                   chunk.choices?.[0]?.delta?.content?.includes('I apologize')) {
@@ -510,6 +555,7 @@ export async function processStreamingResponse(
     // Decode any remaining content
     const remaining = decoder.decode();
     if (remaining && remaining.trim()) {
+      console.log("Processing remaining content after stream end");
       const remainingLines = remaining.trim().split('\n\n');
       
       for (const line of remainingLines) {
@@ -527,6 +573,7 @@ export async function processStreamingResponse(
       }
     }
     
+    console.log("Stream processing complete, calling onComplete callback");
     if (onComplete) onComplete();
   } catch (error) {
     console.error('Error processing streaming response:', error);
@@ -535,6 +582,7 @@ export async function processStreamingResponse(
     // Ensure reader is released even if there was an error
     try {
       await reader.cancel();
+      console.log("Stream reader cancelled");
     } catch (e) {
       console.error('Error cancelling reader:', e);
     }

@@ -993,63 +993,172 @@ export class ChatService {
       const streamingMessage = { ...placeholderMessage };
       let responseContent = "";
       
-      // In a real implementation, this is where streaming would happen
-      // and responseContent would be updated with each chunk received from the API
-      // For now, we'll just set it to a placeholder value
-      responseContent = placeholderMessage.content || "Response would appear here from streaming API";
+      // Add file attachment context if present
+      let userContent = content;
+      if (attachments && attachments.length > 0) {
+        userContent = this.getFileContentSummary(attachments) + '\n\n' + content;
+      }
       
-      // Important: Mark streaming as complete
-      streamingMessage.isStreaming = false;
-      streamingMessage.content = responseContent;
+      // Prepare messages for the API request
+      const messages: ChatMessage[] = [];
       
-      // Update the original message in the session
-      session.messages[placeholderMessageIndex].isStreaming = false;
-      session.messages[placeholderMessageIndex].content = responseContent;
+      // Add system message
+      messages.push({
+        role: "system",
+        content: this.getSystemPrompt()
+      });
       
-      // Notify the UI that streaming is complete
-      onChunk(streamingMessage);
-      
-      // Once streaming is complete, rechunk efficiently
-      // We'll add a flag to indicate if we need to show loading state during rechunking
-      const needsRechunking = session.messages.length > MAX_MESSAGES_PER_CHUNK;
-      
-      if (needsRechunking) {
-        // Update with a loading indicator while rechunking
-        streamingMessage.content = responseContent;
-        streamingMessage.isStreaming = false;
+      // Add context message if there's relevant content
+      if (relevantContent.length > 0) {
+        const contextMessage = this.generateContextMessage({
+          relevantContent,
+          currentPage: this.currentPage
+        });
         
-        if (streamingMessage.metadata) {
-          streamingMessage.metadata.rechunking = true;
-        } else {
-          streamingMessage.metadata = { rechunking: true };
+        if (contextMessage) {
+          messages.push({
+            role: "system",
+            content: contextMessage
+          });
         }
+      }
+      
+      // Add chat history (last few messages)
+      // We don't need to send all messages, just the last few for context
+      const historyMessages = session.messages.filter(m => m.role === "user" || m.role === "assistant");
+      const lastMessages = historyMessages.slice(-6); // Just use last 3 exchanges (6 messages)
+      
+      for (const msg of lastMessages) {
+        if (msg.id !== placeholderMessage.id) {
+          messages.push({
+            role: msg.role,
+            content: msg.content
+          });
+        }
+      }
+      
+      // Add current user message
+      messages.push({
+        role: "user",
+        content: userContent
+      });
+      
+      // Now make the actual streaming API call
+      try {
+        // Send request to OpenRouter API with streaming
+        const response = await sendChatCompletion({
+          messages: messages,
+          model: this.selectedModel,
+          stream: true,
+          temperature: 0.7,
+          max_tokens: 2048
+        });
         
-        // Notify the UI that we're rechunking
-        onChunk(streamingMessage);
-        
-        // Rechunk in the background to avoid blocking the UI
-        setTimeout(() => {
-          // We know sessionId is non-null here
-          const session = this.sessions[sessionId];
-          this.messageChunks = this.chunkMessages(session.messages);
-          this.currentChunkIndex = this.messageChunks.length - 1; // Navigate to latest chunk
+        // Check if we received a ReadableStream
+        if (response instanceof ReadableStream) {
+          // Process the streaming response
+          await processStreamingResponse(
+            response,
+            (chunk) => {
+              // Extract content from the chunk
+              const content = chunk.choices[0].delta.content || '';
+              
+              // Append to the accumulated response
+              responseContent += content;
+              
+              // Update the streaming message
+              streamingMessage.content = responseContent;
+              
+              // Notify the UI about the update
+              onChunk(streamingMessage);
+              
+              // Also update the session message
+              session.messages[placeholderMessageIndex].content = responseContent;
+              session.updatedAt = Date.now();
+            },
+            // On complete
+            () => {
+              // Mark streaming as complete
+              streamingMessage.isStreaming = false;
+              session.messages[placeholderMessageIndex].isStreaming = false;
+              
+              // Notify the UI that streaming is complete with final message
+              onChunk(streamingMessage);
+              
+              // Update session and save
+              session.updatedAt = Date.now();
+              this.saveSessions();
+              
+              // Update chunks once streaming is complete
+              this.messageChunks = this.chunkMessages(session.messages);
+              this.currentChunkIndex = this.messageChunks.length - 1;
+            },
+            // On error
+            (error) => {
+              console.error("Streaming error:", error);
+              
+              // Mark streaming as failed
+              streamingMessage.isStreaming = false;
+              streamingMessage.content = "I'm sorry, I encountered an error while generating a response. Please try again.";
+              streamingMessage.metadata = { type: "error" };
+              
+              // Update the session message
+              session.messages[placeholderMessageIndex].isStreaming = false;
+              session.messages[placeholderMessageIndex].content = streamingMessage.content;
+              session.messages[placeholderMessageIndex].metadata = { type: "error" };
+              
+              // Notify the UI about the error
+              onChunk(streamingMessage);
+              
+              // Update session and save
+              session.updatedAt = Date.now();
+              this.saveSessions();
+            }
+          );
+        } else {
+          // Handle non-streaming response (should not happen if stream=true)
+          console.warn("Expected streaming response but received non-streaming response");
           
-          // Remove the rechunking indicator
-          if (streamingMessage.metadata) {
-            delete streamingMessage.metadata.rechunking;
-          }
+          const textResponse = response.choices[0].message.content;
+          streamingMessage.content = textResponse;
+          streamingMessage.isStreaming = false;
           
-          // Update UI
+          // Update the session message
+          session.messages[placeholderMessageIndex].content = textResponse;
+          session.messages[placeholderMessageIndex].isStreaming = false;
+          
+          // Notify the UI
           onChunk(streamingMessage);
           
-          // Trigger save
+          // Update session and save
+          session.updatedAt = Date.now();
           this.saveSessions();
-        }, 0);
-      } else {
-        // No need for heavy rechunking, just update normally
-        this.messageChunks = this.chunkMessages(session.messages);
-        this.currentChunkIndex = this.messageChunks.length - 1; // Navigate to the last chunk
+          
+          // Update chunks
+          this.messageChunks = this.chunkMessages(session.messages);
+          this.currentChunkIndex = this.messageChunks.length - 1;
+        }
+      } catch (error) {
+        console.error("Error in API call:", error);
+        
+        // Mark streaming as failed
+        streamingMessage.isStreaming = false;
+        streamingMessage.content = "I'm sorry, I encountered an error while generating a response. Please try again.";
+        streamingMessage.metadata = { type: "error" };
+        
+        // Update the session message
+        session.messages[placeholderMessageIndex].isStreaming = false;
+        session.messages[placeholderMessageIndex].content = streamingMessage.content;
+        session.messages[placeholderMessageIndex].metadata = { type: "error" };
+        
+        // Notify the UI about the error
+        onChunk(streamingMessage);
+        
+        // Update session and save
+        session.updatedAt = Date.now();
         this.saveSessions();
+        
+        throw error;
       }
       
       return session.messages[placeholderMessageIndex];

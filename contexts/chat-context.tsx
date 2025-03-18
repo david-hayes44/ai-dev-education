@@ -236,7 +236,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setIsTyping(true);
     
     // Create a timeout to reset the streaming state if it takes too long
-    const streamTimeout = setTimeout(() => {
+    let streamTimeout: NodeJS.Timeout | null = setTimeout(() => {
       // If this executes, the streaming didn't complete properly
       console.warn("Streaming request timed out after 30 seconds");
       setIsStreaming(false);
@@ -268,7 +268,23 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           setCurrentSession(chatService.getCurrentSession());
         }
       }
+      
+      // Reset the timeout reference
+      streamTimeout = null;
     }, 30000); // 30 second timeout
+    
+    // Define a cleanup function for the streaming state
+    const cleanupStreaming = () => {
+      // Clear the timeout if it's still active
+      if (streamTimeout) {
+        clearTimeout(streamTimeout);
+        streamTimeout = null;
+      }
+      
+      // Reset UI state
+      setIsStreaming(false);
+      setIsTyping(false);
+    };
     
     try {
       // Log attachment info for debugging
@@ -334,6 +350,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // Check again if we're still streaming (could have changed during async operations)
       if (isStreaming && latestSession?.messages.some(m => m.isStreaming)) {
         console.warn("Another streaming operation started during preparation");
+        cleanupStreaming();
         return;
       }
       
@@ -348,43 +365,24 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       await chatService.sendStreamingMessage(content, contentResults, (partialMessage) => {
         // Check if this is the right message (to avoid updating the wrong message)
         if (partialMessage.id === messageId) {
-          // Update the current session with the partial response to display in real-time
-          setCurrentSession(chatService.getCurrentSession());
-          
-          // Make sure messages are updated in the current component state
           setMessages(chatService.getCurrentChunk());
           
-          // Check if streaming is complete based on the message state
+          // Check if streaming has ended
           if (!partialMessage.isStreaming) {
-            setIsStreaming(false);
+            cleanupStreaming();
           }
         }
       }, attachments);
       
-      // Update sessions after streaming is complete
-      setSessions(chatService.getSessions());
-      setSessionsByCategory(chatService.getSessionsByCategory());
-      
-      // Update chunking information
-      setTotalChunks(chatService.getTotalChunks());
-      setCurrentChunkIndex(chatService.getCurrentChunkIndex());
-      
-      // Ensure messages state is synchronized with chatService
       setMessages(chatService.getCurrentChunk());
       
       // Remember to clear the timeout when streaming completes successfully
-      clearTimeout(streamTimeout);
-      
-      // Reset streaming state
-      setIsStreaming(false);
-      setIsTyping(false);
+      cleanupStreaming();
     } catch (error) {
       console.error("Error in streaming message:", error);
-      clearTimeout(streamTimeout);
       
-      // Reset streaming state
-      setIsStreaming(false);
-      setIsTyping(false);
+      // Make sure we clean up properly even on error
+      cleanupStreaming();
       
       // Find and update any messages stuck in loading state
       if (currentSession) {
@@ -508,6 +506,40 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
     return false;
   }, [chatService]);
+  
+  // Add useEffect to ensure cleanup of streaming operations on unmount or session change
+  useEffect(() => {
+    // Store current session for cleanup
+    const sessionBeforeUnmount = currentSession;
+    
+    // Return cleanup function
+    return () => {
+      // Check if there was a streaming operation in progress and the session changed
+      if (isStreaming && sessionBeforeUnmount && sessionBeforeUnmount.id !== currentSession?.id) {
+        console.log("Cleaning up streaming operation due to session change or unmount");
+        setIsStreaming(false);
+        setIsTyping(false);
+        
+        // If chatService is available, update any streaming messages to error state
+        if (chatService && sessionBeforeUnmount) {
+          const messagesWithErrors = sessionBeforeUnmount.messages.map(msg => {
+            if (msg.isStreaming || msg.metadata?.type === "loading") {
+              return {
+                ...msg,
+                isStreaming: false,
+                content: "Streaming was interrupted.",
+                metadata: { type: "error" as MessageMetadataType }
+              };
+            }
+            return msg;
+          });
+          
+          // Force update
+          chatService.updateAssistantMessageWithError(new Error("Component unmounted during streaming"));
+        }
+      }
+    };
+  }, [currentSession, isStreaming, chatService]);
   
   // Provide default values during SSR to prevent hydration mismatches
   const contextValue = {
