@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { X, MessageCircle, Settings, Maximize2, Minimize2, Search, Compass, ExternalLink, ChevronRight, Info, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -17,6 +18,11 @@ import {
 } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import { NavigationSuggestion } from "@/components/chat/navigation-suggestion"
+
+// Interface for ChatService with only the methods we need
+interface ChatServiceInterface {
+  isNavigationRequest: (message: string) => boolean;
+}
 
 // Inline implementation of NavigationContainer to avoid import issues
 function NavigationContainer({ onClose, onNavigate }: { 
@@ -248,18 +254,28 @@ function ChatHeader({ isLarge, toggleSize, onClose }: {
         </Button>
         <Popover open={isOpen} onOpenChange={setIsOpen}>
           <PopoverTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-accent/50">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 hover:bg-accent/50"
+            >
               <Settings className="h-4 w-4" />
-              <span className="sr-only">Settings</span>
             </Button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-60 p-4">
-            <div className="space-y-3">
-              <h4 className="font-medium text-sm">Model</h4>
-              <ModelSelector 
-                selectedModel={selectedModel} 
-                onSelectModel={setModel} 
-              />
+          <PopoverContent className="w-60 p-3" align="end">
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium">Settings</h3>
+              <div className="space-y-1">
+                <div className="flex flex-col gap-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Model</span>
+                  </div>
+                  <ModelSelector 
+                    selectedModel={selectedModel}
+                    onSelectModel={setModel}
+                  />
+                </div>
+              </div>
             </div>
           </PopoverContent>
         </Popover>
@@ -274,132 +290,153 @@ function ChatHeader({ isLarge, toggleSize, onClose }: {
         </Button>
       </div>
     </div>
-  );
+  )
 }
 
-// Main component that renders the floating chat UI
 export function FloatingChat() {
-  const [isMinimized, setIsMinimized] = React.useState(true);
+  const [isVisible, setIsVisible] = React.useState(false);
   const [isLarge, setIsLarge] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<'chat' | 'navigation'>('chat');
-  const [size, setSize] = useLocalStorage({
-    key: "floating-chat-size",
-    defaultValue: { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT },
+  const [size, setSize] = useLocalStorage<{ width: number; height: number }>('chatWindowSize', {
+    width: DEFAULT_WIDTH,
+    height: DEFAULT_HEIGHT,
   });
-  const chatService = React.useMemo(() => typeof window !== 'undefined' ? (window as any).chatService : null, []);
+  const router = useRouter();
+  
+  // Define chat service reference to handle chat functionality
+  const chatServiceRef = useRef<ChatServiceInterface | null>(null);
+  
+  // Set up chat service reference on client side
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      chatServiceRef.current = (window as unknown as { chatService: ChatServiceInterface }).chatService;
+    }
+  }, []);
   
   // Handle tab switching when navigation intent is detected
   const handleMessageSend = (message: string) => {
     // Check if this is a navigation request
-    if (chatService && chatService.isNavigationRequest(message)) {
-      // Switch to navigation tab
-      setActiveTab('navigation');
+    if (chatServiceRef.current) {
+      const isNavRequest = chatServiceRef.current.isNavigationRequest(message);
+      if (isNavRequest) {
+        // Switch to navigation tab
+        setActiveTab('navigation');
+      }
     }
   };
   
-  // Switch to chat tab with a message about successful navigation
+  // Handle navigation from the navigation container
   const handleNavigationComplete = (path: string, title: string) => {
     setActiveTab('chat');
-    
-    // Optionally, send a system message to chat indicating successful navigation
-    if (chatService) {
-      const systemMessage = `I've taken you to the "${title}" page. Let me know if you need more help or have questions about this topic.`;
-      // Send or display a success message
+    router.push(path);
+  };
+  
+  // Handle window resizing
+  const handleResize = (newSize: { width: number; height: number }) => {
+    if (newSize && typeof newSize.width === 'number' && typeof newSize.height === 'number') {
+      setSize(newSize);
     }
   };
   
+  // Toggle chat visibility
   const toggleVisibility = () => {
-    setIsMinimized(!isMinimized);
+    setIsVisible(!isVisible);
   };
   
+  // Toggle between normal and large sizes
   const toggleSize = () => {
-    const newIsLarge = !isLarge;
-    setIsLarge(newIsLarge);
-    
-    setSize({
-      width: newIsLarge ? LARGE_WIDTH : DEFAULT_WIDTH,
-      height: newIsLarge ? LARGE_HEIGHT : DEFAULT_HEIGHT,
-    });
+    if (isLarge) {
+      handleResize({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT });
+    } else {
+      handleResize({ width: LARGE_WIDTH, height: LARGE_HEIGHT });
+    }
+    setIsLarge(!isLarge);
   };
   
+  // Close the chat
   const handleClose = () => {
-    setIsMinimized(true);
+    setIsVisible(false);
+  };
+  
+  // Compute current window size based on whether it's large or normal
+  const currentSize = {
+    width: isLarge ? LARGE_WIDTH : (size?.width || DEFAULT_WIDTH),
+    height: isLarge ? LARGE_HEIGHT : (size?.height || DEFAULT_HEIGHT)
   };
   
   return (
-    <div className="fixed bottom-4 right-4 z-50">
-      {isMinimized ? (
-        <Button
-          onClick={toggleVisibility}
-          className="h-12 w-12 rounded-full shadow-lg bg-primary hover:bg-primary/90"
-          aria-label="Open chat"
-        >
-          <MessageCircle className="h-6 w-6" />
-        </Button>
-      ) : (
+    <>
+      {/* Floating chat button */}
+      <Button
+        size="icon"
+        className="fixed bottom-4 right-4 h-14 w-14 rounded-full shadow-lg z-50 hover:scale-105 transition-transform"
+        onClick={toggleVisibility}
+        aria-label={isVisible ? "Close chat" : "Open chat"}
+      >
+        <MessageCircle className="h-6 w-6" />
+      </Button>
+      
+      {/* Chat window */}
+      {isVisible && (
         <div
-          className="bg-background border rounded-lg shadow-xl overflow-hidden flex flex-col transition-all duration-200 ease-in-out"
+          className={cn(
+            "fixed bottom-20 right-4 bg-background rounded-lg border shadow-lg overflow-hidden z-50 transition-all",
+            isLarge && "right-8 bottom-8"
+          )}
           style={{
-            width: `${size.width}px`,
-            height: `${size.height}px`,
+            width: `${currentSize.width}px`,
+            height: `${currentSize.height}px`,
           }}
         >
-          <ChatProvider>
-            {/* Header */}
-            <div className="border-b p-3 flex items-center justify-between">
-              <div className="flex gap-2">
-                <Button
-                  variant={activeTab === 'chat' ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setActiveTab('chat')}
-                  className="h-8"
-                >
-                  <MessageCircle className="h-4 w-4 mr-1" />
-                  Chat
-                </Button>
-                <Button
-                  variant={activeTab === 'navigation' ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setActiveTab('navigation')}
-                  className="h-8"
-                >
-                  <Compass className="h-4 w-4 mr-1" />
-                  Navigate
-                </Button>
-              </div>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={toggleSize}
-                  className="h-8 w-8"
-                  aria-label={isLarge ? "Minimize chat" : "Maximize chat"}
-                >
-                  {isLarge ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleClose}
-                  className="h-8 w-8"
-                  aria-label="Close chat"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-            
-            {/* Content */}
-            <div className="flex-1 overflow-hidden">
-              {activeTab === 'chat' ? (
-                <ChatContainer onMessageSend={handleMessageSend} />
-              ) : (
-                <NavigationContainer onClose={handleClose} onNavigate={handleNavigationComplete} />
+          {/* Tabs */}
+          <div className="flex border-b h-12">
+            <button
+              className={cn(
+                "flex-1 flex justify-center items-center gap-1 text-sm font-medium border-r",
+                activeTab === 'chat'
+                  ? "bg-background text-foreground"
+                  : "bg-muted/50 text-muted-foreground hover:bg-muted/80"
               )}
-            </div>
-          </ChatProvider>
+              onClick={() => setActiveTab('chat')}
+            >
+              <MessageCircle className="h-4 w-4" />
+              <span>Chat</span>
+            </button>
+            <button
+              className={cn(
+                "flex-1 flex justify-center items-center gap-1 text-sm font-medium",
+                activeTab === 'navigation'
+                  ? "bg-background text-foreground"
+                  : "bg-muted/50 text-muted-foreground hover:bg-muted/80"
+              )}
+              onClick={() => setActiveTab('navigation')}
+            >
+              <Compass className="h-4 w-4" />
+              <span>Navigate</span>
+            </button>
+          </div>
+          
+          {/* Chat header with controls */}
+          <ChatHeader
+            isLarge={isLarge}
+            toggleSize={toggleSize}
+            onClose={handleClose}
+          />
+          
+          {/* Content area */}
+          <div className="flex-1 h-[calc(100%-7rem)] overflow-hidden">
+            <ChatProvider>
+              <div className="h-full">
+                {activeTab === 'chat' ? (
+                  <ChatContainer onMessageSend={handleMessageSend} />
+                ) : (
+                  <NavigationContainer onClose={handleClose} onNavigate={handleNavigationComplete} />
+                )}
+              </div>
+            </ChatProvider>
+          </div>
         </div>
       )}
-    </div>
+    </>
   );
 } 

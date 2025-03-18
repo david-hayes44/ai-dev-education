@@ -24,6 +24,15 @@ import { NavigationSuggestion, NavigationSuggestions } from "./navigation-sugges
 // Import from @/lib/chat-service to avoid naming conflicts
 import type { FileAttachment as ChatFileAttachment } from "@/lib/chat-service"
 
+// Interface for ChatService with only the methods we need
+interface ChatServiceInterface {
+  generateResourceRecommendations: (message: Message) => Promise<NavigationSuggestion[]>;
+  generateFollowUpQuestions: (message: Message) => string[];
+  createAssistantMessagePlaceholder: (content: string, attachments?: ChatFileAttachment[]) => Message;
+  updateAssistantMessageWithError: (error: unknown) => void;
+  isNavigationRequest: (message: string) => boolean;
+}
+
 export interface ChatMessageProps {
   message: Message
   className?: string
@@ -59,7 +68,12 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
   const { getNavigationSuggestions, navigateTo } = useNavigation()
   const [resourceRecommendations, setResourceRecommendations] = useState<NavigationSuggestion[]>([])
   const [followUpQuestions, setFollowUpQuestions] = useState<string[]>([])
-  const chatService = React.useMemo(() => typeof window !== 'undefined' ? (window as any).chatService : null, [])
+  const chatService = React.useMemo(() => 
+    typeof window !== 'undefined' 
+      ? (window as unknown as { chatService: ChatServiceInterface }).chatService 
+      : null, 
+    []
+  )
 
   // Function to extract attachment references from markdown content
   const extractAttachmentRefs = (content: string): {
