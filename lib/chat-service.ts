@@ -27,7 +27,7 @@ export interface Message {
   attachments?: FileAttachment[];
 }
 
-export type MessageMetadataType = "streaming" | "error" | "loading" | "thinking" | "suggestion" | "concept_explanation";
+export type MessageMetadataType = "streaming" | "error" | "loading" | "thinking" | "suggestion" | "concept_explanation" | "fallback";
 
 export interface MessageMetadata {
   type?: MessageMetadataType;
@@ -960,6 +960,12 @@ export class ChatService {
     attachments?: FileAttachment[]
   ): Promise<Message> {
     try {
+      // Debug: Log that we're starting this process and key presence
+      console.log(`DEBUG: Starting streaming message process. API key present: ${
+        typeof process.env.NEXT_PUBLIC_OPENROUTER_API_KEY === 'string' && 
+        process.env.NEXT_PUBLIC_OPENROUTER_API_KEY.length > 10 ? 
+        'YES' : 'NO'}`);
+      
       // Ensure we have a current session
       if (!this.currentSessionId) {
         this.createSession();
@@ -1043,8 +1049,29 @@ export class ChatService {
         content: userContent
       });
       
+      // Validate API key
+      if (!process.env.NEXT_PUBLIC_OPENROUTER_API_KEY) {
+        console.error("DEBUG: OpenRouter API key is missing");
+        // Simulate a response with an error message
+        streamingMessage.isStreaming = false;
+        streamingMessage.content = "I'm sorry, I can't process your request because the API connection is not configured. Please contact the administrator to set up the OpenRouter API key.";
+        streamingMessage.metadata = { type: "error" };
+        
+        // Update session with error message
+        session.messages[placeholderMessageIndex] = {
+          ...streamingMessage
+        };
+        
+        // Notify client about error
+        onChunk(streamingMessage);
+        
+        return streamingMessage;
+      }
+      
       // Now make the actual streaming API call
       try {
+        console.log(`DEBUG: Sending request to OpenRouter with model: ${this.selectedModel}`);
+        
         // Send request to OpenRouter API with streaming
         const response = await sendChatCompletion({
           messages: messages,
@@ -1056,12 +1083,14 @@ export class ChatService {
         
         // Check if we received a ReadableStream
         if (response instanceof ReadableStream) {
+          console.log("DEBUG: Received ReadableStream response, starting processing");
+          
           // Process the streaming response
           await processStreamingResponse(
             response,
             (chunk) => {
               // Extract content from the chunk
-              const content = chunk.choices[0].delta.content || '';
+              const content = chunk.choices[0]?.delta?.content || '';
               
               // Append to the accumulated response
               responseContent += content;
@@ -1078,6 +1107,8 @@ export class ChatService {
             },
             // On complete
             () => {
+              console.log("DEBUG: Stream completed successfully");
+              
               // Mark streaming as complete
               streamingMessage.isStreaming = false;
               session.messages[placeholderMessageIndex].isStreaming = false;
@@ -1139,17 +1170,45 @@ export class ChatService {
           this.currentChunkIndex = this.messageChunks.length - 1;
         }
       } catch (error) {
-        console.error("Error in API call:", error);
+        console.error("DEBUG: Error in API call:", error);
+        
+        // Create a more helpful error message based on the error
+        let errorMessage = "I'm sorry, I encountered an error while generating a response. Please try again.";
+        
+        if (error instanceof Error) {
+          const errorText = error.message.toLowerCase();
+          
+          if (errorText.includes("api key") || errorText.includes("authentication")) {
+            errorMessage = "The AI service couldn't be accessed due to an authentication error. Please check the API key configuration.";
+          } else if (errorText.includes("network") || errorText.includes("fetch") || errorText.includes("timeout")) {
+            errorMessage = "I couldn't connect to the AI service due to a network error. Please check your internet connection.";
+          } else if (errorText.includes("model") || errorText.includes("not found")) {
+            errorMessage = `The selected AI model "${this.selectedModel}" is currently unavailable. Please try a different model.`;
+          } else if (errorText.includes("rate") || errorText.includes("limit") || errorText.includes("429")) {
+            errorMessage = "The AI service is currently rate limited. Please wait a moment and try again.";
+          } else if (errorText.includes("token") || errorText.includes("content length")) {
+            errorMessage = "Your message is too long for the AI to process. Please try a shorter message.";
+          }
+        }
+        
+        // FALLBACK MECHANISM: If the API is completely unavailable, hardcode a basic response
+        // This is just for testing/demo purposes to get *something* working
+        if (process.env.NEXT_PUBLIC_ENABLE_FALLBACK === "true") {
+          console.log("DEBUG: Using fallback response mechanism");
+          errorMessage = this.generateFallbackResponse(content);
+          streamingMessage.metadata = { type: "fallback" };
+        } else {
+          streamingMessage.metadata = { type: "error" };
+        }
         
         // Mark streaming as failed
         streamingMessage.isStreaming = false;
-        streamingMessage.content = "I'm sorry, I encountered an error while generating a response. Please try again.";
-        streamingMessage.metadata = { type: "error" };
+        streamingMessage.content = errorMessage;
         
         // Update the session message
         session.messages[placeholderMessageIndex].isStreaming = false;
         session.messages[placeholderMessageIndex].content = streamingMessage.content;
-        session.messages[placeholderMessageIndex].metadata = { type: "error" };
+        session.messages[placeholderMessageIndex].metadata = streamingMessage.metadata;
         
         // Notify the UI about the error
         onChunk(streamingMessage);
@@ -1163,9 +1222,40 @@ export class ChatService {
       
       return session.messages[placeholderMessageIndex];
     } catch (error) {
-      console.error("Error in sendStreamingMessage:", error);
+      console.error("DEBUG: Error in sendStreamingMessage:", error);
       throw error;
     }
+  }
+  
+  /**
+   * Generate a fallback response for when the API is unavailable
+   * This is just for testing/demo purposes
+   */
+  private generateFallbackResponse(query: string): string {
+    // Simple fallback responses
+    const fallbacks = [
+      "AI development involves creating and refining algorithms that enable machines to simulate human intelligence. This includes machine learning, natural language processing, computer vision, and other technologies that allow computers to learn, reason, and make decisions.",
+      
+      "Model Context Protocol (MCP) is a framework that standardizes how context is shared between AI models and development tools. It helps create more consistent and effective interactions by ensuring all tools speak the same language when exchanging contextual information.",
+      
+      "AI-assisted development enhances productivity by automating routine tasks, suggesting code completions, detecting bugs, and providing intelligent insights during the coding process. Tools like GitHub Copilot and Cursor use AI to help developers write better code faster.",
+      
+      "I'm using a fallback response as the AI service is currently unavailable. Once the connection is restored, I'll provide more personalized and detailed answers to your questions."
+    ];
+    
+    // Try to match a relevant response based on keywords
+    const lowercaseQuery = query.toLowerCase();
+    
+    if (lowercaseQuery.includes("mcp") || lowercaseQuery.includes("model context protocol")) {
+      return fallbacks[1];
+    } else if (lowercaseQuery.includes("assisted") || lowercaseQuery.includes("productivity")) {
+      return fallbacks[2];  
+    } else if (lowercaseQuery.includes("ai") || lowercaseQuery.includes("development")) {
+      return fallbacks[0];
+    }
+    
+    // Default response
+    return fallbacks[3];
   }
   
   private generateTitle(content: string): string {

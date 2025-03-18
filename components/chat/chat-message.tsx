@@ -283,13 +283,37 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
             Streaming...
           </span>
           {showRetryButton && (
-            <Button 
-              variant="ghost" 
-              className="h-6 ml-2 text-xs px-2 py-0 text-muted-foreground hover:text-destructive"
-              onClick={handleRetry}
-            >
-              Cancel
-            </Button>
+            <div className="flex gap-1">
+              <Button 
+                variant="ghost" 
+                className="h-6 ml-2 text-xs px-2 py-0 text-muted-foreground hover:text-destructive"
+                onClick={handleRetry}
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="ghost" 
+                className="h-6 text-xs px-2 py-0 text-destructive"
+                onClick={() => {
+                  // Force immediate error state
+                  console.error("DEBUG: Force error triggered by user");
+                  // Log debug info
+                  console.log("DEBUG INFO:", {
+                    messageId: message.id,
+                    isStreaming,
+                    isLoading,
+                    hasOpenRouterKey: !!process.env.NEXT_PUBLIC_OPENROUTER_API_KEY?.substring(0, 3),
+                    metadataType: message.metadata?.type,
+                    browserInfo: navigator.userAgent
+                  });
+                  if (chatService) {
+                    chatService.updateAssistantMessageWithError(new Error("User forced error"));
+                  }
+                }}
+              >
+                Force Error
+              </Button>
+            </div>
           )}
         </div>
       );
@@ -302,13 +326,37 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
             Loading...
           </span>
           {showRetryButton && (
-            <Button 
-              variant="ghost" 
-              className="h-6 ml-2 text-xs px-2 py-0 text-muted-foreground hover:text-destructive"
-              onClick={handleRetry}
-            >
-              Cancel
-            </Button>
+            <div className="flex gap-1">
+              <Button 
+                variant="ghost" 
+                className="h-6 ml-2 text-xs px-2 py-0 text-muted-foreground hover:text-destructive"
+                onClick={handleRetry}
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="ghost" 
+                className="h-6 text-xs px-2 py-0 text-destructive"
+                onClick={() => {
+                  // Force immediate error state
+                  console.error("DEBUG: Force error triggered by user");
+                  // Log debug info
+                  console.log("DEBUG INFO:", {
+                    messageId: message.id,
+                    isStreaming,
+                    isLoading,
+                    hasOpenRouterKey: !!process.env.NEXT_PUBLIC_OPENROUTER_API_KEY?.substring(0, 3),
+                    metadataType: message.metadata?.type,
+                    browserInfo: navigator.userAgent
+                  });
+                  if (chatService) {
+                    chatService.updateAssistantMessageWithError(new Error("User forced error"));
+                  }
+                }}
+              >
+                Force Error
+              </Button>
+            </div>
           )}
         </div>
       );
