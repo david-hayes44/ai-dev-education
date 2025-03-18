@@ -750,172 +750,166 @@ export class ChatService {
     relevantContent: ContentChunk[] = [],
     onChunk: (message: Message) => void
   ): Promise<Message> {
-    if (!this.currentSessionId) {
-      this.createSession();
-    }
-    
-    const session = this.currentSessionId ? this.sessions[this.currentSessionId] : null;
-    if (!session) {
-      throw new Error("Failed to get or create session");
-    }
-    
-    // Get last user message to check for attachments
-    const userMessages = session.messages.filter(m => m.role === 'user');
-    const lastUserMessage = userMessages.length > 0 ? userMessages[userMessages.length - 1] : null;
-    const attachments = lastUserMessage?.attachments;
-    
-    // Apply context window and documentation injection (with attachments if any)
-    const messagesToSend = this.getApiMessagesWithAttachments(content, attachments);
-    
-    // Add or update system message with relevant content
-    if (relevantContent.length > 0) {
-      // Check if the first message is a system message
-      if (messagesToSend.length > 0 && messagesToSend[0].role === 'system') {
-        messagesToSend[0].content = constructSystemMessageWithContent(
-          messagesToSend[0].content,
-          relevantContent
-        );
-      } else {
-        // Add a new system message
-        messagesToSend.unshift({
-          role: 'system',
-          content: constructSystemMessageWithContent(
-            'You are an AI assistant for the AI-Dev Education platform. You help users learn about AI-assisted development and Model Context Protocol (MCP). Be concise, accurate, and helpful.',
-            relevantContent
-          )
-        });
-      }
-    }
-    
     try {
-      // Use our server-side API route with streaming enabled
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          messages: messagesToSend,
-          currentPage: this.currentPage,
-          model: session.model || this.selectedModel,
-          stream: true
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
-      }
-      
-      if (!response.body) {
-        throw new Error('No response stream available');
-      }
-      
-      const assistantMessage = session.messages[session.messages.length - 1];
-      let contentBuffer = '';
-      let contentUpdateCounter = 0;
-      const THROTTLE_UPDATES = 3; // Update UI every 3 chunks to improve performance
-      
-      // Process the streaming response
-      await processStreamingResponse(
-        response.body,
-        (chunk: ChatCompletionChunk) => {
-          if (chunk.choices && chunk.choices.length > 0) {
-            const choice = chunk.choices[0];
-            if (choice.delta.content) {
-              // Append to the buffer
-              contentBuffer += choice.delta.content;
-              contentUpdateCounter++;
-              
-              // Only update the UI periodically to avoid excessive renders
-              if (contentUpdateCounter >= THROTTLE_UPDATES) {
-                // Update the message content
-                assistantMessage.content = contentBuffer;
-                
-                // Check for code blocks which might require syntax highlighting
-                if (assistantMessage.content.includes('```') && !assistantMessage.metadata?.containsCode) {
-                  assistantMessage.metadata = {
-                    ...assistantMessage.metadata,
-                    containsCode: true
-                  };
-                }
-                
-                // Call the callback with the updated message
-                onChunk(assistantMessage);
-                
-                // Reset the counter
-                contentUpdateCounter = 0;
-                
-                // Save the session periodically for incremental updates
-                session.updatedAt = Date.now();
-                this.saveSessions();
-              }
-            }
-          }
-        },
-        () => {
-          // On complete, ensure the final content is updated
-          if (contentBuffer !== assistantMessage.content) {
-            assistantMessage.content = contentBuffer;
-            onChunk(assistantMessage);
-          }
-          
-          // Mark as no longer streaming
-          assistantMessage.isStreaming = false;
-          
-          // Update the session with a better title if this was the first user exchange
-          if (session.messages.filter(m => m.role === 'user').length === 1) {
-            session.title = this.generateTitle(content);
-            
-            // Also update topic and category if applicable
-            const { topic, category } = this.categorizeContent(content);
-            if (topic) session.topic = topic;
-            if (category) session.category = category;
-          }
-          
-          // Check if the response is JSON and attempt to parse
-          if (assistantMessage.content.startsWith('{') && assistantMessage.content.endsWith('}')) {
-            try {
-              const jsonResponse = JSON.parse(assistantMessage.content);
-              
-              // Check if this is a concept explanation
-              if (jsonResponse.concept && jsonResponse.summary) {
-                assistantMessage.metadata = {
-                  ...assistantMessage.metadata,
-                  type: 'concept_explanation',
-                  topic: jsonResponse.concept,
-                  knowledgeLevel: jsonResponse.knowledge_level || jsonResponse.explanation?.level || 'beginner'
-                };
-              }
-            } catch (e) {
-              // Not valid JSON, continue without parsing
-            }
-          }
-          
-          session.updatedAt = Date.now();
-          this.saveSessions();
-        },
-        (error) => {
-          // On error
-          console.error('Error in streaming response:', error);
-          this.updateAssistantMessageWithError(error);
-          
-          // Also notify the UI
-          assistantMessage.isStreaming = false;
-          onChunk(assistantMessage);
-        }
+      // Get the latest placeholder message (which should be the one we just created)
+      const messages = this.getAllMessages();
+      const placeholderMessageIndex = messages.findIndex(
+        m => m.role === "assistant" && m.metadata?.type === "loading"
       );
       
-      // After adding the new messages, rechunk
-      if (this.currentSessionId) {
-        this.messageChunks = this.chunkMessages(this.sessions[this.currentSessionId].messages);
-        this.currentChunkIndex = this.messageChunks.length - 1; // Navigate to the last chunk
+      if (placeholderMessageIndex === -1) {
+        throw new Error("No placeholder message found");
       }
       
-      return assistantMessage;
+      const placeholderMessage = messages[placeholderMessageIndex];
+      const userMessageIndex = placeholderMessageIndex - 1;
+      
+      if (userMessageIndex < 0 || messages[userMessageIndex].role !== "user") {
+        throw new Error("No user message found before placeholder");
+      }
+      
+      const userMessage = messages[userMessageIndex];
+      
+      // Log file attachment information if present
+      if (userMessage.attachments && userMessage.attachments.length > 0) {
+        console.log(`Starting streaming message with ${userMessage.attachments.length} file attachments:`);
+        userMessage.attachments.forEach((attachment, index) => {
+          console.log(`File ${index+1}: ${attachment.name} (${attachment.type}), Size: ${Math.round(attachment.size/1024)}KB`);
+          // Check if URL is accessible
+          fetch(attachment.url, { method: 'HEAD' })
+            .then(response => {
+              console.log(`File ${index+1} URL check: ${response.ok ? 'Accessible' : 'Not accessible'} (${response.status})`);
+            })
+            .catch(err => {
+              console.error(`File ${index+1} URL check failed:`, err);
+            });
+        });
+      }
+      
+      // Create API-compatible messages with system prompt and context
+      const apiMessages = this.getApiMessagesWithAttachments(
+        content, 
+        userMessage.attachments
+      );
+      
+      // Create an enhanced system message with content context
+      if (relevantContent.length > 0) {
+        const contextMessage = this.generateContextMessage({ relevantContent });
+        
+        // Find the system message
+        const systemMessageIndex = apiMessages.findIndex(m => m.role === "system");
+        if (systemMessageIndex !== -1) {
+          // Add context to the existing system message
+          apiMessages[systemMessageIndex].content += "\n\n" + contextMessage;
+        }
+      }
+      
+      // Create a response string to accumulate the streamed response
+      let responseContent = "";
+      const streamingMessage = { ...placeholderMessage };
+      
+      try {
+        // Debug model information
+        console.log(`Sending streaming message using model: ${this.selectedModel}`);
+        
+        // Stream the response
+        const response = await sendChatCompletion({
+          messages: apiMessages,
+          model: this.selectedModel,
+          stream: true,
+          temperature: 0.7,
+          max_tokens: 4000,
+        }) as ReadableStream;
+        
+        await processStreamingResponse(
+          response,
+          (chunk: ChatCompletionChunk) => {
+            // Extract content from the chunk
+            const content = chunk.choices[0]?.delta?.content || "";
+            
+            // Append to accumulated response
+            responseContent += content;
+            
+            // Update the streaming message
+            streamingMessage.content = responseContent;
+            streamingMessage.isStreaming = true;
+            
+            // Replace the message in the array
+            this.messages[placeholderMessageIndex] = streamingMessage;
+            
+            // Call the provided callback
+            onChunk(streamingMessage);
+          },
+          () => {
+            // When streaming is complete, remove the loading metadata and streaming flag
+            streamingMessage.metadata = undefined;
+            streamingMessage.isStreaming = false;
+            this.messages[placeholderMessageIndex] = streamingMessage;
+            
+            // Rechunk messages if needed
+            this.messageChunks = this.chunkMessages(this.messages);
+            
+            // Save sessions
+            this.saveSessions();
+            
+            // Call the callback one final time
+            onChunk(streamingMessage);
+            
+            console.log("Streaming message completed successfully");
+          },
+          (error) => {
+            console.error("Error during streaming response:", error);
+            
+            // Format error message for display
+            let errorMessage = "I'm sorry, I encountered an error while generating a response.";
+            
+            if (error instanceof Error) {
+              errorMessage += ` Error details: ${error.message}`;
+            } else if (typeof error === 'string') {
+              errorMessage += ` Error details: ${error}`;
+            }
+            
+            // Update the streaming message with the error
+            streamingMessage.content = errorMessage;
+            streamingMessage.metadata = { type: "error" };
+            streamingMessage.isStreaming = false;
+            this.messages[placeholderMessageIndex] = streamingMessage;
+            
+            // Rechunk messages
+            this.messageChunks = this.chunkMessages(this.messages);
+            
+            // Save sessions
+            this.saveSessions();
+            
+            // Call the callback with the error message
+            onChunk(streamingMessage);
+          }
+        );
+      } catch (streamError) {
+        console.error("Streaming API call failed:", streamError);
+        
+        // Create a fallback error message
+        streamingMessage.content = `I'm sorry, I encountered an error while processing your request. ${
+          streamError instanceof Error ? `Error: ${streamError.message}` : 'Please try again later.'
+        }`;
+        streamingMessage.metadata = { type: "error" };
+        streamingMessage.isStreaming = false;
+        
+        // Update the message
+        this.messages[placeholderMessageIndex] = streamingMessage;
+        
+        // Rechunk and save
+        this.messageChunks = this.chunkMessages(this.messages);
+        this.saveSessions();
+        
+        // Call the callback
+        onChunk(streamingMessage);
+      }
+      
+      return this.messages[placeholderMessageIndex];
     } catch (error) {
-      console.error('Error sending streaming message:', error);
-      this.updateAssistantMessageWithError(error);
-      return session.messages[session.messages.length - 1];
+      console.error("Error in sendStreamingMessage:", error);
+      throw error;
     }
   }
   
@@ -1105,29 +1099,82 @@ ${chunk.content}
    */
   private getFileContentSummary(attachments?: FileAttachment[]): string {
     if (!attachments || attachments.length === 0) {
-      return "";
+      return '';
     }
     
-    return attachments.map(attachment => {
-      const fileType = attachment.type.split('/').pop();
-      return `[File attached: ${attachment.name} (${fileType}) - ${Math.round(attachment.size / 1024)} KB]`;
-    }).join('\n');
+    // Log for debugging
+    console.log(`Preparing content summary for ${attachments.length} attachments`);
+    
+    const fileDetails = attachments.map(file => {
+      // Get file extension from name or detect from type
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || '';
+      const isImage = file.type.startsWith('image/');
+      const isText = file.type.includes('text') || ['txt', 'md', 'json', 'csv', 'html', 'css', 'js', 'jsx', 'ts', 'tsx'].includes(fileExt);
+      const isDocument = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(fileExt);
+      const isCode = ['js', 'jsx', 'ts', 'tsx', 'py', 'java', 'c', 'cpp', 'cs', 'go', 'rb', 'php', 'swift', 'kt'].includes(fileExt);
+      
+      let fileDescription = `File: ${file.name} (${Math.round(file.size/1024)} KB, ${file.type})`;
+      
+      // Add specific file type context
+      if (isImage) {
+        fileDescription += "\nThis is an image file. Please analyze the visual content and provide observations.";
+      } else if (isText) {
+        fileDescription += "\nThis is a text file. Please analyze the content and provide insights.";
+      } else if (isDocument) {
+        fileDescription += "\nThis is a document file. Please extract and analyze the text content.";
+      } else if (isCode) {
+        fileDescription += "\nThis is a code file. Please analyze the code and provide feedback or explanations.";
+      }
+      
+      // Add the URL
+      fileDescription += `\nATTACHMENT_URL: ${file.url}`;
+      
+      return fileDescription;
+    }).join('\n\n');
+    
+    const instructions = `
+I've attached the following file(s) to analyze and discuss:
+
+${fileDetails}
+
+Please analyze the content of the file(s) and respond to my query. If you cannot access or process the file(s), please let me know.
+`;
+
+    return instructions;
   }
   
   /**
    * Get API messages with file attachments
    */
   private getApiMessagesWithAttachments(userContent?: string, attachments?: FileAttachment[]): ChatMessage[] {
+    // Get base messages
     const messages = this.getApiMessages(userContent);
     
-    // If there are attachments, add them to the context
+    // Add file context if attachments are present
     if (attachments && attachments.length > 0) {
-      const lastMessage = messages[messages.length - 1];
-      if (lastMessage && lastMessage.role === 'user') {
-        // Add file summaries to the content
-        const fileContent = this.getFileContentSummary(attachments);
-        if (fileContent) {
-          lastMessage.content = `${lastMessage.content}\n\n${fileContent}`;
+      console.log(`Processing ${attachments.length} attachments for API messages`);
+      
+      // Find the user message index (should be the last one)
+      const userMessageIndex = messages.findIndex(m => m.role === "user");
+      
+      if (userMessageIndex !== -1) {
+        // Get the file context summary
+        const fileContext = this.getFileContentSummary(attachments);
+        
+        // Update the user message with file context
+        const userMessage = messages[userMessageIndex];
+        
+        // Combine the file context with the user content
+        const userQuery = userContent?.trim() || "Please analyze this file";
+        userMessage.content = `${fileContext}\n\nQuery: ${userQuery}`;
+        
+        // Replace the user message
+        messages[userMessageIndex] = userMessage;
+        
+        // Add specific file handling instructions to the system prompt
+        const systemPromptIndex = messages.findIndex(m => m.role === "system");
+        if (systemPromptIndex !== -1) {
+          messages[systemPromptIndex].content += `\n\nThe user has attached one or more files. Please analyze the files based on the provided URLs and respond to their query. If you cannot access a file, acknowledge this and provide the best assistance possible based on the information you have.`;
         }
       }
     }

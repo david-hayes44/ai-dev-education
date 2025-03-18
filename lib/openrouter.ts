@@ -220,8 +220,24 @@ export async function sendChatCompletion(
   let retries = 0;
   let delay = retry_options.initial_delay;
   
+  // Log message structure for debugging
+  let hasAttachments = false;
+  for (const message of request.messages) {
+    if (message.content && typeof message.content === 'string' && 
+        (message.content.includes('ATTACHMENT_URL:') || message.content.includes('file://'))) {
+      hasAttachments = true;
+      console.log('Detected file attachments in message content');
+      break;
+    }
+  }
+  
   while (true) {
     try {
+      console.log(`Sending OpenRouter request to model: ${request.model}`);
+      if (hasAttachments) {
+        console.log('Request includes file attachments');
+      }
+      
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -248,61 +264,93 @@ export async function sendChatCompletion(
         
         if (retries < retry_options.max_retries) {
           console.warn(`Rate limited by OpenRouter API. Retrying after ${retryDelay}ms. Retry ${retries + 1}/${retry_options.max_retries}`);
+          
           await new Promise(resolve => setTimeout(resolve, retryDelay));
           retries++;
           delay = Math.min(delay * retry_options.backoff_factor, retry_options.max_delay);
           continue;
+        } else {
+          throw new Error(`Rate limited by OpenRouter API and exceeded maximum retries (${retry_options.max_retries})`);
         }
       }
-
+      
       if (!response.ok) {
         const errorText = await response.text();
-        let errorJson;
-        try {
-          errorJson = JSON.parse(errorText);
-        } catch (e) {
-          // If not JSON, use the text as is
-          errorJson = { error: errorText };
+        console.error(`OpenRouter API request failed: ${response.status} ${response.statusText}`, errorText);
+        
+        // Enhanced error handling with specific error codes
+        if (response.status === 400) {
+          // Try to parse the error message
+          try {
+            const errorJson = JSON.parse(errorText);
+            if (errorJson.error && errorJson.error.message) {
+              if (errorJson.error.message.includes('token limit') || 
+                  errorJson.error.message.includes('maximum context length')) {
+                throw new Error('Your message with attachments exceeds the token limit. Please try with a shorter message or fewer/smaller attachments.');
+              }
+            }
+          } catch (e) {
+            // Failed to parse JSON, use generic error
+          }
+          
+          // Generic 400 error
+          throw new Error(`Bad request: The API could not process your request. ${hasAttachments ? 'This might be due to issues with your file attachments.' : ''}`);
         }
         
-        // Check if we should retry based on the error
-        const shouldRetry = response.status >= 500 || response.status === 429;
-        if (shouldRetry && retries < retry_options.max_retries) {
-          console.warn(`OpenRouter API request failed with status ${response.status}. Retrying after ${delay}ms. Retry ${retries + 1}/${retry_options.max_retries}`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          retries++;
-          delay = Math.min(delay * retry_options.backoff_factor, retry_options.max_delay);
-          continue;
+        if (response.status === 401) {
+          throw new Error('Authentication error: Invalid or missing API key');
         }
         
-        throw new Error(`API request failed with status ${response.status}: ${JSON.stringify(errorJson)}`);
+        if (response.status === 403) {
+          throw new Error('Permission denied: Your API key does not have access to the requested model');
+        }
+        
+        if (response.status === 404) {
+          throw new Error(`Model not found: The requested model '${request.model}' is not available`);
+        }
+        
+        if (response.status === 500) {
+          throw new Error('Server error: OpenRouter is experiencing issues. Please try again later.');
+        }
+        
+        // Generic error for other status codes
+        throw new Error(`OpenRouter API request failed with status ${response.status}`);
       }
-
+      
       if (request.stream) {
         if (!response.body) {
-          throw new Error('No response stream available');
+          throw new Error("OpenRouter API returned an empty stream");
         }
-        return response.body as ReadableStream;
+        return response.body;
+      } else {
+        const data = await response.json();
+        return data as ChatCompletionResponse;
       }
-
-      const data = await response.json();
-      return data;
     } catch (error) {
-      // For network errors, we might want to retry
-      const isNetworkError = error instanceof TypeError && error.message.includes('fetch');
-      
-      if (isNetworkError && retries < retry_options.max_retries) {
-        console.warn(`Network error when calling OpenRouter: ${error}. Retrying after ${delay}ms. Retry ${retries + 1}/${retry_options.max_retries}`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        retries++;
-        delay = Math.min(delay * retry_options.backoff_factor, retry_options.max_delay);
-        continue;
+      // If we've already retried the maximum number of times, throw the error
+      if (retries >= retry_options.max_retries) {
+        console.error('OpenRouter request failed after maximum retries:', error);
+        throw error;
       }
       
-      console.error('Error calling OpenRouter:', error);
+      console.warn(`OpenRouter request failed (attempt ${retries + 1}/${retry_options.max_retries}):`, error);
       
-      // Return a more detailed fallback response
-      return createFallbackResponse(error);
+      // Only retry for network errors and server errors, not for client errors
+      if (error instanceof Error) {
+        const errorMessage = error.message.toLowerCase();
+        
+        // Don't retry for client errors like invalid API key, bad request, etc.
+        if (errorMessage.includes('api key') || 
+            errorMessage.includes('authentication') || 
+            errorMessage.includes('bad request') ||
+            errorMessage.includes('permission denied')) {
+          throw error;
+        }
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
+      retries++;
+      delay = Math.min(delay * retry_options.backoff_factor, retry_options.max_delay);
     }
   }
 }

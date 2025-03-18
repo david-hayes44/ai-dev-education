@@ -114,10 +114,33 @@ export default function ChatContainer() {
         return; // Don't send empty messages
       }
       
-      // Use streaming message for better user experience
-      await sendStreamingMessage(content, attachments);
+      // Show loading state for attachments if any
+      if (attachments && attachments.length > 0) {
+        // Add a visual indicator that we're processing files
+        console.log(`Processing ${attachments.length} attachments before sending message`);
+        
+        // Validate attachments before sending
+        const validAttachments = attachments.filter(att => {
+          // Check if URL is accessible for data URLs or regular URLs
+          if (att.url && (att.url.startsWith('data:') || att.url.startsWith('http'))) {
+            return true;
+          }
+          console.warn(`Skipping attachment with invalid URL: ${att.name}`);
+          return false;
+        });
+        
+        if (validAttachments.length !== attachments.length) {
+          console.warn(`Some attachments were invalid and will be skipped`);
+        }
+        
+        // Use streaming message for better user experience
+        await sendStreamingMessage(content, validAttachments);
+      } else {
+        // No attachments, just send the message normally
+        await sendStreamingMessage(content);
+      }
     } catch (error) {
-      console.error("Error sending message with attachments:", error);
+      console.error("Error sending message:", error);
     }
   };
 

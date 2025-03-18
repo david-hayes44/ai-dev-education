@@ -214,6 +214,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setIsStreaming(true);
     setIsTyping(true);
     try {
+      // Log attachment info for debugging
+      if (attachments && attachments.length > 0) {
+        console.log(`Processing message with ${attachments.length} attachments:`, 
+          attachments.map(a => ({ name: a.name, type: a.type, size: a.size })));
+      }
+      
       // Fetch relevant content first
       const contentResults = await fetchRelevantContent(content);
       setRelevantContent(contentResults);
@@ -229,6 +235,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       await chatService.sendStreamingMessage(content, contentResults, (partialMessage) => {
         // Update the current session with the partial response to display in real-time
         setCurrentSession(chatService.getCurrentSession());
+        
+        // Make sure messages are updated in the current component state
+        setMessages(chatService.getCurrentChunk());
       });
       
       // Update sessions after streaming is complete
@@ -238,11 +247,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // Update chunking information
       setTotalChunks(chatService.getTotalChunks());
       setCurrentChunkIndex(chatService.getCurrentChunkIndex());
+      
+      // Ensure messages state is synchronized with chatService
+      setMessages(chatService.getCurrentChunk());
     } catch (error) {
       console.error('Error sending streaming message:', error);
       // Ensure the error is shown to the user
       chatService.updateAssistantMessageWithError(error);
       setCurrentSession(chatService.getCurrentSession());
+      // Also update messages state to show the error
+      setMessages(chatService.getCurrentChunk());
     } finally {
       setIsStreaming(false);
       setIsTyping(false);
