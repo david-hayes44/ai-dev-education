@@ -811,14 +811,31 @@ export class ChatService {
   }
   
   public setCategoryForSession(id: string, category: string): boolean {
-    if (this.sessions[id]) {
-      this.sessions[id].category = category;
+    const session = this.getSession(id);
+    if (session) {
+      session.category = category;
       this.saveSessions();
       return true;
     }
     return false;
   }
-
+  
+  /**
+   * Reset the current chat session by clearing messages
+   */
+  public resetChat(): void {
+    this.messages = [];
+    
+    // If there's a current session, clear its messages too
+    if (this.currentSessionId) {
+      const currentSession = this.sessions[this.currentSessionId];
+      if (currentSession) {
+        currentSession.messages = [];
+        this.saveSessions();
+      }
+    }
+  }
+  
   // Get the system prompt for setting up the assistant
   private getSystemPrompt(): string {
     return `You are AITutor, an educational assistant for the AI Dev Education platform. Your purpose is to help users understand AI development concepts and navigate the platform resources.
