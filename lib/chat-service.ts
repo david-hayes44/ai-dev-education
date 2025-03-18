@@ -1111,10 +1111,21 @@ export class ChatService {
               
               // Mark streaming as complete
               streamingMessage.isStreaming = false;
+              
+              // Important: Explicitly clear the loading state
+              if (streamingMessage.metadata?.type === "loading") {
+                streamingMessage.metadata = {}; // Clear metadata type
+              }
+              
               session.messages[placeholderMessageIndex].isStreaming = false;
               
+              // Also clear loading state in the session message
+              if (session.messages[placeholderMessageIndex].metadata?.type === "loading") {
+                session.messages[placeholderMessageIndex].metadata = {};
+              }
+              
               // Notify the UI that streaming is complete with final message
-              onChunk(streamingMessage);
+              onChunk({...streamingMessage});
               
               // Update session and save
               session.updatedAt = Date.now();
@@ -1130,16 +1141,40 @@ export class ChatService {
               
               // Mark streaming as failed
               streamingMessage.isStreaming = false;
-              streamingMessage.content = "I'm sorry, I encountered an error while generating a response. Please try again.";
-              streamingMessage.metadata = { type: "error" };
+              
+              // Create a more informative error message based on the error type
+              let errorMessage = "I'm sorry, I encountered an error while generating a response. Please try again.";
+              
+              if (error instanceof Error) {
+                const errorText = error.message.toLowerCase();
+                
+                if (errorText.includes("api key") || errorText.includes("authentication") || errorText.includes("unauthorized")) {
+                  errorMessage = "The AI service couldn't be accessed due to an API key issue. Please check the API key configuration.";
+                } else if (errorText.includes("network") || errorText.includes("fetch") || errorText.includes("timeout")) {
+                  errorMessage = "I couldn't connect to the AI service due to a network error. Please check your internet connection.";
+                } else if (errorText.includes("model") || errorText.includes("not found")) {
+                  errorMessage = `The selected AI model "${this.selectedModel}" is currently unavailable. Please try a different model.`;
+                }
+              }
+              
+              // FALLBACK MECHANISM: If enabled, use it
+              if (process.env.NEXT_PUBLIC_ENABLE_FALLBACK === "true") {
+                console.log("DEBUG: Using fallback response mechanism");
+                errorMessage = this.generateFallbackResponse(content);
+                streamingMessage.metadata = { type: "fallback" };
+              } else {
+                streamingMessage.metadata = { type: "error" };
+              }
+              
+              streamingMessage.content = errorMessage;
               
               // Update the session message
               session.messages[placeholderMessageIndex].isStreaming = false;
               session.messages[placeholderMessageIndex].content = streamingMessage.content;
-              session.messages[placeholderMessageIndex].metadata = { type: "error" };
+              session.messages[placeholderMessageIndex].metadata = streamingMessage.metadata;
               
-              // Notify the UI about the error
-              onChunk(streamingMessage);
+              // Notify the UI about the error with a fresh object to ensure update
+              onChunk({...streamingMessage});
               
               // Update session and save
               session.updatedAt = Date.now();

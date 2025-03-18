@@ -378,6 +378,22 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
       );
     }
     
+    if (message.metadata?.type === "fallback") {
+      return (
+        <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-800 dark:text-amber-100">
+          Fallback Mode
+        </span>
+      );
+    }
+    
+    if (isError) {
+      return (
+        <span className="text-xs px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive">
+          Error
+        </span>
+      );
+    }
+    
     return null;
   };
 
@@ -414,7 +430,8 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
             isLoading && "animate-pulse",
             isThinking && "text-muted-foreground italic",
             isRechunking && "text-muted-foreground",
-            isError && "text-destructive"
+            isError && "text-destructive",
+            message.metadata?.type === "fallback" && "text-amber-800 dark:text-amber-300"
           )}>
             {isLoading ? (
               <div className="flex items-center space-x-2">
