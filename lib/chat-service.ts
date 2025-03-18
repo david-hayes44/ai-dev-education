@@ -859,7 +859,7 @@ export class ChatService {
       
       // Create a response string to accumulate the streamed response
       let responseContent = "";
-      let streamingMessage = { ...placeholderMessage };
+      const streamingMessage = { ...placeholderMessage };
       
       try {
         // API Key validation
