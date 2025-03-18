@@ -266,6 +266,11 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
                 Streaming...
               </span>
             )}
+            {!isStreaming && isLoading && (
+              <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary animate-pulse">
+                Loading...
+              </span>
+            )}
             {displayAttachments.length > 0 && (
               <span className="text-xs flex items-center gap-1 text-muted-foreground">
                 <Paperclip className="h-3 w-3" />
@@ -281,7 +286,7 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
             isRechunking && "text-muted-foreground",
             isError && "text-destructive"
           )}>
-            {isLoading ? (
+            {isLoading && !isStreaming ? (
               <div className="flex items-center space-x-2">
                 <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }}></div>
                 <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '200ms' }}></div>
@@ -294,7 +299,7 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
               </div>
             ) : isStreaming ? (
               <div className={cn("transition-all duration-200", isStreaming ? "border-l-2 border-primary pl-2" : "")}>
-                <ReactMarkdown>{message.content}</ReactMarkdown>
+                <ReactMarkdown>{message.content || "Generating response..."}</ReactMarkdown>
               </div>
             ) : (
               <ReactMarkdown>{message.content}</ReactMarkdown>

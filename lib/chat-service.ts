@@ -770,14 +770,75 @@ export class ChatService {
     
     const session = this.sessions[this.currentSessionId];
     
-    // Add user message
-    const userMessage: Message = {
+    // Check if a user message with the same content and attachments already exists
+    // This prevents duplicate messages when handling image uploads
+    const existingUserMessage = session.messages.find(msg => {
+      if (msg.role !== 'user') return false;
+      
+      // Check for matching content
+      const contentMatches = msg.content === userContent;
+      
+      // If no attachments in either message, just check content
+      if (!attachments?.length && !msg.attachments?.length) {
+        return contentMatches;
+      }
+      
+      // If attachments count doesn't match, not the same message
+      if ((attachments?.length || 0) !== (msg.attachments?.length || 0)) {
+        return false;
+      }
+      
+      // Check for matching attachments
+      if (attachments && msg.attachments) {
+        // For simplicity, just check if all attachment IDs match
+        const allAttachmentsMatch = attachments.every(att => 
+          msg.attachments?.some(msgAtt => msgAtt.id === att.id));
+        
+        return contentMatches && allAttachmentsMatch;
+      }
+      
+      return contentMatches;
+    });
+    
+    // If we found a matching user message, check if it already has an assistant response
+    if (existingUserMessage) {
+      const userMessageIndex = session.messages.findIndex(msg => msg.id === existingUserMessage.id);
+      
+      // Check if this user message already has an assistant response
+      if (userMessageIndex >= 0 && userMessageIndex < session.messages.length - 1) {
+        const nextMessage = session.messages[userMessageIndex + 1];
+        if (nextMessage.role === 'assistant') {
+          // Reset the streaming state on the existing assistant message
+          nextMessage.isStreaming = true;
+          nextMessage.content = '';
+          nextMessage.metadata = { type: "loading" };
+          
+          // Update the session
+          session.updatedAt = Date.now();
+          this.saveSessions();
+          
+          // Update message chunks
+          this.messageChunks = this.chunkMessages(session.messages);
+          this.currentChunkIndex = this.messageChunks.length - 1;
+          
+          return nextMessage;
+        }
+      }
+    }
+    
+    // Add user message if we didn't find an existing one
+    const userMessage: Message = existingUserMessage || {
       id: `user-${Date.now()}`,
       role: 'user',
       content: userContent,
       timestamp: Date.now(),
       attachments
     };
+    
+    // If we didn't find an existing message, add this one
+    if (!existingUserMessage) {
+      session.messages.push(userMessage);
+    }
     
     // Add placeholder assistant message
     const assistantPlaceholder: Message = {
@@ -786,10 +847,10 @@ export class ChatService {
       content: '',
       timestamp: Date.now(),
       isStreaming: true,
-      metadata: { type: "loading" } // Explicitly set the loading metadata
+      metadata: { type: "loading" }
     };
     
-    session.messages.push(userMessage, assistantPlaceholder);
+    session.messages.push(assistantPlaceholder);
     session.updatedAt = Date.now();
     
     // Update message chunks based on session messages

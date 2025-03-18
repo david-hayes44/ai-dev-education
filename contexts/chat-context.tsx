@@ -214,6 +214,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       return;
     }
     
+    // Check if we're already streaming - don't allow a new streaming request
+    if (isStreaming) {
+      console.warn("Already processing a streaming message, please wait");
+      return;
+    }
+    
     setIsStreaming(true);
     setIsTyping(true);
     try {
@@ -221,6 +227,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (attachments && attachments.length > 0) {
         console.log(`Processing message with ${attachments.length} attachments:`, 
           attachments.map(a => ({ name: a.name, type: a.type, size: a.size })));
+        
+        // Check for image attachments and add a default prompt if the content is empty
+        const hasImageAttachments = attachments.some(file => file.type.startsWith('image/'));
+        if (hasImageAttachments && !content.trim()) {
+          // If the user just uploaded an image without text, use a default prompt
+          content = "Please describe this image for me.";
+        }
         
         // Add client-side validation for token estimation
         const estimatedTokens = attachments.reduce((acc, file) => {
@@ -264,20 +277,26 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       await processNavigationIntents(content);
       
       // Create a placeholder for the assistant's response with attachments
-      chatService.createAssistantMessagePlaceholder(content, attachments);
+      const assistantPlaceholder = chatService.createAssistantMessagePlaceholder(content, attachments);
       setCurrentSession(chatService.getCurrentSession());
+      
+      // Track the message ID to avoid duplicates
+      const messageId = assistantPlaceholder.id;
       
       // Start streaming with the enriched context
       await chatService.sendStreamingMessage(content, contentResults, (partialMessage) => {
-        // Update the current session with the partial response to display in real-time
-        setCurrentSession(chatService.getCurrentSession());
-        
-        // Make sure messages are updated in the current component state
-        setMessages(chatService.getCurrentChunk());
-        
-        // Check if streaming is complete based on the message state
-        if (!partialMessage.isStreaming) {
-          setIsStreaming(false);
+        // Check if this is the right message (to avoid updating the wrong message)
+        if (partialMessage.id === messageId) {
+          // Update the current session with the partial response to display in real-time
+          setCurrentSession(chatService.getCurrentSession());
+          
+          // Make sure messages are updated in the current component state
+          setMessages(chatService.getCurrentChunk());
+          
+          // Check if streaming is complete based on the message state
+          if (!partialMessage.isStreaming) {
+            setIsStreaming(false);
+          }
         }
       });
       
@@ -311,6 +330,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           } else if (error.message.toLowerCase().includes('url') || 
                     error.message.toLowerCase().includes('access')) {
             errorMessage = "There was a problem accessing your uploaded file. The URL might be invalid or the file format isn't supported.";
+          } else if (attachments.some(file => file.type.startsWith('image/'))) {
+            errorMessage = "I encountered an error processing your image. The image may be too large or in an unsupported format.";
           }
         }
       }
