@@ -751,6 +751,12 @@ export class ChatService {
     onChunk: (message: Message) => void
   ): Promise<Message> {
     try {
+      // Check if chatService is initialized
+      if (!this) {
+        console.error("Chat service not initialized properly");
+        throw new Error("Chat service not initialized");
+      }
+
       // Get the latest placeholder message (which should be the one we just created)
       const messages = this.getAllMessages();
       const placeholderMessageIndex = messages.findIndex(
@@ -770,19 +776,33 @@ export class ChatService {
       
       const userMessage = messages[userMessageIndex];
       
-      // Log file attachment information if present
+      // Detailed logging for file attachment information if present
       if (userMessage.attachments && userMessage.attachments.length > 0) {
         console.log(`Starting streaming message with ${userMessage.attachments.length} file attachments:`);
         userMessage.attachments.forEach((attachment, index) => {
-          console.log(`File ${index+1}: ${attachment.name} (${attachment.type}), Size: ${Math.round(attachment.size/1024)}KB, URL: ${attachment.url.substring(0, 50)}...`);
-          // Check if URL is accessible
-          fetch(attachment.url, { method: 'HEAD' })
-            .then(response => {
-              console.log(`File ${index+1} URL check: ${response.ok ? 'Accessible' : 'Not accessible'} (${response.status})`);
-            })
-            .catch(err => {
-              console.error(`File ${index+1} URL check failed:`, err);
-            });
+          const fileSize = Math.round(attachment.size/1024);
+          const urlPreview = attachment.url ? attachment.url.substring(0, 50) + (attachment.url.length > 50 ? '...' : '') : 'No URL';
+          console.log(`File ${index+1}: ${attachment.name} (${attachment.type}), Size: ${fileSize}KB, URL: ${urlPreview}`);
+          
+          // URL validation - check if URL is accessible or properly formatted
+          if (attachment.url) {
+            if (attachment.url.startsWith('data:')) {
+              console.log(`File ${index+1} using data URL (${Math.round(attachment.url.length/1024)}KB in size)`);
+            } else if (attachment.url.startsWith('http')) {
+              // Check if URL is accessible for HTTP URLs
+              fetch(attachment.url, { method: 'HEAD' })
+                .then(response => {
+                  console.log(`File ${index+1} URL check: ${response.ok ? 'Accessible' : 'Not accessible'} (${response.status})`);
+                })
+                .catch(err => {
+                  console.error(`File ${index+1} URL check failed:`, err);
+                });
+            } else {
+              console.warn(`File ${index+1} has unusual URL format: ${attachment.url.substring(0, 20)}...`);
+            }
+          } else {
+            console.error(`File ${index+1} is missing URL`);
+          }
         });
       }
       
@@ -809,25 +829,25 @@ export class ChatService {
       const streamingMessage = { ...placeholderMessage };
       
       try {
-        // Validate model availability and API key
+        // API Key validation
         if (!process.env.NEXT_PUBLIC_OPENROUTER_API_KEY) {
-          throw new Error("OpenRouter API key is missing");
+          throw new Error("OpenRouter API key is missing or invalid");
         }
         
-        // Debug model information
-        console.log(`Sending streaming message using model: ${this.selectedModel}`);
+        // Model validation
+        console.log(`Selected model for streaming: ${this.selectedModel}`);
         
         // Add model validation logic
         const validModels = AVAILABLE_MODELS.map(m => m.id);
         if (!validModels.includes(this.selectedModel)) {
-          console.warn(`Selected model ${this.selectedModel} not in known models list. Using default model instead.`);
-          this.selectedModel = 'anthropic/claude-3.7-sonnet:beta'; // Fallback to a reliable model
+          console.warn(`Selected model ${this.selectedModel} not in valid models list. Using default model instead.`);
+          this.selectedModel = AVAILABLE_MODELS[0].id; // Use the first available model as fallback
         }
         
         // Stream the response
-        console.log('Sending API request to OpenRouter with', apiMessages.length, 'messages.');
+        console.log(`Sending API request to OpenRouter with ${apiMessages.length} messages.`);
         if (userMessage.attachments?.length) {
-          console.log('Request includes file attachments, may affect token count.');
+          console.log(`Request includes ${userMessage.attachments.length} file attachments.`);
         }
         
         const response = await sendChatCompletion({
@@ -847,9 +867,14 @@ export class ChatService {
             // Extract content from the chunk
             const content = chunk.choices[0]?.delta?.content || "";
             
-            // Check for error indicators in the content
-            if (content.toLowerCase().includes('sorry') && content.toLowerCase().includes('cannot access') && userMessage.attachments?.length) {
-              console.warn('Model indicates inability to access file:', content);
+            // Check for error or file access indicators in the content
+            if (content.toLowerCase().includes('error') || 
+                (userMessage.attachments?.length && 
+                (content.toLowerCase().includes('cannot access') || 
+                 content.toLowerCase().includes('unable to access') ||
+                 content.toLowerCase().includes('could not access') ||
+                 content.toLowerCase().includes('unable to view')))) {
+              console.warn('Detected potential file access issue in response:', content);
             }
             
             // Append to accumulated response
@@ -867,8 +892,24 @@ export class ChatService {
           },
           () => {
             // When streaming is complete, remove the loading metadata and streaming flag
-            streamingMessage.metadata = undefined;
+            
+            // Check if we have an empty response
+            if (!responseContent.trim()) {
+              console.error("Empty response received from OpenRouter API");
+              responseContent = "I'm sorry, I couldn't process your request. This might be due to an issue accessing your attached file or a temporary problem with the AI service.";
+              
+              // Add more context if there are file attachments
+              if (userMessage.attachments?.length) {
+                responseContent += " When working with files, please ensure they are in a supported format (text, images, PDFs) and not too large.";
+              }
+              
+              streamingMessage.metadata = { type: "error" };
+            } else {
+              streamingMessage.metadata = undefined;
+            }
+            
             streamingMessage.isStreaming = false;
+            streamingMessage.content = responseContent;
             this.messages[placeholderMessageIndex] = streamingMessage;
             
             // Rechunk messages if needed
@@ -891,13 +932,20 @@ export class ChatService {
             if (error instanceof Error) {
               errorMessage += ` Error details: ${error.message}`;
               console.error('Error object:', error);
+              
+              // Add specific error handling for file-related issues
+              if (userMessage.attachments?.length) {
+                if (error.message.toLowerCase().includes('token') || 
+                    error.message.toLowerCase().includes('limit')) {
+                  errorMessage = "I couldn't process your file due to token limits. The file may be too large. Try uploading a smaller portion or summarizing its content.";
+                } else if (error.message.toLowerCase().includes('url') || 
+                          error.message.toLowerCase().includes('access') ||
+                          error.message.toLowerCase().includes('file')) {
+                  errorMessage = "I couldn't access the file you uploaded. The URL might be invalid, expired, or the file format isn't supported.";
+                }
+              }
             } else if (typeof error === 'string') {
               errorMessage += ` Error details: ${error}`;
-            }
-            
-            // Additional context for file-related errors
-            if (userMessage.attachments?.length && errorMessage.toLowerCase().includes('token')) {
-              errorMessage += " The uploaded file may be too large for processing. Try with a smaller file or summarize its content in your message.";
             }
             
             // Update the streaming message with the error
@@ -924,17 +972,21 @@ export class ChatService {
         
         if (streamError instanceof Error) {
           console.error('Stream error object:', streamError);
-          errorContent += ` Error: ${streamError.message}`;
           
-          // Special handling for file-related errors
+          // Add specific error handling for file-related issues
           if (userMessage.attachments?.length) {
             if (streamError.message.toLowerCase().includes('token') || 
                 streamError.message.toLowerCase().includes('limit')) {
-              errorContent += " The file you uploaded may be too large to process. Please try with a smaller file or extract the specific parts you want to discuss.";
+              errorContent = "I couldn't process your file due to its size. The file may be too large for my current capabilities. Try uploading a smaller portion or summarizing its content.";
             } else if (streamError.message.toLowerCase().includes('url') || 
-                       streamError.message.toLowerCase().includes('access')) {
-              errorContent += " I couldn't access the file you shared. The URL might be invalid or the file format isn't supported.";
+                      streamError.message.toLowerCase().includes('access') ||
+                      streamError.message.toLowerCase().includes('file')) {
+              errorContent = "I couldn't access the file you uploaded. The URL might be invalid, expired, or the file format isn't supported.";
+            } else {
+              errorContent += ` Error details: ${streamError.message}`;
             }
+          } else {
+            errorContent += ` Error details: ${streamError.message}`;
           }
         } else {
           errorContent += ' Please try again later.';
@@ -1194,8 +1246,24 @@ ${chunk.content}
         fileDescription += "\nThis is a Markdown file. Please interpret the formatted content and provide an overview.";
       }
       
-      // Add data URL with explicit indicator so OpenRouter models can find it
-      fileDescription += `\n\nIMPORTANT - FILE URL: ${file.url}`;
+      // Format the URL as plaintext rather than with special formatting
+      // This increases compatibility with different models
+      if (file.url) {
+        // Remove complicated file paths or URL encoding that might confuse models
+        const cleanUrl = file.url
+          .replace(/^data:(.+);base64,/, 'data-url-content-type-') // Simplify data URLs
+          .replace(/[?&]token=[^&]+/, ''); // Remove auth tokens
+        
+        // Add the URL in a clearly labeled format that models can easily recognize
+        fileDescription += `\n\nFile URL: ${cleanUrl}`;
+        
+        // Add a fallback text description for data URLs
+        if (file.url.startsWith('data:')) {
+          fileDescription += "\n(This is a data URL containing the file's contents directly embedded in the URL)";
+        }
+      } else {
+        fileDescription += "\n\nNOTE: No URL provided for this file.";
+      }
       
       return fileDescription;
     }).join('\n\n---\n\n');

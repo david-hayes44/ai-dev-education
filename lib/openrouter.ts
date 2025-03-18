@@ -220,15 +220,52 @@ export async function sendChatCompletion(
   let retries = 0;
   let delay = retry_options.initial_delay;
   
-  // Log message structure for debugging
+  // Enhanced request validation and logging
   let hasAttachments = false;
+  let dataUrls = 0;
+  let httpUrls = 0;
+  let plainTextAttachments = 0;
+  let totalContentLength = 0;
+  
+  // Analyze message content for debugging
   for (const message of request.messages) {
-    if (message.content && typeof message.content === 'string' && 
-        (message.content.includes('ATTACHMENT_URL:') || message.content.includes('file://'))) {
-      hasAttachments = true;
-      console.log('Detected file attachments in message content');
-      break;
+    if (message.content && typeof message.content === 'string') {
+      totalContentLength += message.content.length;
+      
+      // Check for file attachments
+      if (message.content.includes('File URL:') || 
+          message.content.includes('ATTACHMENT_URL:') || 
+          message.content.includes('data:') ||
+          message.content.includes('file://')) {
+        hasAttachments = true;
+        
+        if (message.content.includes('data:')) {
+          dataUrls++;
+        }
+        
+        if (message.content.match(/https?:\/\//)) {
+          httpUrls++;
+        }
+        
+        // Look for text mentions of files
+        if (message.content.includes('text file') || 
+            message.content.includes('code file') || 
+            message.content.includes('document file')) {
+          plainTextAttachments++;
+        }
+      }
     }
+  }
+  
+  console.log(`OpenRouter request stats: model=${request.model}, message_count=${request.messages.length}, total_content_length=${totalContentLength}`);
+  
+  if (hasAttachments) {
+    console.log(`Request contains file references: data_urls=${dataUrls}, http_urls=${httpUrls}, plaintext_attachments=${plainTextAttachments}`);
+  }
+  
+  // For very large requests, add additional logging
+  if (totalContentLength > 50000) {
+    console.warn(`Request content is very large (${totalContentLength} chars). This might cause issues with some models.`);
   }
   
   while (true) {
@@ -284,13 +321,28 @@ export async function sendChatCompletion(
           try {
             const errorJson = JSON.parse(errorText);
             if (errorJson.error && errorJson.error.message) {
+              console.error('Parsed error message:', errorJson.error.message);
+              
               if (errorJson.error.message.includes('token limit') || 
                   errorJson.error.message.includes('maximum context length')) {
                 throw new Error('Your message with attachments exceeds the token limit. Please try with a shorter message or fewer/smaller attachments.');
               }
+              
+              // Check for file-specific errors
+              if (hasAttachments && 
+                 (errorJson.error.message.includes('file') || 
+                  errorJson.error.message.includes('url') || 
+                  errorJson.error.message.includes('attachment'))) {
+                throw new Error(`Error processing file: ${errorJson.error.message}`);
+              }
+              
+              throw new Error(errorJson.error.message);
             }
           } catch (e) {
-            // Failed to parse JSON, use generic error
+            // If JSON parsing fails, just use the original error text
+            if (e instanceof Error) {
+              console.error('Error parsing JSON error:', e);
+            }
           }
           
           // Generic 400 error
@@ -330,6 +382,17 @@ export async function sendChatCompletion(
       // If we've already retried the maximum number of times, throw the error
       if (retries >= retry_options.max_retries) {
         console.error('OpenRouter request failed after maximum retries:', error);
+        
+        // Add custom messaging for file-related errors
+        if (hasAttachments && error instanceof Error) {
+          if (error.message.includes('token limit') || error.message.includes('too large')) {
+            throw new Error('Your file is too large for the AI to process. Please try with a smaller file or summarize its content.');
+          }
+          if (error.message.includes('file') || error.message.includes('url') || error.message.includes('attachment')) {
+            throw new Error(`File processing error: ${error.message}`);
+          }
+        }
+        
         throw error;
       }
       
