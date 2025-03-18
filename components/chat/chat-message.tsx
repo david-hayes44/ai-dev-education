@@ -73,6 +73,7 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
   const [attachmentError, setAttachmentError] = useState<Record<string, boolean>>({});
   const [loadingAttachments, setLoadingAttachments] = useState<Record<string, boolean>>({});
+  const [showRetryButton, setShowRetryButton] = useState(false);
   
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
@@ -242,21 +243,74 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
     }
   }, [message, isAssistant, isStreaming, isLoading, isRechunking]);
 
+  // Add useEffect to show retry button after 10 seconds of loading
+  React.useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
+    if (isLoading || isStreaming) {
+      // Show retry button after 10 seconds of loading
+      timeoutId = setTimeout(() => {
+        setShowRetryButton(true);
+      }, 10000);
+    } else {
+      setShowRetryButton(false);
+    }
+    
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [isLoading, isStreaming]);
+  
+  // Add handler for retry button click
+  const handleRetry = () => {
+    if (!chatService) return;
+    
+    // Update the message to show error state
+    chatService.updateAssistantMessageWithError(new Error("Request canceled by user"));
+    
+    // Clear loading state
+    setShowRetryButton(false);
+  };
+
   // Helper function to determine what status indicator to show
   const getStatusIndicator = () => {
     if (isStreaming) {
       return (
-        <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary animate-pulse">
-          Streaming...
-        </span>
+        <div className="flex items-center">
+          <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary animate-pulse">
+            Streaming...
+          </span>
+          {showRetryButton && (
+            <Button 
+              variant="ghost" 
+              className="h-6 ml-2 text-xs px-2 py-0 text-muted-foreground hover:text-destructive"
+              onClick={handleRetry}
+            >
+              Cancel
+            </Button>
+          )}
+        </div>
       );
     } 
     
     if (isLoading) {
       return (
-        <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary animate-pulse">
-          Loading...
-        </span>
+        <div className="flex items-center">
+          <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary animate-pulse">
+            Loading...
+          </span>
+          {showRetryButton && (
+            <Button 
+              variant="ghost" 
+              className="h-6 ml-2 text-xs px-2 py-0 text-muted-foreground hover:text-destructive"
+              onClick={handleRetry}
+            >
+              Cancel
+            </Button>
+          )}
+        </div>
       );
     }
     

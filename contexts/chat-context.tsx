@@ -1,7 +1,7 @@
 "use client"
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { ChatService, Message, ChatSession, AIModel, FileAttachment } from '@/lib/chat-service';
+import { ChatService, Message, ChatSession, AIModel, FileAttachment, MessageMetadataType } from '@/lib/chat-service';
 import { usePathname } from 'next/navigation';
 import { ContentChunk } from '@/lib/content-indexing-service';
 import { useContentSearch } from "@/hooks/use-content-search";
@@ -235,6 +235,41 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setIsStreaming(true);
     setIsTyping(true);
     
+    // Create a timeout to reset the streaming state if it takes too long
+    const streamTimeout = setTimeout(() => {
+      // If this executes, the streaming didn't complete properly
+      console.warn("Streaming request timed out after 30 seconds");
+      setIsStreaming(false);
+      setIsTyping(false);
+      
+      // Find and update any messages stuck in loading state
+      if (currentSession) {
+        const updatedMessages = currentSession.messages.map(msg => {
+          if (msg.isStreaming || (msg.metadata?.type === "loading")) {
+            return {
+              ...msg,
+              isStreaming: false,
+              content: msg.content || "I'm sorry, I was unable to generate a response. Please try again.",
+              metadata: { type: "error" as MessageMetadataType }
+            };
+          }
+          return msg;
+        });
+        
+        // Update session with fixed messages
+        if (chatService) {
+          // Replace the current session's messages and update state
+          chatService.resetChat(); // Reset the current chat first
+          
+          // Then manually set our messages in the current context
+          setMessages(updatedMessages);
+          
+          // Refresh the session from the chat service
+          setCurrentSession(chatService.getCurrentSession());
+        }
+      }
+    }, 30000); // 30 second timeout
+    
     try {
       // Log attachment info for debugging
       if (attachments && attachments.length > 0) {
@@ -337,52 +372,44 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // Ensure messages state is synchronized with chatService
       setMessages(chatService.getCurrentChunk());
       
-      // Make sure streaming is set to false when complete
-      setIsStreaming(false);
-    } catch (error) {
-      // Make sure streaming is set to false on error
-      setIsStreaming(false);
-      console.error('Error sending streaming message:', error);
-      // Format the error message for display
-      let errorMessage = "I encountered an error processing your request.";
+      // Remember to clear the timeout when streaming completes successfully
+      clearTimeout(streamTimeout);
       
-      if (error instanceof Error) {
-        console.error('Error details:', error.message);
-        
-        if (attachments && attachments.length > 0) {
-          if (error.message.toLowerCase().includes('token') || 
-              error.message.toLowerCase().includes('limit')) {
-            errorMessage = "The file you uploaded is too large for the AI to process. Please try with a smaller file or extract the key information.";
-          } else if (error.message.toLowerCase().includes('url') || 
-                    error.message.toLowerCase().includes('access')) {
-            errorMessage = "There was a problem accessing your uploaded file. The URL might be invalid or the file format isn't supported.";
-          } else if (attachments.some(file => file.type.startsWith('image/'))) {
-            errorMessage = "I encountered an error processing your image. The image may be too large or in an unsupported format.";
+      // Reset streaming state
+      setIsStreaming(false);
+      setIsTyping(false);
+    } catch (error) {
+      console.error("Error in streaming message:", error);
+      clearTimeout(streamTimeout);
+      
+      // Reset streaming state
+      setIsStreaming(false);
+      setIsTyping(false);
+      
+      // Find and update any messages stuck in loading state
+      if (currentSession) {
+        const updatedMessages = currentSession.messages.map(msg => {
+          if (msg.isStreaming || (msg.metadata?.type === "loading")) {
+            return {
+              ...msg,
+              isStreaming: false,
+              content: "I'm sorry, I encountered an error while generating a response. Please try again.",
+              metadata: { type: "error" as MessageMetadataType }
+            };
           }
+          return msg;
+        });
+        
+        // Update session with fixed messages
+        if (chatService) {
+          // Use the chat service to update the assistant message with an error
+          chatService.updateAssistantMessageWithError(new Error("Streaming response error"));
+          
+          // Refresh our UI state from the chat service
+          setMessages(chatService.getCurrentChunk());
+          setCurrentSession(chatService.getCurrentSession());
         }
       }
-      
-      // Create a custom error message
-      const errorResponseMessage: Message = {
-        id: Date.now().toString(),
-        role: "assistant",
-        content: errorMessage,
-        timestamp: Date.now(),
-        metadata: { type: "error" }
-      };
-      
-      // Add it to the messages
-      setMessages(prev => [...prev, errorResponseMessage]);
-      
-      // Ensure the error is shown to the user
-      chatService.updateAssistantMessageWithError(error);
-      setCurrentSession(chatService.getCurrentSession());
-      
-      // Also update messages state to show the error
-      setMessages(chatService.getCurrentChunk());
-    } finally {
-      setIsTyping(false);
-      setIsStreaming(false); // Ensure streaming state is reset
     }
   };
   

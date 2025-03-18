@@ -141,7 +141,7 @@ export default function ChatContainer({ onMessageSend }: ChatContainerProps) {
     currentChunkIndex,
     navigateToNextChunk,
     navigateToPreviousChunk,
-    resetChat: resetChatSession,
+    resetChat,
     relevantContent,
     isSearchingContent,
     navigationSuggestions
@@ -152,6 +152,7 @@ export default function ChatContainer({ onMessageSend }: ChatContainerProps) {
   const [isChunkLoading, setIsChunkLoading] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [showEmergencyReset, setShowEmergencyReset] = useState(false);
   
   // Helper to force a re-render
   const forceUpdate = () => {
@@ -179,8 +180,8 @@ export default function ChatContainer({ onMessageSend }: ChatContainerProps) {
 
   // Handle starting a new chat
   const handleNewChat = () => {
-    if (resetChatSession) {
-      resetChatSession();
+    if (resetChat) {
+      resetChat();
       // Focus the input after resetting
       setTimeout(() => {
         inputRef.current?.focus();
@@ -254,8 +255,8 @@ export default function ChatContainer({ onMessageSend }: ChatContainerProps) {
   };
 
   const clearChat = () => {
-    if (resetChatSession && confirm("Are you sure you want to clear the chat history?")) {
-      resetChatSession();
+    if (resetChat && confirm("Are you sure you want to clear the chat history?")) {
+      resetChat();
     }
   };
   
@@ -272,9 +273,39 @@ export default function ChatContainer({ onMessageSend }: ChatContainerProps) {
   
   const shortcuts = getShortcutsHelp();
 
+  // Check for stuck loading messages and show emergency reset
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
+    // If any message is in loading state for more than 20 seconds, show emergency reset button
+    const loadingMessages = messages.filter(
+      m => m.isStreaming || m.metadata?.type === "loading"
+    );
+    
+    if (loadingMessages.length > 0) {
+      timeoutId = setTimeout(() => {
+        setShowEmergencyReset(true);
+      }, 20000);
+    } else {
+      setShowEmergencyReset(false);
+    }
+    
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [messages]);
+  
+  // Handle emergency reset
+  const handleEmergencyReset = () => {
+    if (resetChat) {
+      resetChat();
+      setShowEmergencyReset(false);
+    }
+  };
+
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full border rounded-lg overflow-hidden bg-background">
         {totalChunks > 1 && (
           <div className="px-4 py-2 border-b flex items-center justify-between bg-muted/30">
             <div className="text-xs text-muted-foreground flex items-center gap-2">
@@ -402,22 +433,35 @@ export default function ChatContainer({ onMessageSend }: ChatContainerProps) {
         {/* New Chat Button */}
         <div className="px-4 py-2 flex justify-between items-center border-b">
           <h2 className="font-medium text-sm">Chat with AI Tutor</h2>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1"
-                  onClick={handleNewChat}
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  <span>New Chat</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Start a new conversation</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <div className="flex items-center gap-2">
+            {showEmergencyReset && (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-8 gap-1"
+                onClick={handleEmergencyReset}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Force Reset</span>
+              </Button>
+            )}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1"
+                    onClick={handleNewChat}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    <span>New Chat</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Start a new conversation</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
         
         <ScrollArea className="flex-1 p-4">
