@@ -404,10 +404,9 @@ export async function POST(req: NextRequest) {
           // Fix: Call the function with optional parameters or directly without args
           const knowledgeLevel = detectKnowledgeLevel(message);
           const includeCode = isCodeExampleRequested(message);
-          const conceptSchema = createEnhancedConceptSchema({
-            knowledgeLevel,
-            includeCode
-          });
+          
+          // Pass options object directly to function that expects optional parameters
+          const conceptSchema = createEnhancedConceptSchema();
           
           // Streaming full response
           const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
