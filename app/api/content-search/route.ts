@@ -1,143 +1,106 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { semanticSearch, keywordSearch, hybridSearch, contentIndexingService } from '@/lib/content-indexing-service';
+import { getIndexingStats, indexAllContent, hybridSearch } from '@/lib/content-indexing-service';
+import { ContentChunk } from '@/lib/server-utils';
 
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const query = searchParams.get('query');
+  
+  // If no query is provided, return an error
+  if (!query || query.trim().length === 0) {
+    return NextResponse.json(
+      { 
+        error: 'A search query is required' 
+      },
+      { status: 400 }
+    );
+  }
+  
   try {
-    // Parse search query from URL
-    const searchParams = req.nextUrl.searchParams;
-    const query = searchParams.get('query');
-    const limitParam = searchParams.get('limit');
-    const limit = limitParam ? parseInt(limitParam, 10) : 5;
-    const section = searchParams.get('section') || undefined;
-    const mode = searchParams.get('mode') || 'hybrid'; // 'hybrid', 'semantic', or 'keyword'
-    
-    if (!query) {
-      return NextResponse.json(
-        { error: 'Missing query parameter' },
-        { status: 400 }
-      );
-    }
-    
     // Ensure content is indexed
-    const indexingStats = await contentIndexingService.getIndexingStats();
-    if (!indexingStats.lastIndexed) {
-      await contentIndexingService.indexAllContent();
+    const stats = await getIndexingStats();
+    
+    if (!stats.lastIndexed) {
+      // Index content if not already indexed
+      await indexAllContent();
     }
     
-    // Perform search with the query based on mode
-    let results;
-    
-    switch (mode) {
-      case 'semantic':
-        results = await semanticSearch(query, { 
-          limit,
-          section
-        });
-        break;
-      case 'keyword':
-        results = await keywordSearch(query, { 
-          limit,
-          section
-        });
-        break;
-      case 'hybrid':
-      default:
-        results = await hybridSearch(query, { 
-          limit,
-          section
-        });
-        break;
-    }
+    // Perform hybrid search (combining vector and keyword search)
+    const results = await hybridSearch(query, {
+      limit: 10,
+      threshold: 0.3, // Minimum relevance score
+      weightVector: 0.7, // Weight for vector search
+      weightKeyword: 0.3, // Weight for keyword search
+      useAPI: true // Use OpenRouter API for embeddings if available
+    });
     
     return NextResponse.json({
       query,
-      mode,
-      section,
       results
     });
   } catch (error) {
-    console.error('Content search error:', error);
+    console.error('Search error:', error);
+    
     return NextResponse.json(
-      { error: 'Failed to search content' },
+      { 
+        error: 'An error occurred during search' 
+      },
       { status: 500 }
     );
   }
 }
 
-// Also handle POST requests for more complex search parameters
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    // Parse search parameters from request body
-    const body = await req.json();
-    const { 
-      query, 
-      limit = 5, 
-      section, 
-      threshold = 0.5,
-      mode = 'hybrid',
-      weightVector = 0.7,
-      weightKeyword = 0.3,
-      boostFields = {
-        title: 0.2,
-        keywords: 0.1,
-        priority: 0.05
-      }
-    } = body;
+    const body = await request.json();
+    const { query, options } = body;
     
-    if (!query) {
+    // If no query is provided, return an error
+    if (!query || query.trim().length === 0) {
       return NextResponse.json(
-        { error: 'Missing query parameter' },
+        { 
+          error: 'A search query is required' 
+        },
         { status: 400 }
       );
     }
     
+    // Default options
+    const searchOptions = {
+      limit: options?.limit || 10,
+      threshold: options?.threshold || 0.3,
+      section: options?.section || undefined,
+      useAPI: options?.useAPI !== false, // Default to true
+      weightVector: options?.weightVector || 0.7,
+      weightKeyword: options?.weightKeyword || 0.3
+    };
+    
     // Ensure content is indexed
-    const indexingStats = await contentIndexingService.getIndexingStats();
-    if (!indexingStats.lastIndexed) {
-      await contentIndexingService.indexAllContent();
+    const stats = await getIndexingStats();
+    
+    if (!stats.lastIndexed) {
+      // Index content if not already indexed
+      await indexAllContent();
     }
     
-    // Perform search based on mode
-    let results;
-    
-    switch (mode) {
-      case 'semantic':
-        results = await semanticSearch(query, { 
-          limit, 
-          threshold,
-          section,
-          boostFields
-        });
-        break;
-      case 'keyword':
-        results = await keywordSearch(query, { 
-          limit, 
-          threshold,
-          section
-        });
-        break;
-      case 'hybrid':
-      default:
-        results = await hybridSearch(query, { 
-          limit, 
-          threshold,
-          section,
-          weightVector,
-          weightKeyword
-        });
-        break;
-    }
+    // Perform hybrid search
+    const results = await hybridSearch(
+      query, 
+      searchOptions
+    );
     
     return NextResponse.json({
       query,
-      mode,
-      section,
+      options: searchOptions,
       results
     });
   } catch (error) {
-    console.error('Content search error:', error);
+    console.error('Search error:', error);
+    
     return NextResponse.json(
-      { error: 'Failed to search content' },
+      { 
+        error: 'An error occurred during search' 
+      },
       { status: 500 }
     );
   }

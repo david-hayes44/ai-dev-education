@@ -1,74 +1,11 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
-import fs from 'fs'
-import path from 'path'
-import { ContentChunk } from "./content-indexing-service"
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
 
 /**
- * Detect file type category from MIME type or filename
- * 
- * @param type MIME type
- * @param filename Optional filename
- * @returns The file type category
+ * Utility for merging class names with Tailwind CSS
  */
-export function getFileTypeCategory(type: string, filename?: string): 'image' | 'document' | 'code' | 'data' | 'unknown' {
-  // Check MIME type first
-  if (type.startsWith('image/')) {
-    return 'image';
-  }
-  
-  if (type === 'application/pdf' || 
-      type === 'application/msword' || 
-      type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      type === 'text/plain' ||
-      type === 'application/rtf' ||
-      type === 'text/markdown') {
-    return 'document';
-  }
-  
-  if (type === 'application/json' || 
-      type === 'text/csv' || 
-      type === 'application/xml' || 
-      type === 'text/xml' ||
-      type === 'application/vnd.ms-excel' ||
-      type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
-    return 'data';
-  }
-  
-  if (type === 'text/javascript' || 
-      type === 'application/javascript' ||
-      type === 'text/typescript' ||
-      type === 'text/html' ||
-      type === 'text/css') {
-    return 'code';
-  }
-  
-  // If we didn't match by MIME type, try by file extension
-  if (filename) {
-    const extension = filename.split('.').pop()?.toLowerCase();
-    
-    if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(extension || '')) {
-      return 'image';
-    }
-    
-    if (['pdf', 'doc', 'docx', 'txt', 'rtf', 'md', 'markdown'].includes(extension || '')) {
-      return 'document';
-    }
-    
-    if (['json', 'csv', 'xml', 'xlsx', 'xls'].includes(extension || '')) {
-      return 'data';
-    }
-    
-    if (['js', 'ts', 'jsx', 'tsx', 'html', 'css', 'py', 'java', 'rb', 'c', 'cpp', 'cs', 'go', 'php', 'sql', 'swift'].includes(extension || '')) {
-      return 'code';
-    }
-  }
-  
-  return 'unknown';
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
 }
 
 /**
@@ -82,59 +19,99 @@ export interface ContentSection {
 }
 
 /**
- * Extract content metadata from a file path
- * 
- * @param filePath Path to the content file
- * @returns Content metadata object
+ * Get file type category based on MIME type or filename
+ * This is safe to use on both client and server
  */
-export function extractContentMetadata(filePath: string): {
-  route: string;
-  section: string;
-  title: string;
-  priority: number;
-} {
-  // Normalize path for consistent processing
-  const normalizedPath = filePath.replace(/\\/g, '/');
+export function getFileTypeCategory(
+  mimeType?: string,
+  filename?: string
+): 'image' | 'document' | 'data' | 'code' | 'unknown' {
+  // Default to unknown if no info provided
+  if (!mimeType && !filename) return 'unknown';
   
-  // Extract route from path (e.g., "/app/mcp/page.tsx" -> "/mcp")
-  const routeMatch = normalizedPath.match(/\/app\/(.+?)\/page\.tsx$/);
-  const route = routeMatch ? `/${routeMatch[1]}` : '/';
-  
-  // Extract section from route (e.g., "/mcp/overview" -> "mcp")
-  const sectionMatch = route.match(/^\/([^\/]+)/);
-  const section = sectionMatch ? sectionMatch[1] : 'general';
-  
-  // Generate title from route (e.g., "/mcp/overview" -> "MCP Overview")
-  let title = '';
-  if (route === '/') {
-    title = 'Home';
-  } else {
-    // Get the last part of the route (e.g., "/mcp/overview" -> "overview")
-    const lastPart = route.split('/').filter(Boolean).pop() || '';
+  // Check MIME type first if available
+  if (mimeType) {
+    // Images
+    if (mimeType.startsWith('image/')) return 'image';
     
-    // Convert to title case (e.g., "overview" -> "Overview")
-    title = lastPart
-      .split('-')
-      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ');
+    // Documents
+    if (
+      mimeType.includes('pdf') ||
+      mimeType.includes('word') ||
+      mimeType.includes('excel') ||
+      mimeType.includes('powerpoint') ||
+      mimeType.includes('text/plain') ||
+      mimeType.includes('text/html') ||
+      mimeType.includes('text/rtf')
+    ) return 'document';
     
-    // Add section prefix for sub-pages
-    if (route.split('/').filter(Boolean).length > 1) {
-      const sectionTitle = section.toUpperCase();
-      title = `${sectionTitle} ${title}`;
+    // Data files
+    if (
+      mimeType.includes('json') ||
+      mimeType.includes('xml') ||
+      mimeType.includes('csv')
+    ) return 'data';
+    
+    // Code files
+    if (
+      mimeType.includes('javascript') ||
+      mimeType.includes('typescript') ||
+      mimeType.includes('python') ||
+      mimeType.includes('java') ||
+      mimeType.includes('text/x-') || // Many code MIME types use this prefix
+      mimeType.includes('application/x-') // Many code MIME types use this prefix
+    ) return 'code';
+  }
+  
+  // Check filename extension as fallback
+  if (filename) {
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
+    
+    // Images
+    if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp', 'ico'].includes(ext)) {
+      return 'image';
+    }
+    
+    // Documents
+    if (['pdf', 'doc', 'docx', 'txt', 'rtf', 'odt', 'xls', 'xlsx', 'ppt', 'pptx', 'html', 'htm'].includes(ext)) {
+      return 'document';
+    }
+    
+    // Data files
+    if (['json', 'xml', 'csv', 'yaml', 'yml', 'toml'].includes(ext)) {
+      return 'data';
+    }
+    
+    // Code files
+    if ([
+      'js', 'ts', 'jsx', 'tsx',  // JavaScript/TypeScript
+      'py', 'python',            // Python
+      'java', 'class',           // Java
+      'c', 'cpp', 'h', 'hpp',    // C/C++
+      'rb',                      // Ruby
+      'php',                     // PHP
+      'go',                      // Go
+      'rs',                      // Rust
+      'css', 'scss', 'sass',     // CSS
+      'html', 'htm',             // HTML (could be document or code)
+      'sh', 'bash', 'zsh',       // Shell
+      'sql',                     // SQL
+      'md', 'markdown',          // Markdown
+      'swift',                   // Swift
+      'kt', 'kts',               // Kotlin
+      'dart',                    // Dart
+      'ex', 'exs',               // Elixir
+      'cs',                      // C#
+      'fs',                      // F#
+      'hs',                      // Haskell
+      'pl'                       // Perl
+    ].includes(ext)) {
+      return 'code';
     }
   }
   
-  // Determine priority (main pages have higher priority)
-  const depth = route.split('/').filter(Boolean).length;
-  const priority = Math.max(1, 5 - depth) / 5; // 1.0 for main pages, lower for deeper pages
-  
-  return {
-    route,
-    section,
-    title,
-    priority
-  };
+  // Default to unknown if no match found
+  return 'unknown';
 }
 
 /**
@@ -203,108 +180,4 @@ export function extractContentSections(content: string): ContentSection[] {
   }
   
   return sections;
-}
-
-/**
- * Convert a route to a file path
- * 
- * @param route Route to convert
- * @returns File path
- */
-export function routeToFilePath(route: string): string {
-  if (route === '/') {
-    return 'app/page.tsx';
-  }
-  
-  // Handle special routes
-  if (route.startsWith('/api/')) {
-    return `app${route}.ts`;
-  }
-  
-  // Regular routes
-  return `app${route}/page.tsx`;
-}
-
-/**
- * Scan content pages for indexing
- * 
- * @param baseDir Base directory to scan from (default: 'app')
- * @returns Array of file paths
- */
-export async function scanContentPages(baseDir = 'app'): Promise<string[]> {
-  const contentFiles: string[] = [];
-  
-  // Function to recursively scan directories
-  const scanDir = async (dir: string) => {
-    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-    
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      
-      if (entry.isDirectory()) {
-        // Skip special directories
-        if (entry.name === 'api' || entry.name.startsWith('_')) {
-          continue;
-        }
-        
-        // Recursively scan subdirectories
-        await scanDir(fullPath);
-      } else if (entry.isFile() && entry.name === 'page.tsx') {
-        // Found a content page
-        contentFiles.push(fullPath);
-      }
-    }
-  };
-  
-  await scanDir(baseDir);
-  return contentFiles;
-}
-
-/**
- * Extract content from a Next.js page file
- * 
- * @param filePath Path to the page file
- * @returns Content chunks
- */
-export async function extractContentFromPage(filePath: string): Promise<ContentChunk[]> {
-  const chunks: ContentChunk[] = [];
-  const content = await fs.promises.readFile(filePath, 'utf-8');
-  
-  // Extract metadata
-  const metadata = extractContentMetadata(filePath);
-  
-  // Create a chunk for the entire page
-  const pageId = `page:${metadata.route}`;
-  const pageChunk: ContentChunk = {
-    id: pageId,
-    title: metadata.title,
-    content: content,
-    path: metadata.route,
-    source: metadata.title,
-    section: metadata.section,
-    keywords: [metadata.section, ...metadata.title.toLowerCase().split(' ')],
-    priority: metadata.priority
-  };
-  chunks.push(pageChunk);
-  
-  // Extract sections
-  const sections = extractContentSections(content);
-  
-  // Create chunks for each section
-  for (const section of sections) {
-    const sectionChunk: ContentChunk = {
-      id: `section:${metadata.route}:${section.id}`,
-      title: `${metadata.title} - ${section.title}`,
-      content: section.content,
-      path: metadata.route,
-      source: metadata.title,
-      section: metadata.section,
-      keywords: [metadata.section, section.title.toLowerCase()],
-      priority: metadata.priority * 0.9, // Slightly lower priority than the page
-      sectionId: section.id
-    };
-    chunks.push(sectionChunk);
-  }
-  
-  return chunks;
 }

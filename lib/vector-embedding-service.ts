@@ -5,7 +5,7 @@
  * enabling semantic search across the platform content.
  */
 
-import { ContentChunk, semanticSearch, contentIndexingService } from './content-indexing-service';
+import { ContentChunk, semanticSearch, getIndexingStats, indexAllContent } from './content-indexing-service';
 
 // Sample content chunks for testing when no actual content is available
 const SAMPLE_CONTENT_CHUNKS: ContentChunk[] = [
@@ -84,9 +84,9 @@ export class VectorEmbeddingService {
     
     try {
       // Ensure content is indexed
-      const indexingStats = await contentIndexingService.getIndexingStats();
+      const indexingStats = await getIndexingStats();
       if (!indexingStats.lastIndexed) {
-        await contentIndexingService.indexAllContent();
+        await indexAllContent();
       }
       
       // Get content chunks using semanticSearch with an empty query

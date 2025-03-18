@@ -1,3 +1,5 @@
+'use server';
+
 /**
  * Content Indexing Service
  * 
@@ -8,26 +10,11 @@
 import fs from 'fs';
 import path from 'path';
 import fetch from 'node-fetch';
-import { 
-  scanContentPages, 
-  extractContentFromPage,
-  extractContentMetadata
-} from './utils';
+import { ContentSection } from './utils';
+import { ContentChunk } from './server-utils';
 
-// Interface for content chunks that will be indexed and searched
-export interface ContentChunk {
-  id: string;          // Unique identifier
-  title: string;       // Title of the content
-  content: string;     // The actual text content 
-  path: string;        // URL path to the content
-  source: string;      // Source of the content (e.g., page title)
-  section: string;     // Section the content belongs to
-  keywords: string[];  // Keywords for the content
-  priority: number;    // Priority/importance of the content
-  embedding?: number[];// Vector embedding for semantic search
-  relevance?: number;  // Search relevance score (0-1)
-  sectionId?: string;  // Optional section identifier for deep linking
-}
+// Re-export ContentChunk interface for backward compatibility
+export type { ContentChunk };
 
 // Interface for indexing statistics
 export interface IndexingStats {
@@ -45,6 +32,101 @@ let indexingStats: IndexingStats = {
   totalVectors: 0,
   lastIndexed: null
 };
+
+// Mock content for when real content is not indexed yet
+const MOCK_CONTENT = [
+  { 
+    title: 'Introduction to AI-Assisted Development',
+    path: '/introduction',
+    section: 'Getting Started',
+    content: 'AI-assisted development is revolutionizing how developers write code...',
+    sections: [
+      { id: 'benefits', title: 'Benefits', content: 'Improved productivity and code quality...' },
+      { id: 'getting-started', title: 'Getting Started', content: 'To get started with AI-assisted development...' }
+    ]
+  },
+  {
+    title: 'Understanding MCP',
+    path: '/mcp',
+    section: 'Core Concepts',
+    content: 'The Model Context Protocol defines how to structure context for AI models...',
+    sections: [
+      { id: 'core-concepts', title: 'Core Concepts', content: 'MCP is built around several key concepts...' },
+      { id: 'implementation', title: 'Implementation', content: 'Implementing MCP in your workflow...' }
+    ]
+  },
+  // Cursor mock content
+  {
+    title: 'Using Cursor for AI-Assisted Development',
+    path: '/cursor',
+    section: 'AI Tools',
+    content: 'Cursor is an AI-first code editor designed to enhance developer productivity through built-in AI assistance. It provides features like code completion, refactoring help, and natural language explanations of code.',
+    sections: [
+      {
+        id: 'features',
+        title: 'Key Features',
+        content: `Cursor offers a range of AI-powered features:
+          - Intelligent code completion that understands context
+          - Natural language interface for code generation
+          - Built-in AI chat for answering coding questions
+          - Code refactoring suggestions
+          - Explanation of complex code blocks
+          - Automatic bug fixing assistance`
+      },
+      {
+        id: 'shortcuts',
+        title: 'Keyboard Shortcuts',
+        content: `Cursor keyboard shortcuts:
+          - Ctrl+Enter (Cmd+Enter on Mac): Send a message to the AI assistant
+          - Ctrl+K: Open command palette
+          - Ctrl+/ (Cmd+/ on Mac): Toggle comment
+          - Ctrl+Space: Trigger AI code completion
+          - Ctrl+Shift+A: Ask AI about selected code`
+      },
+      {
+        id: 'getting-started',
+        title: 'Getting Started',
+        content: `To get started with Cursor:
+          1. Download Cursor from cursor.so
+          2. Install and open the application
+          3. Open an existing project or create a new one
+          4. Use Ctrl+Enter to activate the AI assistant
+          5. Begin asking questions or requesting code generation`
+      }
+    ]
+  }
+];
+
+/**
+ * Generate a simple vector embedding for content
+ * This is a fallback algorithm when API is not available
+ */
+function generateSimpleEmbedding(content: string): number[] {
+  // Count word frequencies
+  const words = content.toLowerCase().split(/\W+/).filter(Boolean);
+  const wordFreq: Record<string, number> = {};
+  
+  words.forEach(word => {
+    wordFreq[word] = (wordFreq[word] || 0) + 1;
+  });
+  
+  // Create a simple 100-dimension vector
+  const dimensions = 100;
+  const embedding = new Array(dimensions).fill(0);
+  
+  Object.entries(wordFreq).forEach(([word, freq]) => {
+    const hashCode = word.split('').reduce((acc, char) => {
+      return char.charCodeAt(0) + ((acc << 5) - acc);
+    }, 0);
+    
+    const index = Math.abs(hashCode) % dimensions;
+    embedding[index] += freq;
+  });
+  
+  // Normalize the vector
+  const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
+  return embedding.map(val => val / (magnitude || 1));
+}
 
 /**
  * Generate embeddings using Open Router API
@@ -91,37 +173,6 @@ async function generateOpenRouterEmbedding(content: string): Promise<number[]> {
 }
 
 /**
- * Generate a simple vector embedding for content
- * This is a fallback algorithm when API is not available
- */
-function generateSimpleEmbedding(content: string): number[] {
-  // Count word frequencies
-  const words = content.toLowerCase().split(/\W+/).filter(Boolean);
-  const wordFreq: Record<string, number> = {};
-  
-  words.forEach(word => {
-    wordFreq[word] = (wordFreq[word] || 0) + 1;
-  });
-  
-  // Create a simple 100-dimension vector
-  const dimensions = 100;
-  const embedding = new Array(dimensions).fill(0);
-  
-  Object.entries(wordFreq).forEach(([word, freq]) => {
-    const hashCode = word.split('').reduce((acc, char) => {
-      return char.charCodeAt(0) + ((acc << 5) - acc);
-    }, 0);
-    
-    const index = Math.abs(hashCode) % dimensions;
-    embedding[index] += freq;
-  });
-  
-  // Normalize the vector
-  const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
-  return embedding.map(val => val / (magnitude || 1));
-}
-
-/**
  * Calculate cosine similarity between two vectors
  */
 function calculateCosineSimilarity(a: number[], b: number[]): number {
@@ -150,7 +201,46 @@ function calculateCosineSimilarity(a: number[], b: number[]): number {
 }
 
 /**
- * Index all content pages and generate embeddings
+ * Extract metadata from route
+ */
+function extractMetadataFromRoute(route: string, section: string, title: string): {
+  section: string;
+  title: string;
+  priority: number;
+} {
+  // Determine priority (main pages have higher priority)
+  const depth = route.split('/').filter(Boolean).length;
+  const priority = Math.max(1, 5 - depth) / 5; // 1.0 for main pages, lower for deeper pages
+  
+  return {
+    section,
+    title,
+    priority
+  };
+}
+
+/**
+ * Save indexing stats to a file
+ */
+function saveIndexingStats() {
+  try {
+    const dataDir = path.join(process.cwd(), '.data');
+    
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    
+    fs.writeFileSync(
+      path.join(dataDir, 'indexing-stats.json'),
+      JSON.stringify(indexingStats)
+    );
+  } catch (error) {
+    console.error('Failed to save indexing stats:', error);
+  }
+}
+
+/**
+ * Index all content pages and generate embeddings using mock data
  */
 export async function indexAllContent({ 
   useAPI = true 
@@ -165,127 +255,43 @@ export async function indexAllContent({
   contentChunks = [];
   
   try {
-    // Scan for actual content pages instead of using mock data
-    const contentFiles = await scanContentPages();
-    console.log(`Found ${contentFiles.length} content pages to index`);
+    console.log(`Indexing mock content in development mode`);
     
     let chunksCreated = 0;
     let vectorsStored = 0;
     
-    // Process each file
-    for (const filePath of contentFiles) {
-      // Extract chunks from this page
-      const pageChunks = await extractContentFromPage(filePath);
-      
-      // Generate embeddings for each chunk
-      for (const chunk of pageChunks) {
-        chunk.embedding = useAPI 
-          ? await generateOpenRouterEmbedding(chunk.content)
-          : generateSimpleEmbedding(chunk.content);
-          
-        // Add to the chunks array
-        contentChunks.push(chunk);
-        chunksCreated++;
-        vectorsStored++;
-      }
-      
-      console.log(`Indexed ${filePath} - created ${pageChunks.length} chunks`);
-    }
-    
-    // Add mock cursor content until we have a real page for it
-    if (!contentChunks.some(chunk => chunk.path === '/cursor')) {
-      const cursorPage = {
-        id: `page:/cursor`,
-        title: 'Using Cursor for AI-Assisted Development',
-        content: 'Cursor is an AI-first code editor designed to enhance developer productivity through built-in AI assistance. It provides features like code completion, refactoring help, and natural language explanations of code.',
-        path: '/cursor',
-        source: 'Using Cursor for AI-Assisted Development',
-        section: 'AI Tools',
-        keywords: ['cursor', 'code editor', 'ai', 'development', 'ide', 'tool'],
-        priority: 1
-      };
-      
-      const cursorContent = `
-        Cursor is an intelligent code editor with built-in AI capabilities that helps developers write, understand, and transform code efficiently.
-        
-        Key features of Cursor include:
-        
-        1. AI-Powered Code Completion - Write code faster with context-aware suggestions
-        2. Natural Language Commands - Ask questions about your code in plain English
-        3. Code Explanation - Get detailed explanations of complex code segments
-        4. Refactoring Assistance - Intelligent help with code restructuring
-        5. Error Resolution - Get help fixing bugs and resolving errors
-        
-        Keyboard shortcuts in Cursor:
-        - Ctrl+Enter (Cmd+Enter on Mac): Send a message to the AI assistant
-        - Ctrl+K: Open command palette
-        - Ctrl+/ (Cmd+/ on Mac): Toggle comment
-        
-        Getting Started with Cursor:
-        1. Download and install Cursor from cursor.so
-        2. Open your project or create a new one
-        3. Use Ctrl+Enter to interact with the AI assistant
-        4. Ask questions about your code or request code generation
-      `;
-      
-      // Create the main page chunk
-      const cursorPageChunk: ContentChunk = {
-        ...cursorPage,
+    // Process mock content
+    for (const page of MOCK_CONTENT) {
+      // Add the main page
+      const pageChunk: ContentChunk = {
+        id: `page:${page.path}`,
+        title: page.title,
+        content: page.content,
+        path: page.path,
+        source: page.title,
+        section: page.section,
+        keywords: [page.title, page.section],
+        priority: 1,
         embedding: useAPI 
-          ? await generateOpenRouterEmbedding(cursorPage.content)
-          : generateSimpleEmbedding(cursorPage.content)
+          ? await generateOpenRouterEmbedding(page.content)
+          : generateSimpleEmbedding(page.content)
       };
       
-      contentChunks.push(cursorPageChunk);
+      contentChunks.push(pageChunk);
       chunksCreated++;
       vectorsStored++;
       
-      // Add detailed sections for Cursor
-      const cursorSections = [
-        {
-          id: 'features',
-          title: 'Key Features',
-          content: `Cursor offers a range of AI-powered features:
-            - Intelligent code completion that understands context
-            - Natural language interface for code generation
-            - Built-in AI chat for answering coding questions
-            - Code refactoring suggestions
-            - Explanation of complex code blocks
-            - Automatic bug fixing assistance`
-        },
-        {
-          id: 'shortcuts',
-          title: 'Keyboard Shortcuts',
-          content: `Cursor keyboard shortcuts:
-            - Ctrl+Enter (Cmd+Enter on Mac): Send a message to the AI assistant
-            - Ctrl+K: Open command palette
-            - Ctrl+/ (Cmd+/ on Mac): Toggle comment
-            - Ctrl+Space: Trigger AI code completion
-            - Ctrl+Shift+A: Ask AI about selected code`
-        },
-        {
-          id: 'getting-started',
-          title: 'Getting Started',
-          content: `To get started with Cursor:
-            1. Download Cursor from cursor.so
-            2. Install and open the application
-            3. Open an existing project or create a new one
-            4. Use Ctrl+Enter to activate the AI assistant
-            5. Begin asking questions or requesting code generation`
-        }
-      ];
-      
-      // Add each section for Cursor
-      for (const section of cursorSections) {
+      // Add each section
+      for (const section of page.sections) {
         const sectionChunk: ContentChunk = {
-          id: `section:/cursor:${section.id}`,
-          title: `Using Cursor - ${section.title}`,
+          id: `section:${page.path}:${section.id}`,
+          title: `${page.title} - ${section.title}`,
           content: section.content,
-          path: '/cursor',
-          source: 'Using Cursor for AI-Assisted Development',
-          section: 'AI Tools',
-          keywords: ['cursor', 'code editor', section.title.toLowerCase()],
-          priority: 1,
+          path: page.path,
+          source: page.title,
+          section: page.section,
+          keywords: [page.title, section.title],
+          priority: 0.9, // Slightly lower priority than the page
           sectionId: section.id,
           embedding: useAPI 
             ? await generateOpenRouterEmbedding(section.content)
@@ -297,7 +303,7 @@ export async function indexAllContent({
         vectorsStored++;
       }
       
-      console.log('Added mock Cursor content with 4 chunks');
+      console.log(`Indexed ${page.path} - created ${1 + page.sections.length} chunks`);
     }
     
     // Update stats
@@ -321,26 +327,6 @@ export async function indexAllContent({
   } catch (error) {
     console.error('Error indexing content:', error);
     throw error;
-  }
-}
-
-/**
- * Save indexing stats to a file
- */
-function saveIndexingStats() {
-  try {
-    const dataDir = path.join(process.cwd(), '.data');
-    
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-    
-    fs.writeFileSync(
-      path.join(dataDir, 'indexing-stats.json'),
-      JSON.stringify(indexingStats)
-    );
-  } catch (error) {
-    console.error('Failed to save indexing stats:', error);
   }
 }
 
@@ -604,106 +590,4 @@ export async function hybridSearch(
     .filter(chunk => (chunk.relevance || 0) >= threshold)
     .sort((a, b) => (b.relevance || 0) - (a.relevance || 0))
     .slice(0, limit);
-}
-
-/**
- * ContentIndexingService class to manage content indexing and searching
- */
-export class ContentIndexingService {
-  private contentChunks: ContentChunk[] = [];
-  private indexingStats: IndexingStats = {
-    totalPages: 0,
-    totalChunks: 0,
-    totalVectors: 0,
-    lastIndexed: null
-  };
-
-  constructor() {
-    // Initialize with default values
-    this.loadIndexingStats();
-  }
-
-  /**
-   * Index all content pages and generate embeddings
-   */
-  async indexAllContent({ 
-    useAPI = true 
-  }: { 
-    useAPI?: boolean 
-  } = {}): Promise<{
-    pagesIndexed: number;
-    chunksCreated: number;
-    vectorsStored: number;
-  }> {
-    // Use the existing implementation
-    return indexAllContent({ useAPI });
-  }
-
-  /**
-   * Get current indexing statistics
-   */
-  async getIndexingStats(): Promise<IndexingStats> {
-    return getIndexingStats();
-  }
-
-  /**
-   * Perform semantic search across indexed content
-   */
-  async semanticSearch(
-    query: string,
-    options: {
-      limit?: number;
-      threshold?: number;
-      useAPI?: boolean;
-      section?: string;
-      boostFields?: {
-        title?: number;
-        keywords?: number;
-        priority?: number;
-      };
-    } = {}
-  ): Promise<ContentChunk[]> {
-    return semanticSearch(query, options);
-  }
-  
-  /**
-   * Perform keyword search across indexed content
-   */
-  async keywordSearch(
-    query: string,
-    options: {
-      limit?: number;
-      threshold?: number;
-      section?: string;
-    } = {}
-  ): Promise<ContentChunk[]> {
-    return keywordSearch(query, options);
-  }
-  
-  /**
-   * Perform hybrid search combining semantic and keyword search
-   */
-  async hybridSearch(
-    query: string,
-    options: {
-      limit?: number;
-      threshold?: number;
-      useAPI?: boolean;
-      section?: string;
-      weightVector?: number;
-      weightKeyword?: number;
-    } = {}
-  ): Promise<ContentChunk[]> {
-    return hybridSearch(query, options);
-  }
-
-  /**
-   * Load indexing stats from storage (if available)
-   */
-  private loadIndexingStats(): void {
-    // This would typically load from a persistent store
-  }
-}
-
-// Export a singleton instance
-export const contentIndexingService = new ContentIndexingService(); 
+} 
