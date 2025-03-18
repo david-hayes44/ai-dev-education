@@ -16,7 +16,7 @@ interface NavigationContainerProps {
 export function NavigationContainer({ onClose }: NavigationContainerProps) {
   const [searchQuery, setSearchQuery] = React.useState("")
   const [isSearching, setIsSearching] = React.useState(false)
-  const { currentPage, recommendations, isLoading, search } = useNavigation()
+  const { currentPage, recommendations, isLoading, search, relatedPaths, pageTitle, pageDescription } = useNavigation()
   const router = useRouter()
   const searchInputRef = React.useRef<HTMLInputElement>(null)
   
@@ -46,7 +46,7 @@ export function NavigationContainer({ onClose }: NavigationContainerProps) {
     onClose()
   }
   
-  const relatedPages = currentPage?.relatedPaths || []
+  const relatedPages = relatedPaths || []
   
   return (
     <div className="flex flex-col h-full">
@@ -94,22 +94,20 @@ export function NavigationContainer({ onClose }: NavigationContainerProps) {
         ) : (
           <div className="space-y-6">
             {/* Current page information */}
-            {currentPage && (
-              <div className="space-y-3">
-                <h3 className="text-lg font-medium flex items-center">
-                  <Info className="h-4 w-4 mr-2 text-primary" />
-                  Current Page
-                </h3>
-                <div className="bg-accent/10 rounded-lg p-4">
-                  <h4 className="font-medium">{currentPage.title || "Untitled Page"}</h4>
-                  {currentPage.description && (
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {currentPage.description}
-                    </p>
-                  )}
-                </div>
+            <div className="space-y-3">
+              <h3 className="text-lg font-medium flex items-center">
+                <Info className="h-4 w-4 mr-2 text-primary" />
+                Current Page
+              </h3>
+              <div className="bg-accent/10 rounded-lg p-4">
+                <h4 className="font-medium">{pageTitle || "Untitled Page"}</h4>
+                {pageDescription && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {pageDescription}
+                  </p>
+                )}
               </div>
-            )}
+            </div>
             
             {/* Related pages */}
             {relatedPages.length > 0 && (
@@ -156,7 +154,7 @@ interface RecommendationCardProps {
     title: string
     description?: string
     summary?: string
-    confidence: number
+    confidence?: number
   }
   onClick: () => void
 }
@@ -165,8 +163,9 @@ function RecommendationCard({ recommendation, onClick }: RecommendationCardProps
   const { path, title, description, summary, confidence } = recommendation
   const isExternal = path.startsWith("http")
   
-  // Format confidence as percentage
-  const confidencePercent = Math.round(confidence * 100)
+  // Format confidence as percentage with default value if undefined
+  const confidenceValue = confidence || 0.5 // Default to 50% if undefined
+  const confidencePercent = Math.round(confidenceValue * 100)
   
   return (
     <div 
