@@ -108,7 +108,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(({
   }
 
   return (
-    <div className={cn("rounded-lg border bg-card", className)}>
+    <div className={cn("rounded-lg border bg-card chat-input-container", className)}>
       {/* File upload UI */}
       {showFileUpload && (
         <div className="p-4 border-b">
@@ -166,16 +166,21 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(({
         >
           <Paperclip className="h-5 w-5" />
         </Button>
-        <Textarea
-          ref={internalRef}
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          disabled={isLoading || isStreaming}
-          className="min-h-10 resize-none"
-          rows={content.split("\n").length > 3 ? content.split("\n").length : 1}
-        />
+        <div className="relative flex-1">
+          <Textarea
+            ref={internalRef}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            disabled={isLoading || isStreaming}
+            className="min-h-10 resize-none pr-16"
+            rows={content.split("\n").length > 3 ? content.split("\n").length : 1}
+          />
+          <div className="absolute right-2 bottom-2 text-xs text-muted-foreground pointer-events-none select-none bg-card bg-opacity-80 px-1 py-0.5 rounded">
+            Ctrl+Enter to send
+          </div>
+        </div>
         <Button 
           type="submit" 
           size="icon" 

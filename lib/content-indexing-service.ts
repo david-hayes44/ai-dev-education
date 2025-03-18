@@ -232,9 +232,113 @@ export async function indexAllContent({
     }
   }
   
+  // Add detailed Cursor content - this ensures the AI can find Cursor-related content
+  const cursorPage = {
+    id: `page:/cursor`,
+    title: 'Using Cursor for AI-Assisted Development',
+    content: 'Cursor is an AI-first code editor designed to enhance developer productivity through built-in AI assistance. It provides features like code completion, refactoring help, and natural language explanations of code.',
+    path: '/cursor',
+    source: 'Using Cursor for AI-Assisted Development',
+    section: 'AI Tools',
+    keywords: ['cursor', 'code editor', 'ai', 'development', 'ide', 'tool'],
+    priority: 1
+  };
+  
+  const cursorContent = `
+    Cursor is an intelligent code editor with built-in AI capabilities that helps developers write, understand, and transform code efficiently.
+    
+    Key features of Cursor include:
+    
+    1. AI-Powered Code Completion - Write code faster with context-aware suggestions
+    2. Natural Language Commands - Ask questions about your code in plain English
+    3. Code Explanation - Get detailed explanations of complex code segments
+    4. Refactoring Assistance - Intelligent help with code restructuring
+    5. Error Resolution - Get help fixing bugs and resolving errors
+    
+    Keyboard shortcuts in Cursor:
+    - Ctrl+Enter (Cmd+Enter on Mac): Send a message to the AI assistant
+    - Ctrl+K: Open command palette
+    - Ctrl+/ (Cmd+/ on Mac): Toggle comment
+    
+    Getting Started with Cursor:
+    1. Download and install Cursor from cursor.so
+    2. Open your project or create a new one
+    3. Use Ctrl+Enter to interact with the AI assistant
+    4. Ask questions about your code or request code generation
+  `;
+  
+  // Create the main page chunk
+  const cursorPageChunk: ContentChunk = {
+    ...cursorPage,
+    embedding: useAPI 
+      ? await generateOpenRouterEmbedding(cursorPage.content)
+      : generateSimpleEmbedding(cursorPage.content)
+  };
+  
+  contentChunks.push(cursorPageChunk);
+  chunksCreated++;
+  vectorsStored++;
+  
+  // Add detailed sections for Cursor
+  const cursorSections = [
+    {
+      id: 'features',
+      title: 'Key Features',
+      content: `Cursor offers a range of AI-powered features:
+        - Intelligent code completion that understands context
+        - Natural language interface for code generation
+        - Built-in AI chat for answering coding questions
+        - Code refactoring suggestions
+        - Explanation of complex code blocks
+        - Automatic bug fixing assistance`
+    },
+    {
+      id: 'shortcuts',
+      title: 'Keyboard Shortcuts',
+      content: `Cursor keyboard shortcuts:
+        - Ctrl+Enter (Cmd+Enter on Mac): Send a message to the AI assistant
+        - Ctrl+K: Open command palette
+        - Ctrl+/ (Cmd+/ on Mac): Toggle comment
+        - Ctrl+Space: Trigger AI code completion
+        - Ctrl+Shift+A: Ask AI about selected code`
+    },
+    {
+      id: 'getting-started',
+      title: 'Getting Started',
+      content: `To get started with Cursor:
+        1. Download Cursor from cursor.so
+        2. Install and open the application
+        3. Open an existing project or create a new one
+        4. Use Ctrl+Enter to activate the AI assistant
+        5. Begin asking questions or requesting code generation`
+    }
+  ];
+  
+  // Add each section for Cursor
+  for (const section of cursorSections) {
+    const sectionChunk: ContentChunk = {
+      id: `section:/cursor:${section.id}`,
+      title: `Using Cursor - ${section.title}`,
+      content: section.content,
+      path: '/cursor',
+      source: 'Using Cursor for AI-Assisted Development',
+      section: 'AI Tools',
+      keywords: ['cursor', 'code editor', section.title.toLowerCase()],
+      priority: 1,
+      sectionId: section.id,
+      embedding: useAPI 
+        ? await generateOpenRouterEmbedding(section.content)
+        : generateSimpleEmbedding(section.content)
+    };
+    
+    contentChunks.push(sectionChunk);
+    chunksCreated++;
+    vectorsStored++;
+  }
+  
   // Update stats
   indexingStats = {
-    totalPages: mockPages.length,
+    totalPages: mockPages.length + 1, // Add 1 for the Cursor page
     totalChunks: chunksCreated,
     totalVectors: vectorsStored,
     lastIndexed: new Date().toISOString()
@@ -244,7 +348,7 @@ export async function indexAllContent({
   saveIndexingStats();
   
   return {
-    pagesIndexed: mockPages.length,
+    pagesIndexed: mockPages.length + 1, // Add 1 for the Cursor page
     chunksCreated,
     vectorsStored
   };

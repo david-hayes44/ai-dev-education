@@ -21,7 +21,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { ContentReferences } from "./content-references"
-import { NavigationSuggestions } from "./navigation-suggestion"
+import { NavigationSuggestions, NavigationSuggestion } from "./navigation-suggestion"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import dynamic from "next/dynamic"
 import { Message, FileAttachment } from "@/lib/chat-service"
@@ -176,6 +176,17 @@ export default function ChatContainer({ onMessageSend }: ChatContainerProps) {
   const messages = contextMessages.length > 0 
     ? contextMessages
     : (currentSession?.messages || []);
+
+  // Handle starting a new chat
+  const handleNewChat = () => {
+    if (resetChatSession) {
+      resetChatSession();
+      // Focus the input after resetting
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+    }
+  };
 
   // Enhanced navigation functions with loading state
   const handleNavigateChunk = async (direction: 'next' | 'previous' | 'first' | 'last') => {
@@ -387,62 +398,100 @@ export default function ChatContainer({ onMessageSend }: ChatContainerProps) {
             </div>
           </div>
         )}
+        
+        {/* New Chat Button */}
+        <div className="px-4 py-2 flex justify-between items-center border-b">
+          <h2 className="font-medium text-sm">Chat with AI Tutor</h2>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1"
+                  onClick={handleNewChat}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span>New Chat</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Start a new conversation</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+        
         <ScrollArea className="flex-1 p-4">
-          {messages.length === 0 ? (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-muted-foreground text-sm">
-                Start a conversation with the AI tutor...
-              </p>
+          <div className="max-w-3xl mx-auto space-y-6">
+            {/* System message for context */}
+            <div className="bg-muted/30 px-3 py-2 rounded-md">
+              <div className="flex items-start gap-3">
+                <Info className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p>Ask me anything about AI development or MCP.</p>
+                  <p>I can help explain concepts, provide code examples, and guide you through AI concepts.</p>
+                </div>
+              </div>
             </div>
-          ) : (
-            <div className={cn(
-              "space-y-4 transition-opacity duration-200",
-              isChunkLoading ? "opacity-50" : "opacity-100"
-            )}>
-              {messages.map((message: Message) => (
-                <ChatMessage key={message.id} message={message} />
-              ))}
-              {isTyping && (
-                <ChatMessage
-                  message={{
-                    id: "typing",
-                    role: "assistant",
-                    content: "",
-                    timestamp: Date.now(),
-                    metadata: { type: "loading" },
-                  }}
-                />
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-          )}
-        </ScrollArea>
-        
-        {/* Show relevant content section */}
-        {(relevantContent?.length > 0 || isSearchingContent) && (
-          <div className="border-t p-2">
-            <ContentReferences 
-              references={relevantContent || []} 
-              isSearching={isSearchingContent} 
-            />
+
+            {/* Messages */}
+            {messages.map((message) => (
+              <ChatMessage 
+                key={message.id} 
+                message={message} 
+              />
+            ))}
+            {isTyping && !messages.some(m => m.isStreaming) && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <div className="flex items-center space-x-1">
+                  <div className="w-2 h-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-2 h-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '200ms' }}></div>
+                  <div className="w-2 h-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '400ms' }}></div>
+                </div>
+                <span className="text-sm">AI Tutor is thinking...</span>
+              </div>
+            )}
+            
+            <div ref={messagesEndRef} />
           </div>
-        )}
-        
-        {/* Show navigation suggestions when available */}
-        {navigationSuggestions.length > 0 && (
-          <div className="border-t p-2">
-            <NavigationSuggestions suggestions={navigationSuggestions} />
+        </ScrollArea>
+
+        {/* Navigation Recommendations based on query */}
+        {navigationSuggestions && navigationSuggestions.length > 0 && (
+          <div className="px-4 py-3 border-t bg-muted/20">
+            <h4 className="text-sm font-medium mb-2">Suggested Content</h4>
+            <div className="flex items-center gap-3 overflow-x-auto pb-2 snap-x">
+              {navigationSuggestions.map((suggestion, index) => (
+                <div key={index} className="snap-start flex-shrink-0">
+                  <NavigationSuggestion
+                    suggestion={suggestion}
+                    size="sm"
+                    showConfidence={true}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
-        {/* Chat input section */}
-        <div className="p-4 border-t relative">
-          <ChatInput 
-            onSubmit={handleSendMessage}
-            isLoading={isTyping}
-            placeholder="Ask about AI development or MCP..."
-            ref={inputRef}
-          />
+        {/* Chat Input */}
+        <div className="p-4 border-t">
+          <div className="max-w-3xl mx-auto">
+            <ChatInput
+              ref={inputRef}
+              onSubmit={async (content, attachments) => {
+                if (sendStreamingMessage) {
+                  await sendStreamingMessage(content, attachments);
+                }
+                
+                // Call the onMessageSend prop if provided
+                if (onMessageSend) {
+                  onMessageSend(content);
+                }
+              }}
+              isLoading={isLoading}
+              isStreaming={messages.some(m => m.isStreaming)}
+            />
+          </div>
         </div>
       </div>
     </ErrorBoundary>
