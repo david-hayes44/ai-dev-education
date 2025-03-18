@@ -325,4 +325,69 @@ export async function semanticSearch(
       ...result.chunk,
       relevance: result.similarity
     }));
-} 
+}
+
+/**
+ * ContentIndexingService class to manage content indexing and searching
+ */
+export class ContentIndexingService {
+  private contentChunks: ContentChunk[] = [];
+  private indexingStats: IndexingStats = {
+    totalPages: 0,
+    totalChunks: 0,
+    totalVectors: 0,
+    lastIndexed: null
+  };
+
+  constructor() {
+    // Initialize with default values
+    this.loadIndexingStats();
+  }
+
+  /**
+   * Index all content pages and generate embeddings
+   */
+  async indexAllContent({ 
+    useAPI = true 
+  }: { 
+    useAPI?: boolean 
+  } = {}): Promise<{
+    pagesIndexed: number;
+    chunksCreated: number;
+    vectorsStored: number;
+  }> {
+    // Use the existing implementation
+    return indexAllContent({ useAPI });
+  }
+
+  /**
+   * Get current indexing statistics
+   */
+  async getIndexingStats(): Promise<IndexingStats> {
+    return getIndexingStats();
+  }
+
+  /**
+   * Perform semantic search across indexed content
+   */
+  async semanticSearch(
+    query: string,
+    options: {
+      limit?: number;
+      threshold?: number;
+      useAPI?: boolean;
+    } = {}
+  ): Promise<ContentChunk[]> {
+    return semanticSearch(query, options);
+  }
+
+  /**
+   * Load indexing stats from storage (if available)
+   */
+  private loadIndexingStats(): void {
+    // This would typically load from a persistent store
+  }
+}
+
+// Export a singleton instance
+export const contentIndexingService = new ContentIndexingService(); 
