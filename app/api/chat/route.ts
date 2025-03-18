@@ -401,9 +401,12 @@ export async function POST(req: NextRequest) {
       if (conceptExplanation.isConceptExplanation) {
         // Generate structured explanation using schema
         try {
+          // Fix: Ensure the parameter structure matches what createEnhancedConceptSchema expects
+          const knowledgeLevel = detectKnowledgeLevel(message);
+          const includeCode = isCodeExampleRequested(message);
           const conceptSchema = createEnhancedConceptSchema({
-            knowledgeLevel: detectKnowledgeLevel(message),
-            includeCode: isCodeExampleRequested(message)
+            knowledgeLevel,
+            includeCode
           });
           
           // Streaming full response
