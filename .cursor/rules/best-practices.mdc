@@ -1,4 +1,9 @@
 ---
+description: 
+globs: 
+alwaysApply: true
+---
+---
 description: Use this for best practices when you're creating new features. 
 globs: 
 alwaysApply: true
