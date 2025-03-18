@@ -42,7 +42,9 @@ export default function MCPBasics() {
         }
       ]}
     >
-      <SimpleTOC />
+      <div className="sticky top-6">
+        <SimpleTOC />
+      </div>
       
       <h2 id="what-is-mcp">What is MCP?</h2>
       <p>
