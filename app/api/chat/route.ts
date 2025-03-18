@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendChatCompletion, ChatMessage, ChatCompletionRequest, enrichMessagesWithContext, createEnhancedConceptSchema } from '@/lib/openrouter';
 import OpenAI from 'openai';
-import { ContentChunk, contentIndexingService } from '@/lib/content-indexing-service';
+import { ContentChunk, semanticSearch } from '@/lib/content-indexing-service';
 import { NavigationSuggestion } from '@/components/chat/navigation-suggestion';
 import { vectorEmbeddingService } from '@/lib/vector-embedding-service';
 import { ContentReference } from '@/components/chat/content-references';
@@ -140,34 +140,14 @@ function isNavigationRequest(query: string): boolean {
     !lowerQuery.includes("how does");
 }
 
-// Enhanced search function that uses semantic search when available
+/**
+ * Search for content related to a query
+ * Uses semantic search to find relevant content
+ */
 async function searchContent(query: string, limit: number = 5): Promise<ContentChunk[]> {
   try {
-    // First try semantic search
-    try {
-      // Ensure the vector service is initialized
-      if (!vectorEmbeddingService.isInitialized) {
-        await vectorEmbeddingService.initialize();
-      }
-      
-      // Perform semantic search
-      const semanticResults = await vectorEmbeddingService.semanticSearch(query, limit);
-      
-      // If we got results, return them
-      if (semanticResults && semanticResults.length > 0) {
-        console.log(`Semantic search found ${semanticResults.length} results for '${query}'`);
-        return semanticResults.map(result => result.chunk);
-      }
-    } catch (error) {
-      console.warn('Semantic search failed, falling back to keyword search:', error);
-    }
-    
-    // Fall back to basic content search
-    if (!contentIndexingService.isIndexed) {
-      await contentIndexingService.indexContent();
-    }
-    
-    return contentIndexingService.search(query, limit);
+    // Use semantic search directly
+    return await semanticSearch(query, { limit });
   } catch (error) {
     console.error('Content search error:', error);
     return [];
@@ -338,24 +318,40 @@ function extractTopics(query: string, response: string): string[] {
 
 // Extract content references from a response
 function extractContentReferences(query: string, relevantContent: ContentChunk[]): ContentReference[] {
-  if (!relevantContent || relevantContent.length === 0) {
+  try {
+    if (!relevantContent || relevantContent.length === 0) {
+      return [];
+    }
+    
+    // Extract the most relevant content chunks
+    const topChunks = relevantContent.slice(0, 3);
+    
+    // Convert to ContentReference format
+    const references: ContentReference[] = topChunks.map(chunk => {
+      // Calculate relevance score - if not provided, use a default
+      const relevance = chunk.relevance !== undefined 
+        ? chunk.relevance 
+        : 0.7; // Default relevance for chunks without a score
+      
+      // Create a short excerpt from the content
+      const excerpt = chunk.content.length > 120 
+        ? chunk.content.substring(0, 120) + '...'
+        : chunk.content;
+        
+      return {
+        title: chunk.title,
+        path: chunk.path,
+        sectionId: chunk.sectionId,
+        excerpt,
+        relevance
+      };
+    });
+    
+    return references;
+  } catch (error: unknown) {
+    console.error('Error extracting content references:', error);
     return [];
   }
-
-  // Convert ContentChunk[] to ContentReference[]
-  return relevantContent.map((chunk, index) => {
-    // Calculate a simple relevance score - in a real implementation,
-    // this would use semantic similarity
-    let relevance = 0.5 + (0.5 / (index + 1));
-    
-    return {
-      title: chunk.title,
-      path: chunk.path,
-      sectionId: chunk.section?.toLowerCase().replace(/\s+/g, '-'),
-      excerpt: chunk.content.substring(0, 120) + '...',
-      relevance: relevance,
-    };
-  });
 }
 
 // Enhanced POST handler that integrates semantic search and content references
@@ -377,11 +373,12 @@ export async function POST(req: NextRequest) {
     const isNavRequest = isNavigationRequest(message);
     
     // Prepare context data
-    let relevantContent: ContentChunk[] = context.relevantContent || [];
+    const relevantContent: ContentChunk[] = context.relevantContent || [];
     
     // If we don't have relevant content yet, search for it
     if (relevantContent.length === 0) {
-      relevantContent = await searchContent(message, 5);
+      const searchResults = await searchContent(message, 5);
+      relevantContent.push(...searchResults);
     }
     
     // Update context with relevant content
@@ -390,93 +387,124 @@ export async function POST(req: NextRequest) {
       relevantContent
     };
     
-    // Generate context message with relevant content
+    // Add system context message
     const contextMessage = generateContextMessage(enhancedContext);
     
-    // Prepare system message
-    const systemPrompt = getSystemPrompt();
-    
-    // Prepare messages array for the chat completion
-    const chatMessages = [
-      { role: 'system' as MessageRole, content: systemPrompt },
-      ...(contextMessage ? [{ role: 'system' as MessageRole, content: contextMessage }] : []),
-      ...messages.map(m => ({ role: m.role, content: m.content })),
-      { role: 'user' as MessageRole, content: message }
-    ];
-    
-    // If this is a concept explanation, provide a schema to the LLM
-    let response;
-    if (conceptExplanation.isConceptExplanation) {
-      const knowledgeLevel = detectKnowledgeLevel(message);
-      const includeCode = isCodeExampleRequested(message);
-      
-      const functionName = 'generateConceptExplanation';
-      // Get the concept schema which returns a Record<string, unknown>
-      const schema = createEnhancedConceptSchema();
-      
-      // Use the OpenAI SDK types directly instead of our ChatCompletionRequest
-      response = await openai.chat.completions.create({
-        model: model,
-        messages: chatMessages,
-        temperature: 0.7,
-        max_tokens: 2048,
-        functions: [{ // Use 'functions' for OpenRouter API which matches OpenAI v1 API
-          name: functionName,
-          description: "Generate a structured explanation of an AI concept",
-          parameters: schema // The schema will be used as the parameters object
-        }],
-        function_call: { name: functionName } // Use function_call for OpenRouter API
-      });
-    } else {
-      // Regular chat completion
-      response = await openai.chat.completions.create({
-        model: model,
-        messages: chatMessages,
-        temperature: 0.7,
-        max_tokens: 2048
-      });
-    }
-    
-    // Extract response from OpenAI
+    // Call OpenRouter if API key is available
+    const openRouterApiKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY;
     let content = '';
-    let functionResponse = null;
+    let navigationSuggestions: NavigationSuggestion[] = [];
+    let followUpQuestions: string[] = [];
     
-    if (response.choices[0].message.tool_calls && response.choices[0].message.tool_calls.length > 0) {
-      const toolCall = response.choices[0].message.tool_calls[0];
-      if (toolCall.type === 'function' && toolCall.function.arguments) {
-        functionResponse = JSON.parse(toolCall.function.arguments);
-        
-        // Format the concept explanation
-        const concept = functionResponse.concept;
-        const explanation = functionResponse.explanation[detectKnowledgeLevel(message)];
-        const examples = functionResponse.examples || [];
-        const related = functionResponse.relatedConcepts || [];
-        
-        content = `## ${concept}\n\n${explanation}\n\n`;
-        
-        if (examples.length > 0) {
-          content += `### Example\n\`\`\`\n${examples[0]}\n\`\`\`\n\n`;
-        }
-        
-        if (related.length > 0) {
-          content += `### Related Concepts\n`;
-          related.forEach((r: any) => {
-            content += `- ${r.name}\n`;
+    if (openRouterApiKey) {
+      // If this is potentially a concept explanation, use enhanced prompt
+      if (conceptExplanation.isConceptExplanation) {
+        // Generate structured explanation using schema
+        try {
+          const conceptSchema = createEnhancedConceptSchema({
+            knowledgeLevel: detectKnowledgeLevel(message),
+            includeCode: isCodeExampleRequested(message)
           });
+          
+          // Streaming full response
+          const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${openRouterApiKey}`,
+              'HTTP-Referer': process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000',
+              'X-Title': 'AI Education Platform'
+            },
+            body: JSON.stringify({
+              model: 'anthropic/claude-3-sonnet:beta',
+              messages: [
+                {
+                  role: 'system',
+                  content: `You are an AI education assistant focused on explaining AI concepts clearly and accurately. ${contextMessage}
+                  
+When explaining AI concepts, use this JSON schema to structure your response:
+${JSON.stringify(conceptSchema, null, 2)}
+
+Make sure your response is valid JSON that follows this schema exactly, with all required fields. Do not include any markdown formatting, just the pure JSON.`
+                },
+                ...messages.map((msg): { role: string; content: string } => ({ 
+                  role: msg.role, 
+                  content: msg.content 
+                })),
+                { role: 'user', content: message }
+              ],
+              response_format: { type: "json_object" }
+            })
+          });
+          
+          if (!response.ok) {
+            throw new Error(`OpenRouter API error: ${response.status}`);
+          }
+          
+          const responseData = await response.json() as { choices: [{ message: { content: string } }] };
+          content = responseData.choices[0].message.content;
+          
+          // Generate navigation suggestions and follow-up questions
+          navigationSuggestions = await generateNavigationSuggestions(message);
+          followUpQuestions = generateFollowUpQuestions(message, content);
+        } catch (error) {
+          console.error('Error generating structured concept explanation:', error);
+          content = `I apologize, but I encountered an error while trying to explain this concept. Please try asking in a different way or about a different topic.`;
+        }
+      } else {
+        // Regular chat response
+        try {
+          const systemPrompt = getSystemPrompt();
+          
+          // Add context-specific information to the system prompt
+          const fullSystemPrompt = `${systemPrompt}\n\n${contextMessage}`;
+          
+          // Streaming full response
+          const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${openRouterApiKey}`,
+              'HTTP-Referer': process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000',
+              'X-Title': 'AI Education Platform'
+            },
+            body: JSON.stringify({
+              model: 'anthropic/claude-3-haiku',
+              messages: [
+                { role: 'system', content: fullSystemPrompt },
+                ...messages.map((msg): { role: string; content: string } => ({ 
+                  role: msg.role, 
+                  content: msg.content 
+                })),
+                { role: 'user', content: message }
+              ]
+            })
+          });
+          
+          if (!response.ok) {
+            throw new Error(`OpenRouter API error: ${response.status}`);
+          }
+          
+          const responseData = await response.json() as { choices: [{ message: { content: string } }] };
+          content = responseData.choices[0].message.content;
+          
+          // Generate navigation suggestions
+          if (isNavRequest) {
+            navigationSuggestions = await generateNavigationSuggestions(message);
+          }
+          
+          // Generate follow-up questions
+          followUpQuestions = generateFollowUpQuestions(message, content);
+          
+        } catch (error) {
+          console.error('Error calling OpenRouter API:', error);
+          content = `I apologize, but I encountered an error while processing your request. Please try again later.`;
         }
       }
-    } else if (response.choices[0].message.content) {
-      content = response.choices[0].message.content;
+    } else {
+      // Fallback for when OpenRouter is not available
+      content = `I'm sorry, but I'm not fully configured yet. Please check that the OpenRouter API key is properly set up.`;
     }
-    
-    // Generate navigation suggestions if needed
-    let navigationSuggestions: NavigationSuggestion[] = [];
-    if (isNavRequest) {
-      navigationSuggestions = await generateNavigationSuggestions(message);
-    }
-    
-    // Generate follow-up questions
-    const followUpQuestions = generateFollowUpQuestions(message, content);
     
     // Extract content references
     const contentReferences = extractContentReferences(message, relevantContent);
