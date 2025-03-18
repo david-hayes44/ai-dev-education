@@ -1,7 +1,7 @@
 import { Metadata } from "next"
 import { Container } from "@/components/ui/container"
 import { PageHeader } from "@/components/page-header"
-import { TableOfContents } from "@/components/content"
+import { LegacyTableOfContents } from "@/components/content"
 import Link from "next/link"
 
 export const metadata: Metadata = {
@@ -20,7 +20,7 @@ export default function Page() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
           {/* Table of Contents - only visible on larger screens */}
           <div className="hidden lg:block lg:col-span-3">
-            <TableOfContents 
+            <LegacyTableOfContents 
               items={[
                 {
                   id: "introduction",

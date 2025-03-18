@@ -19,11 +19,13 @@ export interface ContentReference {
 interface ContentReferencesProps {
   references: ContentReference[]
   maxVisible?: number
+  isSearching?: boolean
 }
 
 export function ContentReferences({ 
   references, 
-  maxVisible = 3 
+  maxVisible = 3,
+  isSearching
 }: ContentReferencesProps) {
   const [showAll, setShowAll] = useState(false)
   

@@ -1,7 +1,7 @@
 import { Metadata } from "next"
 import { Container } from "@/components/ui/container"
 import { PageHeader } from "@/components/page-header"
-import { Callout, TableOfContents } from "@/components/content"
+import { Callout, LegacyTableOfContents } from "@/components/content"
 import Link from "next/link"
 
 export const metadata: Metadata = {
@@ -21,7 +21,7 @@ export default function Page() {
           {/* Table of Contents - sticky on left side */}
           <div className="hidden lg:block lg:col-span-3">
             <div className="sticky top-6">
-              <TableOfContents 
+              <LegacyTableOfContents 
                 items={[
                   {
                     id: "understanding-architecture",

@@ -5,7 +5,7 @@ import { ArrowRight, Code, Puzzle, Layers, ExternalLink, Github, BookOpen, Check
 import { Button } from "@/components/ui/button"
 import { Container } from "@/components/ui/container"
 import { PageHeader } from "@/components/page-header"
-import { TableOfContents } from "@/components/content"
+import { LegacyTableOfContents } from "@/components/content"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 
@@ -21,7 +21,7 @@ export default function MCPPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
           {/* Table of Contents - only visible on larger screens */}
           <div className="hidden lg:block lg:col-span-3">
-            <TableOfContents 
+            <LegacyTableOfContents 
               items={[
                 {
                   id: "what-is-mcp",

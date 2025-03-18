@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/page-header"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Code, Server, Database} from "lucide-react"
-import { TableOfContents } from "@/components/content"
+import { LegacyTableOfContents } from "@/components/content"
 
 export default function BuildingServersPage() {
   return (
@@ -20,7 +20,7 @@ export default function BuildingServersPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
           {/* Table of Contents - only visible on larger screens */}
           <div className="hidden lg:block lg:col-span-3">
-            <TableOfContents 
+            <LegacyTableOfContents 
               items={[
                 {
                   id: "getting-started",
