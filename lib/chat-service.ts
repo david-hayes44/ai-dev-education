@@ -857,7 +857,10 @@ export class ChatService {
       const streamingMessage = { ...placeholderMessage };
       let responseContent = "";
       
-      // ... existing streaming code ...
+      // In a real implementation, this is where streaming would happen
+      // and responseContent would be updated with each chunk received from the API
+      // For now, we'll just set it to a placeholder value
+      responseContent = placeholderMessage.content || "Response would appear here from streaming API";
       
       // Once streaming is complete, rechunk efficiently
       // We'll add a flag to indicate if we need to show loading state during rechunking

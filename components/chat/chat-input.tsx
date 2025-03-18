@@ -18,8 +18,8 @@ interface ChatInputProps {
   className?: string
 }
 
-// Convert to forwardRef to allow parent components to access the textarea
-export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(({
+// Create the component first without export
+const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(({
   onSubmit,
   isLoading,
   isStreaming = false,
@@ -187,4 +187,10 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(({
       </form>
     </div>
   )
-}) 
+})
+
+// Set display name
+ChatInputComponent.displayName = "ChatInput" 
+
+// Export as a named export
+export const ChatInput = ChatInputComponent 
