@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import TanstackClientProvider from "@/components/providers/tanstack-client-provider"
 import ClientLayout from "@/components/layout/client-layout"
 import { NavigationProvider } from "@/contexts/navigation-context"
+import { ChatProvider } from "@/contexts/chat-context"
 
 const fontSans = FontSans({
   subsets: ["latin"],
@@ -50,8 +51,11 @@ export default function RootLayout({
           >
             <AuthProvider>
               <NavigationProvider>
-                <ClientLayout>{children}</ClientLayout>
-                <Toaster />
+                <ChatProvider>
+                  <div className="relative flex min-h-screen flex-col">
+                    <div className="flex-1">{children}</div>
+                  </div>
+                </ChatProvider>
               </NavigationProvider>
             </AuthProvider>
           </ThemeProvider>

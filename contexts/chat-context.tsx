@@ -1,8 +1,11 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { ChatService, Message, ChatSession, AIModel } from '@/lib/chat-service';
 import { usePathname } from 'next/navigation';
+import { ContentChunk } from '@/lib/content-indexing-service';
+import { useContentSearch } from "@/hooks/use-content-search";
+import { useNavigation, type NavigationSuggestion } from "@/contexts/navigation-context";
 
 interface ChatContextType {
   sessions: ChatSession[];
@@ -13,6 +16,8 @@ interface ChatContextType {
   currentPage: string;
   selectedModel: string;
   availableModels: AIModel[];
+  relevantContent: ContentChunk[];
+  isSearchingContent: boolean;
   sendMessage: (content: string) => Promise<void>;
   sendStreamingMessage: (content: string) => Promise<void>;
   createSession: (initialTopic?: string) => void;
@@ -22,6 +27,12 @@ interface ChatContextType {
   setCategoryForSession: (id: string, category: string) => void;
   setCurrentPage: (page: string) => void;
   setModel: (modelId: string) => void;
+  messages: Message[];
+  isTyping: boolean;
+  inputValue: string;
+  setInputValue: (value: string) => void;
+  resetChat: () => void;
+  navigationSuggestions: NavigationSuggestion[];
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -38,6 +49,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [relevantContent, setRelevantContent] = useState<ContentChunk[]>([]);
+  const [isSearchingContent, setIsSearchingContent] = useState<boolean>(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isTyping, setIsTyping] = useState<boolean>(false);
+  const [inputValue, setInputValue] = useState<string>("");
+  const { searchContent, results, isSearching } = useContentSearch();
+  const [navigationSuggestions, setNavigationSuggestions] = useState<NavigationSuggestion[]>([]);
+  const navigation = useNavigation();
   
   // Track current page
   useEffect(() => {
@@ -79,34 +98,121 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     });
   }, [pathname]);
   
-  const sendMessage = async (content: string) => {
-    if (!chatService) return;
+  /**
+   * Fetch relevant content based on the user message
+   */
+  const fetchRelevantContent = async (message: string): Promise<ContentChunk[]> => {
+    if (!message.trim()) return [];
     
-    setIsLoading(true);
+    setIsSearchingContent(true);
     try {
-      await chatService.sendMessage(content);
-      setCurrentSession(chatService.getCurrentSession());
-      setSessions(chatService.getSessions());
-      setSessionsByCategory(chatService.getSessionsByCategory());
+      const response = await fetch(`/api/content-search?query=${encodeURIComponent(message)}&limit=3`);
+      
+      if (!response.ok) {
+        console.error(`Content search failed with status: ${response.status}`);
+        return [];
+      }
+      
+      const data = await response.json();
+      return data.results || [];
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('Error fetching relevant content:', error);
+      return [];
     } finally {
-      setIsLoading(false);
+      setIsSearchingContent(false);
     }
   };
   
-  // New function to send streaming messages
+  const processNavigationIntents = async (content: string) => {
+    const suggestions = await navigation.getNavigationSuggestions(content);
+    setNavigationSuggestions(suggestions);
+  };
+  
+  const sendMessage = useCallback(async (content: string) => {
+    if (content.trim() === "") return;
+    
+    // Add user message to chat
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content,
+      timestamp: Date.now(),
+    };
+    
+    setMessages((prev) => [...prev, userMessage]);
+    setIsTyping(true);
+    setInputValue("");
+    
+    try {
+      // Search for relevant content
+      await searchContent(content);
+      
+      // Process navigation intents
+      await processNavigationIntents(content);
+      
+      // Send message to chat service with content and context
+      let response: Message;
+      
+      try {
+        if (!chatService) {
+          throw new Error("Chat service not initialized");
+        }
+        
+        response = await chatService.sendMessage(
+          content, 
+          {
+            relevantContent: results || [],
+            currentPage: navigation.currentPage,
+            pageTitle: navigation.pageTitle,
+            pageDescription: navigation.pageDescription
+          }
+        );
+      } catch (error) {
+        // If the chat service throws an error, create an error message
+        response = {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: "I'm sorry, I encountered an error communicating with the AI service. Please try again later.",
+          timestamp: Date.now(),
+          metadata: { type: "error" },
+        };
+      }
+      
+      setMessages((prev) => [...prev, response]);
+    } catch (error) {
+      console.error("Error in chat process:", error);
+      
+      // Add error message
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: "I'm sorry, I encountered an error. Please try again.",
+        timestamp: Date.now(),
+        metadata: { type: "error" },
+      };
+      
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsTyping(false);
+    }
+  }, [results, searchContent, navigation, processNavigationIntents, chatService]);
+  
+  // Update the streaming message function
   const sendStreamingMessage = async (content: string) => {
     if (!chatService) return;
     
     setIsStreaming(true);
     try {
+      // Fetch relevant content first
+      const contentResults = await fetchRelevantContent(content);
+      setRelevantContent(contentResults);
+      
       // Create a placeholder for the assistant's response
       chatService.createAssistantMessagePlaceholder(content);
       setCurrentSession(chatService.getCurrentSession());
       
-      // Start streaming
-      await chatService.sendStreamingMessage(content, (partialMessage) => {
+      // Start streaming with the enriched context
+      await chatService.sendStreamingMessage(content, contentResults, (partialMessage) => {
         // Update the current session with the partial response to display in real-time
         setCurrentSession(chatService.getCurrentSession());
       });
@@ -181,6 +287,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   };
   
+  const resetChat = useCallback(() => {
+    setMessages([]);
+    if (chatService && typeof chatService.resetChat === 'function') {
+      chatService.resetChat();
+    }
+    setNavigationSuggestions([]);
+  }, [chatService]);
+  
   // Provide default values during SSR to prevent hydration mismatches
   const contextValue = {
     sessions,
@@ -191,6 +305,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     currentPage,
     selectedModel,
     availableModels,
+    relevantContent,
+    isSearchingContent,
     sendMessage,
     sendStreamingMessage,
     createSession,
@@ -199,7 +315,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     renameSession,
     setCategoryForSession,
     setCurrentPage: handleSetCurrentPage,
-    setModel: handleSetModel
+    setModel: handleSetModel,
+    messages,
+    isTyping,
+    inputValue,
+    setInputValue,
+    resetChat,
+    navigationSuggestions
   };
   
   return (

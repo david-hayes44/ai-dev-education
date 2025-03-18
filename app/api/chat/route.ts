@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendChatCompletion, ChatMessage, ChatCompletionRequest, enrichMessagesWithContext, createEnhancedConceptSchema } from '@/lib/openrouter';
+import OpenAI from 'openai';
+import { ContentChunk } from '@/lib/content-indexing-service';
 
 // List of AI-related topics we can provide structured explanations for
 const AI_TOPICS = [
@@ -11,6 +13,31 @@ const AI_TOPICS = [
   "agentic ai", "multimodal", "diffusion models", "gan", "stable diffusion", "openai",
   "anthropic", "claude", "gpt", "cursor", "langchain", "semantic kernel"
 ];
+
+// Server-side environment variables
+const apiKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY;
+const model = 'anthropic/claude-3-opus:1:0';
+
+// Define types
+interface ChatRequest {
+  message: string;
+  messages: Array<{
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+  }>;
+  context?: {
+    relevantContent?: ContentChunk[];
+    currentPage?: string;
+    pageTitle?: string;
+    pageDescription?: string;
+  };
+}
+
+// Initialize OpenAI client for OpenRouter
+const openai = new OpenAI({
+  apiKey: apiKey || '',
+  baseURL: 'https://openrouter.ai/api/v1',
+});
 
 // Function to detect if a query is asking for a concept explanation
 function isConceptExplanationQuery(query: string): { isConceptExplanation: boolean, topic?: string } {
@@ -92,131 +119,115 @@ function isNavigationRequest(query: string): boolean {
     !lowerQuery.includes("how does");
 }
 
+// Format relevant content for context
+function formatContentContext(content: ContentChunk[]): string {
+  if (!content || content.length === 0) {
+    return "";
+  }
+
+  return content
+    .map((chunk, index) => {
+      return `CONTENT ${index + 1}: ${chunk.title || "Untitled"}
+SOURCE: ${chunk.path || "Unknown"}
+---
+${chunk.content}
+---`;
+    })
+    .join("\n\n");
+}
+
+// Generate context message
+function generateContextMessage(context?: ChatRequest['context']): string {
+  let contextMessage = "";
+
+  // Add page context if available
+  if (context?.currentPage) {
+    contextMessage += `\nCURRENT PAGE: ${context.currentPage}\n`;
+    
+    if (context.pageTitle) {
+      contextMessage += `PAGE TITLE: ${context.pageTitle}\n`;
+    }
+    
+    if (context.pageDescription) {
+      contextMessage += `PAGE DESCRIPTION: ${context.pageDescription}\n`;
+    }
+    
+    contextMessage += "\n";
+  }
+
+  // Add relevant content if available
+  if (context?.relevantContent && context.relevantContent.length > 0) {
+    contextMessage += `\nRELEVANT CONTENT:\n${formatContentContext(context.relevantContent)}\n`;
+  }
+
+  return contextMessage;
+}
+
+// Get system prompt for initializing the chat
+function getSystemPrompt(): string {
+  return `You are AITutor, an educational assistant for the AI Dev Education platform. Your purpose is to help users understand AI development concepts and navigate the platform resources.
+
+When responding:
+- Be concise and informative, focusing on providing accurate information
+- When referencing platform resources, mention them specifically
+- Adapt your responses based on the current page context provided
+- Provide context-aware help based on the user's current location in the documentation
+- Suggest relevant pages when appropriate based on the user's questions
+
+The platform covers topics including:
+- Machine-Cognition Protocol (MCP)
+- AI Agent development
+- Prompt engineering
+- LLM systems
+- Multimodal AI
+- AI safety and alignment`;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { messages, currentPage, model, stream = false } = await req.json();
-    
-    if (!messages || !Array.isArray(messages)) {
-      return NextResponse.json({ error: 'Invalid request format' }, { status: 400 });
-    }
-    
-    // Get the user's query (last message)
-    const userQuery = messages.findLast((m: ChatMessage) => m.role === 'user')?.content || '';
-    
-    // Enhance messages with context based on current page if available
-    const enhancedMessages: ChatMessage[] = enrichMessagesWithContext(messages, currentPage);
-    
-    // Check if this is a concept explanation query
-    const { isConceptExplanation, topic } = isConceptExplanationQuery(userQuery);
-    const isNavigation = isNavigationRequest(userQuery);
-    
-    let request: ChatCompletionRequest;
-    
-    if (isConceptExplanation && topic) {
-      const knowledgeLevel = detectKnowledgeLevel(userQuery);
-      const includeCode = isCodeExampleRequested(userQuery);
-      
-      // Add system message to guide the structured response
-      enhancedMessages.unshift({
-        role: 'system',
-        content: `You are an AI tutor for the AI-Dev Education platform. The user is asking about the concept of ${topic}. 
-Provide a comprehensive explanation at the ${knowledgeLevel} level. ${includeCode ? 'Include relevant code examples.' : ''} 
-Your response should be informative, accurate, and tailored to the user's knowledge level.`
-      });
-      
-      // Set up the request with JSON schema for structured output
-      request = {
-        messages: enhancedMessages,
-        model: model || 'google/gemini-2.0-flash-thinking-exp:free',
-        temperature: 0.7,
-        max_tokens: 2000,
-        stream,
-        safe_mode: 'standard',
-        response_format: {
-          type: "json_schema",
-          json_schema: createEnhancedConceptSchema()
-        }
-      };
-    } else if (isNavigation) {
-      // Add system message to guide navigation assistance
-      enhancedMessages.unshift({
-        role: 'system',
-        content: `You are a navigation assistant for the AI-Dev Education platform. 
-The user is looking for help finding information or navigating to a specific section. 
-Provide clear directions to relevant content, including links when possible.
-Do NOT redirect the user automatically. Instead, provide helpful information about where they can find content.
-Your goal is to help them find what they're looking for efficiently.`
-      });
-      
-      request = {
-        messages: enhancedMessages,
-        model: model || 'google/gemini-2.0-flash-thinking-exp:free',
-        temperature: 0.7,
-        max_tokens: 1500,
-        stream,
-        safe_mode: 'standard'
-      };
-    } else {
-      // Regular chat request
-      enhancedMessages.unshift({
-        role: 'system',
-        content: `You are an AI tutor for the AI-Dev Education platform. You help users learn about AI-assisted development and Model Context Protocol (MCP). 
-Be accurate, helpful, and adapt your explanations to the user's level of understanding. 
-When appropriate, suggest relevant sections of the platform where the user can learn more.`
-      });
-      
-      request = {
-        messages: enhancedMessages,
-        model: model || 'google/gemini-2.0-flash-thinking-exp:free',
-        temperature: 0.7,
-        max_tokens: 1500,
-        stream,
-        safe_mode: 'standard'
-      };
-    }
-    
-    // Handle streaming responses
-    if (stream) {
-      const streamResponse = await sendChatCompletion(request);
-      
-      if (!(streamResponse instanceof ReadableStream)) {
-        return NextResponse.json({ error: 'Failed to get streaming response' }, { status: 500 });
-      }
-      
-      return new NextResponse(streamResponse, {
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive'
-        }
+    // Parse the request body
+    const requestData = await req.json() as ChatRequest;
+    const { message, messages, context } = requestData;
+
+    // Create messages array
+    const apiMessages = [
+      {
+        role: 'system' as const,
+        content: getSystemPrompt()
+      },
+      ...messages
+    ];
+
+    // Add context message if available
+    const contextMessage = generateContextMessage(context);
+    if (contextMessage) {
+      apiMessages.push({
+        role: 'system' as const,
+        content: `Here is the current context for this conversation: ${contextMessage}`
       });
     }
+
+    // Call OpenRouter API (via OpenAI client)
+    const response = await openai.chat.completions.create({
+      model: model,
+      messages: apiMessages,
+      temperature: 0.7,
+    });
+
+    // Extract assistant message
+    const assistantContent = response.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response.";
     
-    // Handle regular responses
-    const response = await sendChatCompletion(request);
-    
-    if (response instanceof ReadableStream) {
-      return NextResponse.json({ error: 'Unexpected streaming response' }, { status: 500 });
-    }
-    
-    // Add metadata to the response
-    if (isConceptExplanation && topic) {
-      // Create a new object with the metadata
-      const enhancedResponse = {
-        ...response,
-        metadata: {
-          type: "concept_explanation",
-          topic,
-          knowledgeLevel: detectKnowledgeLevel(userQuery)
-        }
-      };
-      
-      return NextResponse.json(enhancedResponse);
-    }
-    
-    return NextResponse.json(response);
+    return NextResponse.json({
+      role: 'assistant',
+      content: assistantContent,
+      timestamp: Date.now(),
+      id: Date.now().toString()
+    });
   } catch (error) {
-    console.error('Chat API error:', error);
-    return NextResponse.json({ error: 'An error occurred processing your request' }, { status: 500 });
+    console.error("Error calling OpenRouter API:", error);
+    return NextResponse.json(
+      { error: 'Failed to generate response' },
+      { status: 500 }
+    );
   }
 } 
