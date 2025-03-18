@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
-import { UploadCloud, X, FileText, Image as ImageIcon, AlertCircle } from 'lucide-react';
+import { UploadCloud, X, FileText, Image as ImageIcon, AlertCircle, Link } from 'lucide-react';
 import { uploadFile, getFileUrl } from '@/lib/supabase';
 
 interface FileUploadProps {
@@ -21,6 +21,7 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
   const [preview, setPreview] = useState<string | null>(null);
   const [fileInfo, setFileInfo] = useState<File | null>(null);
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
+  const [showFallback, setShowFallback] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -40,6 +41,7 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
     setFileInfo(file);
     setError(null);
     setDebugInfo(null);
+    setShowFallback(false);
 
     // Create preview for images
     if (file.type.startsWith('image/')) {
@@ -53,6 +55,50 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
     }
   };
 
+  // Local fallback for when Supabase storage fails
+  const handleFallbackAttachment = () => {
+    if (!fileInfo) return;
+    
+    try {
+      // For images or small files, we can use a data URL
+      if (fileInfo.type.startsWith('image/') || fileInfo.size < 1024 * 1024) { // < 1MB
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          if (!e.target?.result) return;
+          
+          // Create a local attachment with data URL
+          onFileUploaded({
+            path: `local/${fileInfo.name}`,
+            url: e.target.result as string,
+            name: fileInfo.name,
+            size: fileInfo.size,
+            type: fileInfo.type
+          });
+          
+          // Reset the form
+          resetUpload();
+        };
+        reader.readAsDataURL(fileInfo);
+      } else {
+        // For other files, just use a reference to the file name
+        onFileUploaded({
+          path: `local/${fileInfo.name}`,
+          // Use a placeholder URL since we can't upload
+          url: '#',
+          name: fileInfo.name,
+          size: fileInfo.size,
+          type: fileInfo.type
+        });
+        
+        // Reset the form
+        resetUpload();
+      }
+    } catch (err) {
+      console.error('Error with fallback attachment:', err);
+      setError('Failed to attach file locally.');
+    }
+  };
+
   const handleUpload = async () => {
     if (!fileInfo) return;
 
@@ -61,6 +107,7 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
       setProgress(0);
       setError(null);
       setDebugInfo(null);
+      setShowFallback(false);
 
       // Upload to specific folder per user
       const path = `users/${userId}/${Date.now()}-${fileInfo.name.replace(/[^a-zA-Z0-9-_.]/g, '_')}`;
@@ -70,42 +117,74 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
         setProgress(Math.round(progress * 100));
       };
 
+      // Verify file size
+      if (fileInfo.size > 10 * 1024 * 1024) { // 10MB limit
+        throw new Error("File too large. Maximum file size is 10MB.");
+      }
+
       // Log info for debugging
       setDebugInfo(`Starting upload to bucket: attachments, path: ${path}`);
 
-      const result = await uploadFile("attachments", path, fileInfo, onProgressUpdate);
-      
-      if (!result) {
-        throw new Error("Upload failed - no result returned");
+      try {
+        const result = await uploadFile("attachments", path, fileInfo, onProgressUpdate);
+        
+        if (!result) {
+          throw new Error("Upload failed - no result returned");
+        }
+        
+        setDebugInfo(`Upload successful, generating public URL for: ${result.path || path}`);
+        
+        // Get the public URL for the file
+        const fileUrl = getFileUrl("attachments", result.path || path);
+        
+        if (!fileUrl) {
+          throw new Error("Failed to generate public URL for file");
+        }
+        
+        setDebugInfo(`File uploaded successfully with URL: ${fileUrl}`);
+        
+        // Send the file data back to the parent component
+        onFileUploaded({
+          path: result.path || path,
+          url: fileUrl,
+          name: fileInfo.name,
+          size: fileInfo.size,
+          type: fileInfo.type
+        });
+        
+        // Reset after successful upload
+        resetUpload();
+      } catch (uploadError) {
+        console.error('Specific upload error:', uploadError);
+        
+        // Check for common Supabase errors
+        const errorMessage = uploadError instanceof Error ? uploadError.message : 'Unknown error';
+        
+        if (errorMessage.includes('Storage configuration missing')) {
+          setDebugInfo('Storage not configured correctly on the server. Please check Supabase setup.');
+          setError('Storage not configured correctly. Please try the local attachment option.');
+          setShowFallback(true);
+          return;
+        }
+        
+        if (errorMessage.includes('Unauthorized') || errorMessage.includes('not allowed')) {
+          setDebugInfo('Unauthorized: Your account may not have permission to upload files.');
+          setError('You do not have permission to upload files. Try the local attachment option.');
+          setShowFallback(true);
+          return;
+        }
+        
+        // For other errors, show fallback option
+        setError(`${errorMessage}. You can try attaching the file locally instead.`);
+        setShowFallback(true);
+        return;
       }
-      
-      setDebugInfo(`Upload successful, generating public URL for: ${result.path || path}`);
-      
-      // Get the public URL for the file
-      const fileUrl = getFileUrl("attachments", result.path || path);
-      
-      if (!fileUrl) {
-        throw new Error("Failed to generate public URL for file");
-      }
-      
-      setDebugInfo(`File uploaded successfully with URL: ${fileUrl}`);
-      
-      // Send the file data back to the parent component
-      onFileUploaded({
-        path: result.path || path,
-        url: fileUrl,
-        name: fileInfo.name,
-        size: fileInfo.size,
-        type: fileInfo.type
-      });
-      
-      // Reset after successful upload
-      resetUpload();
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to upload file';
       console.error('Upload error:', err);
       setError(errorMessage);
       setDebugInfo(`Error during upload: ${errorMessage}`);
+      setShowFallback(true);
     } finally {
       setUploading(false);
     }
@@ -116,6 +195,7 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
     setPreview(null);
     setProgress(0);
     setError(null);
+    setShowFallback(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -193,7 +273,17 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
             </div>
           )}
 
-          <div className="mt-3 flex justify-end">
+          <div className="mt-3 flex justify-end gap-2">
+            {showFallback && (
+              <button
+                onClick={handleFallbackAttachment}
+                disabled={uploading}
+                className="inline-flex items-center px-3 py-1.5 text-sm rounded-md text-white bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300"
+              >
+                <Link className="h-4 w-4 mr-1" />
+                Attach Locally
+              </button>
+            )}
             <button
               onClick={handleUpload}
               disabled={uploading}

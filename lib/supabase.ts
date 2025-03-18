@@ -102,6 +102,24 @@ export async function uploadFile(
   onProgress?: (progress: number) => void
 ): Promise<SupabaseFileResponse | null> {
   try {
+    // Validate inputs
+    if (!bucket || !path || !file) {
+      console.error('Invalid parameters for uploadFile', { bucket, path, fileExists: !!file });
+      return null;
+    }
+    
+    // Check if Supabase is properly initialized
+    if (!supabaseUrl || !supabaseKey || !supabase) {
+      console.error('Supabase not properly initialized');
+      throw new Error('Storage configuration missing. Please check environment variables.');
+    }
+    
+    console.log(`Attempting to upload file to ${bucket}/${path}`, { 
+      fileSize: file.size, 
+      fileType: file.type,
+      supabaseConfigured: !!supabase
+    });
+
     // Create an upload event handler that works with the progress callback
     const options: {
       cacheControl: string;
@@ -122,19 +140,37 @@ export async function uploadFile(
       };
     }
 
+    // Create bucket if it doesn't exist
+    await createBucketIfNotExists(bucket);
+
+    // Perform the upload
     const { data, error } = await supabase.storage
       .from(bucket)
       .upload(path, file, options);
 
     if (error) {
-      console.error('Error uploading file:', error.message);
-      return null;
+      console.error('Supabase storage error:', error);
+      throw new Error(`Storage error: ${error.message}`);
     }
 
-    return data as SupabaseFileResponse;
+    if (!data) {
+      console.error('No data returned from Supabase upload, but no error either');
+      throw new Error('No data returned from storage upload');
+    }
+
+    console.log('File uploaded successfully', data);
+    
+    // Add the path to the response if it's missing
+    const response = {
+      ...data,
+      path: data.path || path
+    };
+
+    return response as SupabaseFileResponse;
   } catch (error) {
-    console.error('Error uploading file:', error);
-    return null;
+    console.error('Error in uploadFile function:', error);
+    // Rethrow the error with a descriptive message
+    throw new Error(`Failed to upload: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 

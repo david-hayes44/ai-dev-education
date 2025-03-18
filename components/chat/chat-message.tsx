@@ -69,8 +69,12 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
   const handleAttachmentClick = (attachment: FileAttachment) => {
     // If it's a real attachment with URL, open it
     if (attachment.url && attachment.url !== '#') {
-      if (attachment.type.startsWith('image/')) {
-        // For images, show in the modal
+      // Check if it's a data URL (local attachment)
+      if (attachment.url.startsWith('data:')) {
+        // For data URLs (local attachments), show in the modal
+        setSelectedAttachment(attachment);
+      } else if (attachment.type.startsWith('image/')) {
+        // For remote images, show in the modal
         setSelectedAttachment(attachment);
       } else {
         // For other files, open in a new tab
