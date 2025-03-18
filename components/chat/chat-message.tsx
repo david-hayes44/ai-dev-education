@@ -1,9 +1,9 @@
 "use client"
 
 import React, { useState } from "react"
-import { Message, FileAttachment } from "@/lib/chat-service"
+import { Message } from "@/lib/chat-service"
 import { Avatar } from "@/components/ui/avatar"
-import { User, Bot, Paperclip, X, Download } from "lucide-react"
+import { User, Bot, Paperclip, X, Download, FileText } from "lucide-react"
 import { cn } from "@/lib/utils"
 import ReactMarkdown from "react-markdown"
 import FileAttachmentComponent from "./FileAttachment"
@@ -18,6 +18,17 @@ import {
 export interface ChatMessageProps {
   message: Message
   className?: string
+}
+
+// Extended FileAttachment interface
+export interface FileAttachment {
+  id: string;
+  name: string;
+  type: string;
+  url: string;
+  path: string;
+  size: number;
+  isLocalReference?: boolean;
 }
 
 export default function ChatMessage({ message, className }: ChatMessageProps) {
@@ -54,6 +65,13 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
     };
   };
   
+  // Format file size in a human-readable way
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + ' bytes';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+  };
+  
   // Process content for attachment references (temporary approach)
   const { text, attachments } = extractAttachmentRefs(message.content);
   const displayAttachments = message.attachments || 
@@ -68,16 +86,26 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
     
   const handleAttachmentClick = (attachment: FileAttachment) => {
     // If it's a real attachment with URL, open it
-    if (attachment.url && attachment.url !== '#') {
+    if (attachment.url) {
       // Check if it's a data URL (local attachment)
       if (attachment.url.startsWith('data:')) {
         // For data URLs (local attachments), show in the modal
         setSelectedAttachment(attachment);
-      } else if (attachment.type.startsWith('image/')) {
-        // For remote images, show in the modal
+      } 
+      // Check if it's a local attachment with file metadata embedded in URL
+      else if (attachment.url.includes(';name=')) {
+        // Just show basic metadata in the modal since we can't display the actual file content
+        setSelectedAttachment({
+          ...attachment,
+          isLocalReference: true
+        });
+      }
+      // For remote images, show in the modal
+      else if (attachment.type.startsWith('image/')) {
         setSelectedAttachment(attachment);
-      } else {
-        // For other files, open in a new tab
+      } 
+      // For other files with real URLs, open in a new tab
+      else if (attachment.url !== '#') {
         window.open(attachment.url, '_blank');
       }
     }
@@ -165,6 +193,7 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
                               size: attachment.size
                             }}
                             onDownload={() => handleAttachmentClick(attachment)}
+                            isLocal={attachment.url.startsWith('data:') || attachment.url.includes(';name=')}
                           />
                         ) : (
                           <div 
@@ -198,7 +227,7 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
               <X className="h-4 w-4" />
             </button>
           </DialogHeader>
-          {selectedAttachment?.type.startsWith('image/') && (
+          {selectedAttachment?.type.startsWith('image/') && selectedAttachment?.url.startsWith('data:') && (
             <div className="flex justify-center items-center p-4">
               <img 
                 src={selectedAttachment.url} 
@@ -207,17 +236,32 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
               />
             </div>
           )}
+          {selectedAttachment?.isLocalReference && (
+            <div className="p-4 text-center">
+              <div className="bg-muted p-6 rounded-md flex flex-col items-center justify-center">
+                <FileText className="h-16 w-16 text-muted-foreground mb-2" />
+                <h3 className="font-medium">{selectedAttachment.name}</h3>
+                <p className="text-sm text-muted-foreground">
+                  {selectedAttachment.size ? formatFileSize(selectedAttachment.size) : ''}
+                  {selectedAttachment.type ? ` • ${selectedAttachment.type.split('/').pop()}` : ''}
+                </p>
+                <p className="mt-4 text-sm">This file was attached locally and cannot be displayed</p>
+              </div>
+            </div>
+          )}
           <div className="flex justify-end">
-            <a 
-              href={selectedAttachment?.url} 
-              download={selectedAttachment?.name}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Download Original
-            </a>
+            {selectedAttachment?.url.startsWith('data:') && !selectedAttachment?.isLocalReference && (
+              <a 
+                href={selectedAttachment?.url} 
+                download={selectedAttachment?.name}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download
+              </a>
+            )}
           </div>
         </DialogContent>
       </Dialog>

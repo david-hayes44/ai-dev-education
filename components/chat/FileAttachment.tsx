@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import { FileText, Download, Image as ImageIcon, FileCode, Database, File } from 'lucide-react';
+import { FileText, Download, Image as ImageIcon, FileCode, Database, File, Link } from 'lucide-react';
 import { getFileTypeCategory } from '@/lib/utils';
 
 interface FileAttachmentProps {
@@ -10,9 +10,10 @@ interface FileAttachmentProps {
     size?: number;
   };
   onDownload?: () => void;
+  isLocal?: boolean;
 }
 
-export default function FileAttachment({ file, onDownload }: FileAttachmentProps) {
+export default function FileAttachment({ file, onDownload, isLocal = false }: FileAttachmentProps) {
   const isImage = file.type.startsWith('image/');
   const fileCategory = getFileTypeCategory(file.type, file.name);
   
@@ -51,6 +52,13 @@ export default function FileAttachment({ file, onDownload }: FileAttachmentProps
     <div className="max-w-xs sm:max-w-sm md:max-w-md border rounded-lg overflow-hidden bg-white shadow-sm">
       {isImage ? (
         <div className="relative w-full" style={{ height: '200px' }}>
+          {isLocal && (
+            <div className="absolute top-2 right-2 z-10">
+              <span className="bg-amber-100 text-amber-800 text-xs px-2 py-1 rounded-full">
+                Local
+              </span>
+            </div>
+          )}
           <Image 
             src={file.url} 
             alt={file.name || 'Image attachment'} 
@@ -64,8 +72,13 @@ export default function FileAttachment({ file, onDownload }: FileAttachmentProps
             {getFileIcon()}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">
+            <p className="text-sm font-medium text-gray-900 truncate flex items-center">
               {file.name || 'File attachment'}
+              {isLocal && (
+                <span className="ml-2 bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full">
+                  Local
+                </span>
+              )}
             </p>
             {file.size && <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>}
           </div>
@@ -81,7 +94,7 @@ export default function FileAttachment({ file, onDownload }: FileAttachmentProps
           onClick={handleDownload}
           className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
         >
-          <Download className="h-3.5 w-3.5" />
+          {isLocal ? <Link className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
           {isImage ? 'View' : fileCategory === 'document' || fileCategory === 'code' ? 'Open' : 'Download'}
         </button>
       </div>

@@ -60,15 +60,21 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
     if (!fileInfo) return;
     
     try {
-      // For images or small files, we can use a data URL
-      if (fileInfo.type.startsWith('image/') || fileInfo.size < 1024 * 1024) { // < 1MB
+      setUploading(true);
+      
+      // For images or small files (< 2MB), we can use a data URL
+      if (fileInfo.type.startsWith('image/') || fileInfo.size < 2 * 1024 * 1024) {
         const reader = new FileReader();
         reader.onload = (e) => {
-          if (!e.target?.result) return;
+          if (!e.target?.result) {
+            setError("Failed to read file");
+            setUploading(false);
+            return;
+          }
           
           // Create a local attachment with data URL
           onFileUploaded({
-            path: `local/${fileInfo.name}`,
+            path: `local/${Date.now()}-${fileInfo.name}`,
             url: e.target.result as string,
             name: fileInfo.name,
             size: fileInfo.size,
@@ -77,14 +83,20 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
           
           // Reset the form
           resetUpload();
+          setUploading(false);
         };
+        
+        reader.onerror = () => {
+          setError("Failed to read file");
+          setUploading(false);
+        };
+        
         reader.readAsDataURL(fileInfo);
       } else {
-        // For other files, just use a reference to the file name
+        // For larger files, create a simple reference
         onFileUploaded({
-          path: `local/${fileInfo.name}`,
-          // Use a placeholder URL since we can't upload
-          url: '#',
+          path: `local/${Date.now()}-${fileInfo.name}`,
+          url: `data:${fileInfo.type};name=${encodeURIComponent(fileInfo.name)}`,
           name: fileInfo.name,
           size: fileInfo.size,
           type: fileInfo.type
@@ -92,10 +104,12 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
         
         // Reset the form
         resetUpload();
+        setUploading(false);
       }
     } catch (err) {
       console.error('Error with fallback attachment:', err);
       setError('Failed to attach file locally.');
+      setUploading(false);
     }
   };
 
@@ -167,9 +181,10 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
           return;
         }
         
-        if (errorMessage.includes('Unauthorized') || errorMessage.includes('not allowed')) {
-          setDebugInfo('Unauthorized: Your account may not have permission to upload files.');
-          setError('You do not have permission to upload files. Try the local attachment option.');
+        if (errorMessage.includes('Unauthorized') || errorMessage.includes('not allowed') || 
+            errorMessage.includes('row-level security policy') || errorMessage.includes('violates row-level security')) {
+          setDebugInfo('Security policy error: Your account does not have permission to upload files to storage.');
+          setError('You do not have permission to upload files. Please use the "Attach Locally" option instead.');
           setShowFallback(true);
           return;
         }
@@ -278,7 +293,7 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
               <button
                 onClick={handleFallbackAttachment}
                 disabled={uploading}
-                className="inline-flex items-center px-3 py-1.5 text-sm rounded-md text-white bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300"
+                className="inline-flex items-center px-3 py-1.5 text-sm rounded-md text-white bg-green-600 hover:bg-green-700 disabled:bg-green-300"
               >
                 <Link className="h-4 w-4 mr-1" />
                 Attach Locally
@@ -286,7 +301,7 @@ export default function FileUpload({ onFileUploaded, userId }: FileUploadProps) 
             )}
             <button
               onClick={handleUpload}
-              disabled={uploading}
+              disabled={uploading || showFallback}
               className="inline-flex items-center px-3 py-1.5 text-sm rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
             >
               {uploading ? 'Uploading...' : 'Upload'}

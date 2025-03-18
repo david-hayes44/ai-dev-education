@@ -63,24 +63,36 @@ export function ChatInput({
     }
   }, [content])
 
-  const handleFileUploaded = (fileData: { path: string; url: string; name: string; size: number; type: string; }) => {
-    // Convert to our FileAttachment type by adding an ID
-    console.log("File uploaded successfully:", fileData);
+  const handleFileUploaded = (fileData: {
+    path: string;
+    url: string;
+    name: string;
+    size: number;
+    type: string;
+  }) => {
+    console.log('File uploaded:', fileData);
     
-    // Ensure we have a valid URL
     if (!fileData.url) {
-      console.error("Missing URL in uploaded file data", fileData);
+      console.error('File upload missing URL data');
       return;
     }
     
+    // Create a new attachment from the uploaded file
     const attachment: FileAttachment = {
-      ...fileData,
-      id: `file-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+      id: `attachment-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      name: fileData.name,
+      type: fileData.type,
+      url: fileData.url,
+      path: fileData.path,
+      size: fileData.size
     };
     
+    // Add to the existing file attachments
     setAttachments(prev => [...prev, attachment]);
+    
+    // Hide the file upload interface
     setShowFileUpload(false);
-  }
+  };
 
   const removeAttachment = (attachmentId: string) => {
     setAttachments(prev => prev.filter(a => a.id !== attachmentId))
