@@ -862,6 +862,17 @@ export class ChatService {
       // For now, we'll just set it to a placeholder value
       responseContent = placeholderMessage.content || "Response would appear here from streaming API";
       
+      // Important: Mark streaming as complete
+      streamingMessage.isStreaming = false;
+      streamingMessage.content = responseContent;
+      
+      // Update the original message in the session
+      session.messages[placeholderMessageIndex].isStreaming = false;
+      session.messages[placeholderMessageIndex].content = responseContent;
+      
+      // Notify the UI that streaming is complete
+      onChunk(streamingMessage);
+      
       // Once streaming is complete, rechunk efficiently
       // We'll add a flag to indicate if we need to show loading state during rechunking
       const needsRechunking = session.messages.length > MAX_MESSAGES_PER_CHUNK;

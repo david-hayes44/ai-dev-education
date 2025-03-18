@@ -274,6 +274,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         
         // Make sure messages are updated in the current component state
         setMessages(chatService.getCurrentChunk());
+        
+        // Check if streaming is complete based on the message state
+        if (!partialMessage.isStreaming) {
+          setIsStreaming(false);
+        }
       });
       
       // Update sessions after streaming is complete
@@ -286,7 +291,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       
       // Ensure messages state is synchronized with chatService
       setMessages(chatService.getCurrentChunk());
+      
+      // Make sure streaming is set to false when complete
+      setIsStreaming(false);
     } catch (error) {
+      // Make sure streaming is set to false on error
+      setIsStreaming(false);
       console.error('Error sending streaming message:', error);
       // Format the error message for display
       let errorMessage = "I encountered an error processing your request.";
@@ -324,7 +334,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // Also update messages state to show the error
       setMessages(chatService.getCurrentChunk());
     } finally {
-      setIsStreaming(false);
       setIsTyping(false);
     }
   };
