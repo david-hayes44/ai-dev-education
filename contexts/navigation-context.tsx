@@ -30,6 +30,7 @@ interface NavigationContextType {
   pageTitle: string;
   pageDescription: string;
   recommendations: NavigationSuggestion[];
+  relatedPaths: string[];
   isLoading: boolean;
   search: (query: string) => Promise<NavigationSuggestion[]>;
   getSiteStructure: () => Promise<{[key: string]: string[]}>;
@@ -49,6 +50,7 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
   const [pageTitle, setPageTitle] = useState<string>('');
   const [pageDescription, setPageDescription] = useState<string>('');
   const [recommendations, setRecommendations] = useState<NavigationSuggestion[]>([]);
+  const [relatedPaths, setRelatedPaths] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   
   // Update current page info when pathname changes
@@ -63,6 +65,32 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
       const title = pageName.charAt(0).toUpperCase() + pageName.slice(1).replace(/-/g, ' ');
       setPageTitle(title);
       setPageDescription(`Information about ${title}`);
+      
+      // Set related paths based on the current page
+      // This is a simplified implementation - would normally fetch from an API
+      const getRelatedPaths = async () => {
+        const siteStructure = await getSiteStructure();
+        // Find current section
+        let currentSection = '';
+        let paths: string[] = [];
+        
+        for (const [section, sectionPaths] of Object.entries(siteStructure)) {
+          if (sectionPaths.some(path => path.includes(pageName))) {
+            currentSection = section;
+            paths = sectionPaths.filter(path => !path.includes(pageName));
+            break;
+          }
+        }
+        
+        // If no specific section found, provide some default related paths
+        if (paths.length === 0) {
+          paths = ['/introduction', '/mcp/overview', '/servers/architecture'];
+        }
+        
+        setRelatedPaths(paths);
+      };
+      
+      getRelatedPaths();
     }
   }, [pathname]);
   
@@ -160,6 +188,7 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
       pageTitle,
       pageDescription,
       recommendations,
+      relatedPaths,
       isLoading,
       search,
       getSiteStructure,

@@ -16,42 +16,43 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
+import { NavigationSuggestion } from "@/components/chat/navigation-suggestion"
 
 // Inline implementation of NavigationContainer to avoid import issues
 function NavigationContainer({ onClose }: { onClose: () => void }) {
-  const [searchQuery, setSearchQuery] = React.useState("")
-  const [isSearching, setIsSearching] = React.useState(false)
-  const { currentPage, recommendations, isLoading, search } = useNavigation()
-  const router = useRouter()
-  const searchInputRef = React.useRef<HTMLInputElement>(null)
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [isSearching, setIsSearching] = React.useState(false);
+  const { currentPage, recommendations, isLoading, search, relatedPaths, pageTitle, pageDescription } = useNavigation();
+  const router = useRouter();
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
   
   // Focus search input on component mount
   React.useEffect(() => {
     if (searchInputRef.current) {
-      searchInputRef.current.focus()
+      searchInputRef.current.focus();
     }
-  }, [])
+  }, []);
   
   // Perform search when user submits
   const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!searchQuery.trim()) return
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
     
-    setIsSearching(true)
+    setIsSearching(true);
     try {
-      await search(searchQuery)
+      await search(searchQuery);
     } finally {
-      setIsSearching(false)
+      setIsSearching(false);
     }
-  }
+  };
   
   // Navigate to a page and close the navigation panel
   const handleNavigate = (path: string) => {
-    router.push(path)
-    onClose()
-  }
+    router.push(path);
+    onClose();
+  };
   
-  const relatedPages = currentPage?.relatedPaths || []
+  const relatedPages = relatedPaths || [];
   
   return (
     <div className="flex flex-col h-full">
@@ -99,22 +100,20 @@ function NavigationContainer({ onClose }: { onClose: () => void }) {
         ) : (
           <div className="space-y-6">
             {/* Current page information */}
-            {currentPage && (
-              <div className="space-y-3">
-                <h3 className="text-lg font-medium flex items-center">
-                  <Info className="h-4 w-4 mr-2 text-primary" />
-                  Current Page
-                </h3>
-                <div className="bg-accent/10 rounded-lg p-4">
-                  <h4 className="font-medium">{currentPage.title || "Untitled Page"}</h4>
-                  {currentPage.description && (
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {currentPage.description}
-                    </p>
-                  )}
-                </div>
+            <div className="space-y-3">
+              <h3 className="text-lg font-medium flex items-center">
+                <Info className="h-4 w-4 mr-2 text-primary" />
+                Current Page
+              </h3>
+              <div className="bg-accent/10 rounded-lg p-4">
+                <h4 className="font-medium">{pageTitle || "Untitled Page"}</h4>
+                {pageDescription && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {pageDescription}
+                  </p>
+                )}
               </div>
-            )}
+            </div>
             
             {/* Related pages */}
             {relatedPages.length > 0 && (
@@ -156,14 +155,16 @@ function NavigationContainer({ onClose }: { onClose: () => void }) {
 }
 
 function RecommendationCard({ recommendation, onClick }: {
-  recommendation: NavRecommendationType,
+  recommendation: NavigationSuggestion | NavRecommendationType,
   onClick: () => void
 }) {
-  const { path, title, description, summary, confidence } = recommendation
+  const { path, title, description, confidence } = recommendation
+  const summary = 'summary' in recommendation ? recommendation.summary : undefined
   const isExternal = path.startsWith("http")
   
-  // Format confidence as percentage
-  const confidencePercent = Math.round(confidence * 100)
+  // Format confidence as percentage - handle both optional and required confidence
+  const confidenceValue = confidence || 0.5  // Default to 0.5 if undefined
+  const confidencePercent = Math.round(confidenceValue * 100)
   
   return (
     <div 
@@ -222,15 +223,15 @@ function ChatHeader({ isLarge, toggleSize, onClose }: {
 }) {
   const { selectedModel, setModel } = useChat();
   const [isOpen, setIsOpen] = React.useState(false);
-  const { currentPage } = useNavigation();
+  const { pageTitle, pageDescription } = useNavigation();
 
   // Show current page in header if available
-  const pageTitle = currentPage?.title || "AI Navigation Assistant";
+  const displayTitle = pageTitle || "AI Navigation Assistant";
 
   return (
     <div className="flex items-center justify-between border-b p-4 h-16">
       <h3 className="font-semibold text-base flex items-center">
-        <span className="truncate max-w-[200px]">{pageTitle}</span>
+        <span className="truncate max-w-[200px]">{displayTitle}</span>
       </h3>
       <div className="flex items-center gap-3">
         <Button
