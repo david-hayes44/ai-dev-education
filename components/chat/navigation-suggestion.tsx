@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ExternalLink, ChevronRight } from "lucide-react";
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export interface NavigationSuggestion {
   title: string;
   path: string;
   description?: string;
   confidence?: number;
+  sectionId?: string;
 }
 
 interface NavigationSuggestionCardProps {
@@ -19,6 +21,21 @@ interface NavigationSuggestionCardProps {
 
 export function NavigationSuggestionCard({ suggestion }: NavigationSuggestionCardProps) {
   const isExternalLink = suggestion.path.startsWith('http');
+  const router = useRouter();
+  
+  const handleNavigation = (e: React.MouseEvent) => {
+    e.preventDefault();
+    
+    if (isExternalLink) {
+      window.open(suggestion.path, '_blank');
+    } else {
+      const path = suggestion.sectionId 
+        ? `${suggestion.path}#${suggestion.sectionId}`
+        : suggestion.path;
+      
+      router.push(path);
+    }
+  };
   
   return (
     <Card className="p-4 flex flex-col gap-2 rounded-lg shadow-sm">
@@ -38,31 +55,24 @@ export function NavigationSuggestionCard({ suggestion }: NavigationSuggestionCar
       )}
       
       <div className="mt-2">
-        {isExternalLink ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs h-8"
-            asChild
-          >
-            <a href={suggestion.path} target="_blank" rel="noopener noreferrer">
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-xs h-8"
+          onClick={handleNavigation}
+        >
+          {isExternalLink ? (
+            <>
               Visit Page
               <ExternalLink className="ml-1 h-3 w-3" />
-            </a>
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs h-8"
-            asChild
-          >
-            <Link href={suggestion.path}>
-              Go to page
+            </>
+          ) : (
+            <>
+              Go to {suggestion.sectionId ? 'section' : 'page'}
               <ChevronRight className="ml-1 h-3 w-3" />
-            </Link>
-          </Button>
-        )}
+            </>
+          )}
+        </Button>
       </div>
     </Card>
   );
@@ -75,7 +85,6 @@ interface NavigationSuggestionsProps {
 export function NavigationSuggestions({ suggestions }: NavigationSuggestionsProps) {
   const [expanded, setExpanded] = useState<boolean>(false);
   
-  // Show max 3 suggestions when collapsed
   const visibleSuggestions = expanded ? suggestions : suggestions.slice(0, 2);
   
   return (

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sendChatCompletion, ChatMessage, ChatCompletionRequest, enrichMessagesWithContext, createEnhancedConceptSchema } from '@/lib/openrouter';
 import OpenAI from 'openai';
 import { ContentChunk } from '@/lib/content-indexing-service';
+import { NavigationSuggestion } from '@/components/chat/navigation-suggestion';
 
 // List of AI-related topics we can provide structured explanations for
 const AI_TOPICS = [
@@ -30,6 +31,19 @@ interface ChatRequest {
     currentPage?: string;
     pageTitle?: string;
     pageDescription?: string;
+  };
+}
+
+interface ChatResponse {
+  role: 'assistant';
+  content: string;
+  timestamp: number;
+  id: string;
+  metadata?: {
+    type?: string;
+    isNavigationRequest?: boolean;
+    navigationSuggestions?: NavigationSuggestion[];
+    followUpQuestions?: string[];
   };
 }
 
@@ -100,14 +114,15 @@ function isCodeExampleRequested(query: string): boolean {
   return codePatterns.some(pattern => pattern.test(lowerQuery));
 }
 
-// Function to check if navigation assistance is requested
+// Enhanced function to check if navigation assistance is requested
 function isNavigationRequest(query: string): boolean {
   const lowerQuery = query.toLowerCase();
   
   const navigationPatterns = [
     /where can i find/i, /show me/i, /navigate to/i, /take me to/i,
     /where is/i, /how do i get to/i, /link to/i, /find/i,
-    /section about/i, /page on/i, /documentation for/i
+    /section about/i, /page on/i, /documentation for/i,
+    /go to/i, /bring up/i, /open the/i, /access/i
   ];
   
   // Only return true for explicit navigation requests with these patterns
@@ -117,6 +132,54 @@ function isNavigationRequest(query: string): boolean {
     !lowerQuery.includes("explain") &&
     !lowerQuery.includes("what is") &&
     !lowerQuery.includes("how does");
+}
+
+// Generate navigation suggestions based on the query
+async function generateNavigationSuggestions(query: string): Promise<NavigationSuggestion[]> {
+  // Extract potential topic from navigation query
+  const navigationPatterns = [
+    /where can i find (.*)/i, /show me (.*)/i, /navigate to (.*)/i, 
+    /take me to (.*)/i, /where is (.*)/i, /how do i get to (.*)/i, 
+    /link to (.*)/i, /find (.*)/i, /go to (.*)/i
+  ];
+  
+  let topic = '';
+  for (const pattern of navigationPatterns) {
+    const match = query.match(pattern);
+    if (match && match[1]) {
+      topic = match[1].trim();
+      break;
+    }
+  }
+  
+  if (!topic) {
+    const words = query.split(/\s+/);
+    // Use the last few words if no explicit topic was found
+    topic = words.slice(Math.max(0, words.length - 3)).join(' ');
+  }
+  
+  try {
+    // Search for content related to the topic
+    const response = await fetch(`${process.env.BASE_URL || 'http://localhost:3000'}/api/content-search?query=${encodeURIComponent(topic)}`);
+    
+    if (!response.ok) {
+      throw new Error(`Content search failed with status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // Convert search results to navigation suggestions
+    return (data.results || []).slice(0, 3).map((chunk: ContentChunk) => ({
+      title: chunk.title,
+      path: chunk.path,
+      description: chunk.content.substring(0, 100) + '...',
+      confidence: 0.8,
+      sectionId: chunk.section.toLowerCase().replace(/\s+/g, '-')
+    }));
+  } catch (error) {
+    console.error('Error generating navigation suggestions:', error);
+    return [];
+  }
 }
 
 // Format relevant content for context
@@ -175,12 +238,66 @@ When responding:
 - Suggest relevant pages when appropriate based on the user's questions
 
 The platform covers topics including:
-- Machine-Cognition Protocol (MCP)
+- Model Context Protocol (MCP)
 - AI Agent development
 - Prompt engineering
 - LLM systems
 - Multimodal AI
 - AI safety and alignment`;
+}
+
+// Generate follow-up questions based on the response and query
+function generateFollowUpQuestions(query: string, response: string): string[] {
+  const topics = extractTopics(query, response);
+  const followUps: string[] = [];
+  
+  // Generate follow-ups based on topics
+  topics.forEach(topic => {
+    if (topic.toLowerCase().includes('mcp') || topic.toLowerCase().includes('model context protocol')) {
+      followUps.push(`How can I implement ${topic} in my project?`);
+      followUps.push(`What are the key components of ${topic}?`);
+    } else if (topic.toLowerCase().includes('server') || topic.toLowerCase().includes('architecture')) {
+      followUps.push(`What are the security considerations for ${topic}?`);
+      followUps.push(`How does ${topic} scale with increasing users?`);
+    } else if (topic.toLowerCase().includes('development')) {
+      followUps.push(`What tools are recommended for ${topic}?`);
+      followUps.push(`What are best practices for ${topic}?`);
+    }
+  });
+  
+  // Add generic follow-ups if we don't have enough
+  if (followUps.length < 2) {
+    followUps.push("Can you provide code examples?");
+    followUps.push("Where can I learn more about this?");
+    followUps.push("What related topics should I explore next?");
+  }
+  
+  // Return a maximum of 3 unique follow-up questions
+  return [...new Set(followUps)].slice(0, 3);
+}
+
+// Extract topics from text
+function extractTopics(query: string, response: string): string[] {
+  const keywords = [
+    'mcp', 'model context protocol', 'context management',
+    'context window', 'token limit', 'server', 'architecture',
+    'security', 'api', 'development', 'workflow', 'agent',
+    'integration', 'tools', 'cursor', 'ide', 'llm',
+    'large language model', 'prompt engineering'
+  ];
+  
+  const foundTopics: string[] = [];
+  const lowerQuery = query.toLowerCase();
+  const lowerResponse = response.toLowerCase();
+  
+  // Find keywords in the text
+  keywords.forEach(keyword => {
+    if (lowerQuery.includes(keyword) || lowerResponse.includes(keyword)) {
+      foundTopics.push(keyword);
+    }
+  });
+  
+  return [...new Set(foundTopics)];
 }
 
 export async function POST(req: NextRequest) {
@@ -189,6 +306,9 @@ export async function POST(req: NextRequest) {
     const requestData = await req.json() as ChatRequest;
     const { message, messages, context } = requestData;
 
+    // Check if this is a navigation request
+    const isNavRequest = isNavigationRequest(message);
+    
     // Create messages array
     const apiMessages = [
       {
@@ -206,6 +326,14 @@ export async function POST(req: NextRequest) {
         content: `Here is the current context for this conversation: ${contextMessage}`
       });
     }
+    
+    // For navigation requests, add a special system message
+    if (isNavRequest) {
+      apiMessages.push({
+        role: 'system' as const,
+        content: `The user seems to be asking for navigation assistance. If they're looking for specific content or pages, help them by mentioning relevant sections and pages they should visit.`
+      });
+    }
 
     // Call OpenRouter API (via OpenAI client)
     const response = await openai.chat.completions.create({
@@ -217,12 +345,29 @@ export async function POST(req: NextRequest) {
     // Extract assistant message
     const assistantContent = response.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response.";
     
-    return NextResponse.json({
+    // For navigation requests, generate navigation suggestions
+    let navigationSuggestions: NavigationSuggestion[] = [];
+    if (isNavRequest) {
+      navigationSuggestions = await generateNavigationSuggestions(message);
+    }
+    
+    // Generate follow-up questions
+    const followUpQuestions = generateFollowUpQuestions(message, assistantContent);
+    
+    // Create enhanced response with metadata
+    const chatResponse: ChatResponse = {
       role: 'assistant',
       content: assistantContent,
       timestamp: Date.now(),
-      id: Date.now().toString()
-    });
+      id: Date.now().toString(),
+      metadata: {
+        isNavigationRequest: isNavRequest,
+        navigationSuggestions: navigationSuggestions.length > 0 ? navigationSuggestions : undefined,
+        followUpQuestions: followUpQuestions.length > 0 ? followUpQuestions : undefined
+      }
+    };
+    
+    return NextResponse.json(chatResponse);
   } catch (error) {
     console.error("Error calling OpenRouter API:", error);
     return NextResponse.json(

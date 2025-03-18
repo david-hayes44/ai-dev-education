@@ -2,6 +2,7 @@ import { ChatMessage, sendChatCompletion, processStreamingResponse, ChatCompleti
 import { ContentChunk } from './content-indexing-service';
 import OpenAI from "openai";
 import { v4 as uuidv4 } from "uuid";
+import { NavigationSuggestion } from '@/components/chat/navigation-suggestion';
 
 // Define message types
 export type MessageRole = "user" | "assistant" | "system";
@@ -1400,6 +1401,153 @@ If you cannot access or process the file, please let me know.
     }
     
     return messages;
+  }
+
+  /**
+   * Generate contextual resource recommendations based on conversation history
+   * These are used to suggest relevant documentation pages to the user
+   */
+  public generateResourceRecommendations(message: Message): Promise<NavigationSuggestion[]> {
+    if (!this.currentSessionId) return Promise.resolve([]);
+    
+    const session = this.sessions[this.currentSessionId];
+    if (!session) return Promise.resolve([]);
+  
+    // Extract key topics from the message
+    const topics = this.extractTopicsFromContent(message.content);
+    
+    if (!topics.length) return Promise.resolve([]);
+    
+    // Search for content related to these topics
+    // In a real implementation, this would be a more sophisticated semantic search
+    return fetch(`/api/content-search?query=${encodeURIComponent(topics.join(' '))}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!data.results || !data.results.length) return [];
+        
+        // Convert content chunks to navigation suggestions
+        return data.results.slice(0, 3).map((chunk: ContentChunk) => ({
+          title: chunk.title,
+          path: chunk.path,
+          description: chunk.content.substring(0, 100) + '...',
+          confidence: 0.8,
+          sectionId: chunk.section.toLowerCase().replace(/\s+/g, '-')
+        }));
+      })
+      .catch(err => {
+        console.error('Error generating resource recommendations:', err);
+        return [];
+      });
+  }
+  
+  /**
+   * Generate follow-up questions based on the last assistant response
+   * These are used to suggest next questions the user might want to ask
+   */
+  public generateFollowUpQuestions(assistantMessage: Message): string[] {
+    if (!assistantMessage.content) return [];
+    
+    // Extract key topics from the assistant message
+    const topics = this.extractTopicsFromContent(assistantMessage.content);
+    
+    // Generate follow-up questions based on the topics and current context
+    const followUps: string[] = [];
+    
+    // Add topic-specific follow-ups
+    topics.forEach(topic => {
+      if (topic.toLowerCase().includes('mcp') || topic.toLowerCase().includes('model context protocol')) {
+        followUps.push(`How can I implement ${topic} in my project?`);
+        followUps.push(`What are the key components of ${topic}?`);
+      } else if (topic.toLowerCase().includes('server') || topic.toLowerCase().includes('architecture')) {
+        followUps.push(`What are the security considerations for ${topic}?`);
+        followUps.push(`How does ${topic} scale with increasing users?`);
+      } else if (topic.toLowerCase().includes('development')) {
+        followUps.push(`What tools are recommended for ${topic}?`);
+        followUps.push(`What are best practices for ${topic}?`);
+      }
+    });
+    
+    // Add general follow-ups if we don't have enough specific ones
+    if (followUps.length < 2) {
+      followUps.push("Can you provide code examples?");
+      followUps.push("Where can I learn more about this?");
+      followUps.push("What related topics should I explore next?");
+    }
+    
+    // Return a maximum of 3 unique follow-up questions
+    return [...new Set(followUps)].slice(0, 3);
+  }
+  
+  /**
+   * Check if a message is a navigation request
+   * This is used to determine if we should switch to the navigation tab
+   */
+  public isNavigationRequest(message: string): boolean {
+    const navigationPatterns = [
+      /show me/i, /where can I find/i, /take me to/i,
+      /navigate to/i, /go to/i, /how do I get to/i,
+      /find the/i, /look for/i, /search for/i
+    ];
+    
+    return navigationPatterns.some(pattern => pattern.test(message));
+  }
+  
+  /**
+   * Extract key topics from message content
+   * Used for generating recommendations and follow-up questions
+   */
+  private extractTopicsFromContent(content: string): string[] {
+    if (!content) return [];
+    
+    // A simple keyword extraction - in a real implementation,
+    // this would be a more sophisticated NLP approach
+    const keywords = [
+      'mcp', 'model context protocol', 'context management',
+      'context window', 'token limit', 'server', 'architecture',
+      'security', 'api', 'development', 'workflow', 'agent',
+      'integration', 'tools', 'cursor', 'ide', 'llm',
+      'large language model', 'prompt engineering'
+    ];
+    
+    const foundTopics: string[] = [];
+    const lowerContent = content.toLowerCase();
+    
+    // Find keywords in the content
+    keywords.forEach(keyword => {
+      if (lowerContent.includes(keyword.toLowerCase())) {
+        foundTopics.push(keyword);
+      }
+    });
+    
+    // Extract potential custom topics (nouns and noun phrases)
+    // This is a very simplified approach
+    const words = content.split(/\s+/);
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      
+      // Skip short words, common stop words and already found topics
+      if (word.length <= 3 || 
+          ['the', 'and', 'for', 'with', 'this', 'that', 'they', 'them'].includes(word.toLowerCase()) ||
+          foundTopics.some(topic => topic.includes(word.toLowerCase()))) {
+        continue;
+      }
+      
+      // Look for capitalized words that might be proper nouns
+      if (word[0] === word[0].toUpperCase() && 
+          i > 0 && // Not beginning of sentence 
+          !['I', 'A', 'An', 'The'].includes(word)) {
+        foundTopics.push(word);
+      }
+      
+      // Look for technical terms
+      if (word.match(/[A-Z][a-z]+[A-Z]/) || // Camel case
+          word.includes('-') || // Kebab case
+          word.includes('_')) { // Snake case
+        foundTopics.push(word);
+      }
+    }
+    
+    return [...new Set(foundTopics)];
   }
 }
 

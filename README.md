@@ -189,3 +189,87 @@ Available browser automation features:
 - Inspect CSS styles
 
 Visit the Browser Automation page at `/browser-automation` to try out these features.
+
+# AI-Dev Education - Enhanced Chat Assistant
+
+## Overview
+
+The AI-Dev Education platform has been enhanced with a more sophisticated chat assistant that provides contextual help, navigation assistance, and an improved user experience. This README documents the key improvements made to the chat system.
+
+## Key Features
+
+### 1. Enhanced Navigation System
+
+The navigation system now allows users to navigate to specific content using natural language:
+
+- **Natural Language Navigation**
+  - Users can ask navigation questions in plain language (e.g., "Take me to the MCP architecture section")
+  - The system detects navigation intents and distinguishes them from information requests
+  - Direct routing to the most relevant page and section based on user queries
+  - Auto-switching between chat and navigation interfaces based on detected intent
+
+- **Section-Level Navigation**
+  - Deep linking to specific sections within documentation pages
+  - Topic-to-section mapping for precise navigation
+  - Visual cues to highlight the navigated section
+
+### 2. Contextual Chat Suggestions
+
+The chat assistant now provides contextual suggestions based on the conversation:
+
+- **Resource Recommendations**
+  - Clickable page resource suggestions within chat responses
+  - Tailored resource links based on conversation context
+  - Inline previews of suggested resources
+
+- **Follow-up Question Prompts**
+  - Smart suggestion chips for related questions
+  - "Learn more" options that expand on current topics
+  - Context-aware follow-up questions based on user expertise level
+  - Single-click to expand on complex topics
+
+### 3. Unified Experience Improvements
+
+The chat and navigation interfaces are now more integrated:
+
+- **Tab Synchronization**
+  - Automatic switching between chat/navigation tabs based on detected intent
+  - Smooth transitions with context preservation between modes
+  - Shared context between navigation and Q&A functions
+  - Visual cues when switching between modes
+
+- **Developer-Centric Experience**
+  - Enhanced recognition for technical terminology
+  - Improved code snippet support
+  - Better handling of programming concepts and frameworks
+
+## Technical Implementation
+
+The enhancements were implemented through the following components:
+
+- **Navigation Context**: Enhanced with sophisticated intent detection and section mapping
+- **Chat Service**: Extended with methods for recommendations and follow-up questions
+- **API Routes**: Improved to detect intents and provide contextual responses
+- **UI Components**: Updated for a more integrated chat and navigation experience
+
+## Usage
+
+The chat assistant can be accessed through the floating chat button in the bottom right corner of the screen. Users can:
+
+1. Type questions in natural language to get information
+2. Ask navigation questions to be directed to relevant content
+3. Click on suggested resources to explore related topics
+4. Use follow-up question prompts to continue the conversation
+
+## Future Improvements
+
+Planned future enhancements include:
+
+- Personalized recommendations based on user history
+- Enhanced code snippet handling and syntax highlighting
+- More sophisticated navigation intent detection
+- Improved integration with custom user content
+
+## Contributing
+
+Contributions to the AI-Dev Education platform are welcome. Please see the CONTRIBUTING.md file for guidelines.

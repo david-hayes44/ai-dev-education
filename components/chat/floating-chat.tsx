@@ -19,10 +19,13 @@ import { cn } from "@/lib/utils"
 import { NavigationSuggestion } from "@/components/chat/navigation-suggestion"
 
 // Inline implementation of NavigationContainer to avoid import issues
-function NavigationContainer({ onClose }: { onClose: () => void }) {
+function NavigationContainer({ onClose, onNavigate }: { 
+  onClose: () => void;
+  onNavigate: (path: string, title: string) => void;
+}) {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [isSearching, setIsSearching] = React.useState(false);
-  const { currentPage, recommendations, isLoading, search, relatedPaths, pageTitle, pageDescription } = useNavigation();
+  const { currentPage, recommendations, isLoading, search, relatedPaths, pageTitle, pageDescription, navigateTo } = useNavigation();
   const router = useRouter();
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   
@@ -47,9 +50,9 @@ function NavigationContainer({ onClose }: { onClose: () => void }) {
   };
   
   // Navigate to a page and close the navigation panel
-  const handleNavigate = (path: string) => {
-    router.push(path);
-    onClose();
+  const handleNavigate = (path: string, sectionId?: string, title?: string) => {
+    navigateTo(path, sectionId);
+    onNavigate(path, title || path.split('/').pop() || 'page');
   };
   
   const relatedPages = relatedPaths || [];
@@ -88,7 +91,7 @@ function NavigationContainer({ onClose }: { onClose: () => void }) {
                 <RecommendationCard
                   key={recommendation.path}
                   recommendation={recommendation}
-                  onClick={() => handleNavigate(recommendation.path)}
+                  onClick={() => handleNavigate(recommendation.path, recommendation.sectionId, recommendation.title)}
                 />
               ))}
             </div>
@@ -276,108 +279,127 @@ function ChatHeader({ isLarge, toggleSize, onClose }: {
 
 // Main component that renders the floating chat UI
 export function FloatingChat() {
-  const [isVisible, setIsVisible] = React.useState(false)
-  const [isLarge, setIsLarge] = React.useState(false)
-  const [width, setWidth] = React.useState(DEFAULT_WIDTH)
-  const [height, setHeight] = React.useState(DEFAULT_HEIGHT)
-  const [activeTab, setActiveTab] = React.useState<"chat" | "navigation">("chat")
+  const [isMinimized, setIsMinimized] = React.useState(true);
+  const [isLarge, setIsLarge] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState<'chat' | 'navigation'>('chat');
+  const [size, setSize] = useLocalStorage({
+    key: "floating-chat-size",
+    defaultValue: { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT },
+  });
+  const chatService = React.useMemo(() => typeof window !== 'undefined' ? (window as any).chatService : null, []);
   
-  // Store visibility in local storage
-  const [storedVisibility, setStoredVisibility] = useLocalStorage("floatingChatVisible", false)
-  
-  // Set visibility from stored value on mount
-  React.useEffect(() => {
-    setIsVisible(storedVisibility)
-  }, [storedVisibility])
-  
-  // Toggle chat visibility
-  const toggleVisibility = () => {
-    const newVisibility = !isVisible
-    setIsVisible(newVisibility)
-    setStoredVisibility(newVisibility)
-  }
-  
-  // Toggle between normal and large size
-  const toggleSize = () => {
-    setIsLarge(!isLarge)
-    setWidth(!isLarge ? LARGE_WIDTH : DEFAULT_WIDTH)
-    setHeight(!isLarge ? LARGE_HEIGHT : DEFAULT_HEIGHT)
-  }
-  
-  // Reset to chat tab when closed
-  React.useEffect(() => {
-    if (!isVisible) {
-      setActiveTab("chat")
+  // Handle tab switching when navigation intent is detected
+  const handleMessageSend = (message: string) => {
+    // Check if this is a navigation request
+    if (chatService && chatService.isNavigationRequest(message)) {
+      // Switch to navigation tab
+      setActiveTab('navigation');
     }
-  }, [isVisible])
+  };
+  
+  // Switch to chat tab with a message about successful navigation
+  const handleNavigationComplete = (path: string, title: string) => {
+    setActiveTab('chat');
+    
+    // Optionally, send a system message to chat indicating successful navigation
+    if (chatService) {
+      const systemMessage = `I've taken you to the "${title}" page. Let me know if you need more help or have questions about this topic.`;
+      // Send or display a success message
+    }
+  };
+  
+  const toggleVisibility = () => {
+    setIsMinimized(!isMinimized);
+  };
+  
+  const toggleSize = () => {
+    const newIsLarge = !isLarge;
+    setIsLarge(newIsLarge);
+    
+    setSize({
+      width: newIsLarge ? LARGE_WIDTH : DEFAULT_WIDTH,
+      height: newIsLarge ? LARGE_HEIGHT : DEFAULT_HEIGHT,
+    });
+  };
+  
+  const handleClose = () => {
+    setIsMinimized(true);
+  };
   
   return (
-    <>
-      {/* Chat button */}
-      {!isVisible && (
+    <div className="fixed bottom-4 right-4 z-50">
+      {isMinimized ? (
         <Button
           onClick={toggleVisibility}
-          className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50"
+          className="h-12 w-12 rounded-full shadow-lg bg-primary hover:bg-primary/90"
           aria-label="Open chat"
         >
           <MessageCircle className="h-6 w-6" />
         </Button>
-      )}
-      
-      {/* Chat panel */}
-      {isVisible && (
+      ) : (
         <div
-          className="fixed bottom-6 right-6 bg-background border rounded-lg shadow-lg overflow-hidden flex flex-col z-50"
+          className="bg-background border rounded-lg shadow-xl overflow-hidden flex flex-col transition-all duration-200 ease-in-out"
           style={{
-            width: `${width}px`,
-            height: `${height}px`,
-            maxHeight: 'calc(100vh - 80px)' // Ensure it doesn't exceed viewport height
+            width: `${size.width}px`,
+            height: `${size.height}px`,
           }}
         >
           <ChatProvider>
-            <ChatHeader 
-              isLarge={isLarge} 
-              toggleSize={toggleSize} 
-              onClose={toggleVisibility} 
-            />
-            
-            {/* Tab navigation */}
-            <div className="flex items-center border-b">
-              <button
-                onClick={() => setActiveTab("chat")}
-                className={cn(
-                  "flex-1 py-2 text-sm font-medium text-center transition-colors",
-                  activeTab === "chat" 
-                    ? "border-b-2 border-primary" 
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Chat
-              </button>
-              <button
-                onClick={() => setActiveTab("navigation")}
-                className={cn(
-                  "flex-1 py-2 text-sm font-medium text-center transition-colors",
-                  activeTab === "navigation" 
-                    ? "border-b-2 border-primary" 
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Navigation
-              </button>
+            {/* Header */}
+            <div className="border-b p-3 flex items-center justify-between">
+              <div className="flex gap-2">
+                <Button
+                  variant={activeTab === 'chat' ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setActiveTab('chat')}
+                  className="h-8"
+                >
+                  <MessageCircle className="h-4 w-4 mr-1" />
+                  Chat
+                </Button>
+                <Button
+                  variant={activeTab === 'navigation' ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setActiveTab('navigation')}
+                  className="h-8"
+                >
+                  <Compass className="h-4 w-4 mr-1" />
+                  Navigate
+                </Button>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleSize}
+                  className="h-8 w-8"
+                  aria-label={isLarge ? "Minimize chat" : "Maximize chat"}
+                >
+                  {isLarge ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleClose}
+                  className="h-8 w-8"
+                  aria-label="Close chat"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             
-            {/* Content based on active tab */}
-            <div className="flex-1 overflow-auto">
-              {activeTab === "chat" ? (
-                <ChatContainer />
+            {/* Content */}
+            <div className="flex-1 overflow-hidden">
+              {activeTab === 'chat' ? (
+                <ChatContainer onMessageSend={handleMessageSend} />
               ) : (
-                <NavigationContainer onClose={() => setActiveTab("chat")} />
+                <NavigationContainer onClose={handleClose} onNavigate={handleNavigationComplete} />
               )}
             </div>
           </ChatProvider>
         </div>
       )}
-    </>
-  )
+    </div>
+  );
 } 
