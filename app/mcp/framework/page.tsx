@@ -42,40 +42,47 @@ export default function MCPFramework() {
         }
       ]}
     >
-      <div className="sticky top-6">
-        <SimpleTOC />
-      </div>
-      
-      <h2 id="introduction">Introduction</h2>
-      <p>
-        The Model Context Protocol (MCP) Framework provides a standardized approach to implementing
-        context-sharing between AI-powered development tools. This guide offers a detailed technical overview
-        of the framework's architecture, components, and implementation patterns.
-      </p>
-      
-      <Callout type="info" title="Framework vs. Protocol">
-        <p>
-          While the MCP defines the protocol specifications (data formats, APIs, etc.), the MCP Framework
-          provides reusable components, libraries, and patterns to help developers implement the protocol
-          effectively in their tools and services.
-        </p>
-      </Callout>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+        {/* Table of Contents - sticky on left side */}
+        <div className="hidden lg:block lg:col-span-3">
+          <div className="sticky top-6">
+            <SimpleTOC />
+          </div>
+        </div>
+        
+        {/* Main content */}
+        <div className="lg:col-span-9">
+          <div className="prose prose-lg dark:prose-invert">
+            <h2 id="introduction">Introduction</h2>
+            <p>
+              The Model Context Protocol (MCP) Framework provides a standardized approach to implementing
+              context-sharing between AI-powered development tools. This guide offers a detailed technical overview
+              of the framework's architecture, components, and implementation patterns.
+            </p>
+            
+            <Callout type="info" title="Framework vs. Protocol">
+              <p>
+                While the MCP defines the protocol specifications (data formats, APIs, etc.), the MCP Framework
+                provides reusable components, libraries, and patterns to help developers implement the protocol
+                effectively in their tools and services.
+              </p>
+            </Callout>
 
-      <h2 id="framework-overview">Framework Overview</h2>
-      <p>
-        The MCP Framework is built on a modular, layered architecture that separates concerns and promotes
-        flexibility and interoperability. This design allows developers to implement only the parts they need
-        while ensuring compatibility with the broader MCP ecosystem.
-      </p>
-      
-      <h3 id="architectural-layers">Architectural Layers</h3>
-      <p>
-        The framework is organized into the following layers:
-      </p>
-      
-      <div className="bg-card p-6 rounded-lg border mb-6">
-        <pre className="text-xs p-0">
-          {`┌─────────────────────────────────────────────────────────────────┐
+            <h2 id="framework-overview">Framework Overview</h2>
+            <p>
+              The MCP Framework is built on a modular, layered architecture that separates concerns and promotes
+              flexibility and interoperability. This design allows developers to implement only the parts they need
+              while ensuring compatibility with the broader MCP ecosystem.
+            </p>
+            
+            <h3 id="architectural-layers">Architectural Layers</h3>
+            <p>
+              The framework is organized into the following layers:
+            </p>
+            
+            <div className="bg-card p-6 rounded-lg border mb-6">
+              <pre className="text-xs p-0">
+                {`┌─────────────────────────────────────────────────────────────────┐
 │                      Application Layer                             │
 │                                                                     │
 │  ┌────────────────┐  ┌────────────────┐  ┌────────────────────────┐ │
@@ -117,91 +124,91 @@ export default function MCPFramework() {
 │  │                │  │                │  │                        │ │
 │  └────────────────┘  └────────────────┘  └────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────┘`}
-        </pre>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 mb-8">
-        <div className="bg-card rounded-lg border p-6">
-          <h4 className="text-lg font-medium mb-2">Infrastructure Layer</h4>
-          <p className="text-muted-foreground">
-            The foundation of the framework, providing low-level services for storage, security,
-            and communication. This layer abstracts the underlying infrastructure and provides
-            a consistent interface for the layers above.
-          </p>
-        </div>
-        
-        <div className="bg-card rounded-lg border p-6">
-          <h4 className="text-lg font-medium mb-2">Core Layer</h4>
-          <p className="text-muted-foreground">
-            Implements the core MCP protocol specifications, including data models, API definitions,
-            and protocol handlers. This layer ensures compliance with the MCP standard and provides
-            the essential functionality for context management.
-          </p>
-        </div>
-        
-        <div className="bg-card rounded-lg border p-6">
-          <h4 className="text-lg font-medium mb-2">Integration Layer</h4>
-          <p className="text-muted-foreground">
-            Bridges the gap between the core MCP functionality and specific tools or environments.
-            Provides adapters, providers, and handlers that make it easier to integrate MCP into
-            various development tools and workflows.
-          </p>
-        </div>
-        
-        <div className="bg-card rounded-lg border p-6">
-          <h4 className="text-lg font-medium mb-2">Application Layer</h4>
-          <p className="text-muted-foreground">
-            The top layer where specific MCP-compatible applications, plugins, or tools are
-            implemented. This layer leverages the functionality provided by the lower layers
-            to deliver MCP capabilities to end users.
-          </p>
-        </div>
-      </div>
-      
-      <h3 id="design-principles">Design Principles</h3>
-      <p>
-        The MCP Framework is built on the following key design principles:
-      </p>
-      
-      <ul>
-        <li><strong>Modularity:</strong> Components can be used independently or together</li>
-        <li><strong>Interoperability:</strong> Ensures compatibility between different implementations</li>
-        <li><strong>Extensibility:</strong> Easy to extend or customize for specific needs</li>
-        <li><strong>Protocol Compliance:</strong> Strict adherence to the MCP specification</li>
-        <li><strong>Developer Experience:</strong> Designed for ease of implementation and use</li>
-      </ul>
-      
-      <h3 id="framework-flow">Framework Flow</h3>
-      <p>
-        Here's a high-level view of how data flows through the MCP Framework:
-      </p>
-      
-      <ol>
-        <li><strong>Context Collection:</strong> Application-specific code gathers relevant context data</li>
-        <li><strong>Data Transformation:</strong> Raw context is transformed into MCP-compliant format</li>
-        <li><strong>Context Management:</strong> The core layer processes and manages context data</li>
-        <li><strong>Storage/Transmission:</strong> Context is stored locally or transmitted to MCP servers</li>
-        <li><strong>Context Retrieval:</strong> Other tools retrieve context through the MCP API</li>
-        <li><strong>Context Utilization:</strong> Retrieved context is applied to enhance AI capabilities</li>
-      </ol>
+              </pre>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 mb-8">
+              <div className="bg-card rounded-lg border p-6">
+                <h4 className="text-lg font-medium mb-2">Infrastructure Layer</h4>
+                <p className="text-muted-foreground">
+                  The foundation of the framework, providing low-level services for storage, security,
+                  and communication. This layer abstracts the underlying infrastructure and provides
+                  a consistent interface for the layers above.
+                </p>
+              </div>
+              
+              <div className="bg-card rounded-lg border p-6">
+                <h4 className="text-lg font-medium mb-2">Core Layer</h4>
+                <p className="text-muted-foreground">
+                  Implements the core MCP protocol specifications, including data models, API definitions,
+                  and protocol handlers. This layer ensures compliance with the MCP standard and provides
+                  the essential functionality for context management.
+                </p>
+              </div>
+              
+              <div className="bg-card rounded-lg border p-6">
+                <h4 className="text-lg font-medium mb-2">Integration Layer</h4>
+                <p className="text-muted-foreground">
+                  Bridges the gap between the core MCP functionality and specific tools or environments.
+                  Provides adapters, providers, and handlers that make it easier to integrate MCP into
+                  various development tools and workflows.
+                </p>
+              </div>
+              
+              <div className="bg-card rounded-lg border p-6">
+                <h4 className="text-lg font-medium mb-2">Application Layer</h4>
+                <p className="text-muted-foreground">
+                  The top layer where specific MCP-compatible applications, plugins, or tools are
+                  implemented. This layer leverages the functionality provided by the lower layers
+                  to deliver MCP capabilities to end users.
+                </p>
+              </div>
+            </div>
+            
+            <h3 id="design-principles">Design Principles</h3>
+            <p>
+              The MCP Framework is built on the following key design principles:
+            </p>
+            
+            <ul>
+              <li><strong>Modularity:</strong> Components can be used independently or together</li>
+              <li><strong>Interoperability:</strong> Ensures compatibility between different implementations</li>
+              <li><strong>Extensibility:</strong> Easy to extend or customize for specific needs</li>
+              <li><strong>Protocol Compliance:</strong> Strict adherence to the MCP specification</li>
+              <li><strong>Developer Experience:</strong> Designed for ease of implementation and use</li>
+            </ul>
+            
+            <h3 id="framework-flow">Framework Flow</h3>
+            <p>
+              Here's a high-level view of how data flows through the MCP Framework:
+            </p>
+            
+            <ol>
+              <li><strong>Context Collection:</strong> Application-specific code gathers relevant context data</li>
+              <li><strong>Data Transformation:</strong> Raw context is transformed into MCP-compliant format</li>
+              <li><strong>Context Management:</strong> The core layer processes and manages context data</li>
+              <li><strong>Storage/Transmission:</strong> Context is stored locally or transmitted to MCP servers</li>
+              <li><strong>Context Retrieval:</strong> Other tools retrieve context through the MCP API</li>
+              <li><strong>Context Utilization:</strong> Retrieved context is applied to enhance AI capabilities</li>
+            </ol>
 
-      <h2 id="core-components">Core Components</h2>
-      <p>
-        The MCP Framework consists of several modular components that work together to provide a complete
-        implementation of the Model Context Protocol. Each component addresses a specific aspect of context
-        management and can be used independently or as part of a comprehensive MCP solution.
-      </p>
-      
-      <h3 id="context-manager">Context Manager</h3>
-      <p>
-        The Context Manager is the central component of the MCP Framework, responsible for creating,
-        retrieving, updating, and deleting context data. It orchestrates the interactions between
-        other components and ensures proper context lifecycle management.
-      </p>
-      
-      <CodeBlock
-        language="typescript"
-        code={`// Example of a Context Manager implementation
+            <h2 id="core-components">Core Components</h2>
+            <p>
+              The MCP Framework consists of several modular components that work together to provide a complete
+              implementation of the Model Context Protocol. Each component addresses a specific aspect of context
+              management and can be used independently or as part of a comprehensive MCP solution.
+            </p>
+            
+            <h3 id="context-manager">Context Manager</h3>
+            <p>
+              The Context Manager is the central component of the MCP Framework, responsible for creating,
+              retrieving, updating, and deleting context data. It orchestrates the interactions between
+              other components and ensures proper context lifecycle management.
+            </p>
+            
+            <CodeBlock
+              language="typescript"
+              code={`// Example of a Context Manager implementation
 import { ContextStorage } from './context-storage';
 import { ContextValidator } from './context-validator';
 import { ContextTransformer } from './context-transformer';
@@ -272,17 +279,17 @@ export class ContextManager {
     return this.storage.deleteContext(contextId);
   }
 }`}
-      />
-      
-      <h3 id="context-storage">Context Storage</h3>
-      <p>
-        The Context Storage component provides a unified interface for storing and retrieving context
-        data, regardless of the underlying storage mechanism (database, file system, cloud storage, etc.).
-      </p>
-      
-      <CodeBlock
-        language="typescript"
-        code={`// Abstract Context Storage interface
+            />
+            
+            <h3 id="context-storage">Context Storage</h3>
+            <p>
+              The Context Storage component provides a unified interface for storing and retrieving context
+              data, regardless of the underlying storage mechanism (database, file system, cloud storage, etc.).
+            </p>
+            
+            <CodeBlock
+              language="typescript"
+              code={`// Abstract Context Storage interface
 import { Context, ContextOptions, ContextQuery } from '../models';
 
 export interface ContextStorage {
@@ -399,18 +406,18 @@ function matchesQuery(context: Context, query: ContextQuery): boolean {
   }
   return true;
 }`}
-      />
-      
-      <h3 id="context-validator">Context Validator</h3>
-      <p>
-        The Context Validator ensures that context data conforms to the MCP specification and meets
-        any additional validation requirements. It helps prevent invalid or malformed context data
-        from entering the system.
-      </p>
-      
-      <CodeBlock
-        language="typescript"
-        code={`// Context Validator implementation
+            />
+            
+            <h3 id="context-validator">Context Validator</h3>
+            <p>
+              The Context Validator ensures that context data conforms to the MCP specification and meets
+              any additional validation requirements. It helps prevent invalid or malformed context data
+              from entering the system.
+            </p>
+            
+            <CodeBlock
+              language="typescript"
+              code={`// Context Validator implementation
 import { Context } from '../models';
 
 export interface ValidationResult {
@@ -452,17 +459,17 @@ export class ContextValidator {
     };
   }
 }`}
-      />
-      
-      <h3 id="context-transformer">Context Transformer</h3>
-      <p>
-        The Context Transformer is responsible for converting between different representations of context
-        data. It enables interoperability between different tools and versions of the MCP specification.
-      </p>
-      
-      <CodeBlock
-        language="typescript"
-        code={`// Context Transformer implementation
+            />
+            
+            <h3 id="context-transformer">Context Transformer</h3>
+            <p>
+              The Context Transformer is responsible for converting between different representations of context
+              data. It enables interoperability between different tools and versions of the MCP specification.
+            </p>
+            
+            <CodeBlock
+              language="typescript"
+              code={`// Context Transformer implementation
 import { Context } from '../models';
 
 export class ContextTransformer {
@@ -527,18 +534,18 @@ function getLanguageFromPath(filePath: string): string {
   
   return extension ? (languageMap[extension] || 'plaintext') : 'plaintext';
 }`}
-      />
-      
-      <h3 id="context-provider">Context Provider</h3>
-      <p>
-        The Context Provider gathers context data from the environment (IDE, filesystem, etc.) and converts
-        it into a format suitable for the MCP Framework. Different providers can be implemented for different
-        sources of context.
-      </p>
-      
-      <CodeBlock
-        language="typescript"
-        code={`// Abstract Context Provider interface
+            />
+            
+            <h3 id="context-provider">Context Provider</h3>
+            <p>
+              The Context Provider gathers context data from the environment (IDE, filesystem, etc.) and converts
+              it into a format suitable for the MCP Framework. Different providers can be implemented for different
+              sources of context.
+            </p>
+            
+            <CodeBlock
+              language="typescript"
+              code={`// Abstract Context Provider interface
 import { Context, ProviderOptions } from '../models';
 
 export interface ContextProvider {
@@ -632,17 +639,17 @@ export class FileSystemContextProvider implements ContextProvider {
     });
   }
 }`}
-      />
-      
-      <h3 id="context-syncer">Context Synchronizer</h3>
-      <p>
-        The Context Synchronizer ensures that context data remains consistent across different tools
-        and environments. It handles conflict resolution, version control, and real-time updates.
-      </p>
-      
-      <CodeBlock
-        language="typescript"
-        code={`// Context Synchronizer implementation
+            />
+            
+            <h3 id="context-syncer">Context Synchronizer</h3>
+            <p>
+              The Context Synchronizer ensures that context data remains consistent across different tools
+              and environments. It handles conflict resolution, version control, and real-time updates.
+            </p>
+            
+            <CodeBlock
+              language="typescript"
+              code={`// Context Synchronizer implementation
 import { Context, SyncOptions, SyncResult } from '../models';
 import { ContextManager } from './context-manager';
 
@@ -771,49 +778,51 @@ export class ContextSynchronizer {
     // and identify specific conflicts at the file or field level
   }
 }`}
-      />
+            />
 
-      <h2 id="data-structures">Data Structures and Models</h2>
-      <p>
-        This section will detail the standard data structures defined by the MCP Framework for representing
-        context data, metadata, and related information.
-      </p>
+            <h2 id="data-structures">Data Structures and Models</h2>
+            <p>
+              This section will detail the standard data structures defined by the MCP Framework for representing
+              context data, metadata, and related information.
+            </p>
 
-      <h2 id="api-reference">API Reference</h2>
-      <p>
-        A comprehensive reference for the API endpoints, methods, parameters, and responses defined by
-        the MCP Framework.
-      </p>
+            <h2 id="api-reference">API Reference</h2>
+            <p>
+              A comprehensive reference for the API endpoints, methods, parameters, and responses defined by
+              the MCP Framework.
+            </p>
 
-      <h2 id="integration-patterns">Integration Patterns</h2>
-      <p>
-        Common patterns and approaches for integrating MCP into various types of development tools and
-        workflows.
-      </p>
+            <h2 id="integration-patterns">Integration Patterns</h2>
+            <p>
+              Common patterns and approaches for integrating MCP into various types of development tools and
+              workflows.
+            </p>
 
-      <h2 id="implementation-examples">Implementation Examples</h2>
-      <p>
-        Practical code examples showing how to implement key aspects of the MCP Framework in
-        different programming languages and environments.
-      </p>
+            <h2 id="implementation-examples">Implementation Examples</h2>
+            <p>
+              Practical code examples showing how to implement key aspects of the MCP Framework in
+              different programming languages and environments.
+            </p>
 
-      <h2 id="best-practices">Best Practices</h2>
-      <p>
-        Recommendations for effectively implementing and using the MCP Framework, including
-        performance, security, and reliability considerations.
-      </p>
+            <h2 id="best-practices">Best Practices</h2>
+            <p>
+              Recommendations for effectively implementing and using the MCP Framework, including
+              performance, security, and reliability considerations.
+            </p>
 
-      <h2 id="extending-framework">Extending the Framework</h2>
-      <p>
-        Guidelines for extending or customizing the MCP Framework to meet specific requirements
-        while maintaining compatibility with the broader ecosystem.
-      </p>
+            <h2 id="extending-framework">Extending the Framework</h2>
+            <p>
+              Guidelines for extending or customizing the MCP Framework to meet specific requirements
+              while maintaining compatibility with the broader ecosystem.
+            </p>
 
-      <h2 id="conclusion">Conclusion</h2>
-      <p>
-        Summary of key concepts and next steps for working with the MCP Framework.
-      </p>
-
+            <h2 id="conclusion">Conclusion</h2>
+            <p>
+              Summary of key concepts and next steps for working with the MCP Framework.
+            </p>
+          </div>
+        </div>
+      </div>
     </ContentTemplate>
   )
 } 

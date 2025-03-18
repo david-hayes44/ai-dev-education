@@ -37,60 +37,69 @@ export default function ServerSecurity() {
         }
       ]}
     >
-      <div className="sticky top-6">
-        <SimpleTOC />
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+        {/* Table of Contents - sticky on left side */}
+        <div className="hidden lg:block lg:col-span-3">
+          <div className="sticky top-6">
+            <SimpleTOC />
+          </div>
+        </div>
+        
+        {/* Main content */}
+        <div className="lg:col-span-9">
+          <div className="prose prose-lg dark:prose-invert">
+            <h2 id="introduction">Introduction to MCP Server Security</h2>
+            <p>
+              Security is a critical aspect of any MCP server implementation. MCP servers handle sensitive 
+              code, project details, and proprietary information that must be protected. This guide covers 
+              essential security measures and best practices.
+            </p>
+            
+            <Callout type="warning" title="Security First">
+              Security should never be an afterthought. Integrate security considerations from the beginning
+              of your MCP server development process.
+            </Callout>
+
+            <h2 id="authentication">Authentication</h2>
+            <p>
+              Authentication verifies the identity of users and systems accessing your MCP server. It is your
+              first line of defense against unauthorized access.
+            </p>
+
+            <h2 id="authorization">Authorization</h2>
+            <p>
+              Authorization determines what authenticated users can access or modify. A robust authorization 
+              system is essential for protecting sensitive context data.
+            </p>
+
+            <h2 id="encryption">Encryption</h2>
+            <p>
+              Encryption ensures that even if data is intercepted or accessed without authorization, it remains
+              unreadable without the proper decryption keys.
+            </p>
+
+            <h2 id="secure-deployment">Secure Deployment</h2>
+            <p>
+              Security extends beyond code to how you deploy and operate your MCP server in production environments.
+            </p>
+
+            <h2 id="monitoring">Security Monitoring</h2>
+            <p>
+              Continuous monitoring helps detect and respond to security incidents quickly, minimizing potential damage.
+            </p>
+
+            <h2 id="best-practices">Security Best Practices</h2>
+            <p>
+              Follow these recommended practices to maintain a secure MCP server implementation.
+            </p>
+
+            <h2 id="conclusion">Conclusion</h2>
+            <p>
+              Securing your MCP server requires attention at every stage of development and operation.
+            </p>
+          </div>
+        </div>
       </div>
-
-      <h2 id="introduction">Introduction to MCP Server Security</h2>
-      <p>
-        Security is a critical aspect of any MCP server implementation. MCP servers handle sensitive 
-        code, project details, and proprietary information that must be protected. This guide covers 
-        essential security measures and best practices.
-      </p>
-      
-      <Callout type="warning" title="Security First">
-        Security should never be an afterthought. Integrate security considerations from the beginning
-        of your MCP server development process.
-      </Callout>
-
-      <h2 id="authentication">Authentication</h2>
-      <p>
-        Authentication verifies the identity of users and systems accessing your MCP server. It is your
-        first line of defense against unauthorized access.
-      </p>
-
-      <h2 id="authorization">Authorization</h2>
-      <p>
-        Authorization determines what authenticated users can access or modify. A robust authorization 
-        system is essential for protecting sensitive context data.
-      </p>
-
-      <h2 id="encryption">Encryption</h2>
-      <p>
-        Encryption ensures that even if data is intercepted or accessed without authorization, it remains
-        unreadable without the proper decryption keys.
-      </p>
-
-      <h2 id="secure-deployment">Secure Deployment</h2>
-      <p>
-        Security extends beyond code to how you deploy and operate your MCP server in production environments.
-      </p>
-
-      <h2 id="monitoring">Security Monitoring</h2>
-      <p>
-        Continuous monitoring helps detect and respond to security incidents quickly, minimizing potential damage.
-      </p>
-
-      <h2 id="best-practices">Security Best Practices</h2>
-      <p>
-        Follow these recommended practices to maintain a secure MCP server implementation.
-      </p>
-
-      <h2 id="conclusion">Conclusion</h2>
-      <p>
-        Securing your MCP server requires attention at every stage of development and operation.
-      </p>
-
     </ContentTemplate>
   )
 }
