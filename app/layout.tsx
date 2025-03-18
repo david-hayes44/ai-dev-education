@@ -52,13 +52,15 @@ export default function RootLayout({
             disableTransitionOnChange
           >
             <AuthProvider>
-              <ChatProvider>
-                <ClientLayout>
-                  <Header />
-                  <div className="flex-1">{children}</div>
-                  <FloatingChat />
-                </ClientLayout>
-              </ChatProvider>
+              <NavigationProvider>
+                <ChatProvider>
+                  <ClientLayout>
+                    <Header />
+                    <div className="flex-1">{children}</div>
+                    <FloatingChat />
+                  </ClientLayout>
+                </ChatProvider>
+              </NavigationProvider>
             </AuthProvider>
           </ThemeProvider>
         </TanstackClientProvider>

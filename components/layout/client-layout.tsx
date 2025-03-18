@@ -3,7 +3,6 @@
 import { ReactNode, useState, useEffect } from "react"
 import { Sidebar } from "@/components/navigation/Sidebar"
 import { MainLayout } from "@/components/layout/main-layout"
-import { NavigationProvider } from "@/contexts/navigation-context"
 
 export default function ClientLayout({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
@@ -29,13 +28,13 @@ export default function ClientLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <NavigationProvider>
+    <>
       {/* Persistent sidebar for all pages */}
       <Sidebar />
       
       <MainLayout>
         {children}
       </MainLayout>
-    </NavigationProvider>
+    </>
   )
 } 
