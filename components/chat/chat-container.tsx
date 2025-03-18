@@ -92,7 +92,8 @@ export default function ChatContainer() {
     isTyping, 
     relevantContent, 
     isSearchingContent,
-    navigationSuggestions 
+    navigationSuggestions,
+    sendMessage
   } = useChat();
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
@@ -100,8 +101,13 @@ export default function ChatContainer() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
+  // Handle sending a message
+  const handleSendMessage = async (content: string) => {
+    await sendMessage(content);
+  };
+
   return (
-    <div className="flex flex-col h-[calc(100vh-180px)] rounded-md border shadow-sm bg-background">
+    <div className="flex flex-col h-full">
       <ScrollArea className="flex-1 p-4">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
@@ -146,6 +152,15 @@ export default function ChatContainer() {
           <NavigationSuggestions suggestions={navigationSuggestions} />
         </div>
       )}
+
+      {/* Chat input section */}
+      <div className="border-t mt-auto">
+        <ChatInput 
+          onSubmit={handleSendMessage}
+          isLoading={isTyping}
+          placeholder="Ask about AI development or MCP..."
+        />
+      </div>
     </div>
   );
 }
