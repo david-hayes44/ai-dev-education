@@ -211,9 +211,9 @@ function RecommendationCard({ recommendation, onClick }: {
 
 // Define larger default sizes with increased comfort
 const DEFAULT_WIDTH = 420; // Increased from 350
-const DEFAULT_HEIGHT = 650; // Increased from previous value
+const DEFAULT_HEIGHT = 750; // Increased to show full chat content
 const LARGE_WIDTH = 800;
-const LARGE_HEIGHT = 800;
+const LARGE_HEIGHT = 900; // Increased for better visibility
 
 // Must be used within a ChatProvider
 function ChatHeader({ isLarge, toggleSize, onClose }: { 
@@ -331,6 +331,7 @@ export function FloatingChat() {
           style={{
             width: `${width}px`,
             height: `${height}px`,
+            maxHeight: 'calc(100vh - 80px)' // Ensure it doesn't exceed viewport height
           }}
         >
           <ChatProvider>
@@ -367,7 +368,7 @@ export function FloatingChat() {
             </div>
             
             {/* Content based on active tab */}
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-auto">
               {activeTab === "chat" ? (
                 <ChatContainer />
               ) : (
