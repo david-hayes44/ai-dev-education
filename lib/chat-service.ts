@@ -1422,7 +1422,7 @@ When responding:
 - Suggest relevant pages when appropriate based on the user's questions
 
 The platform covers topics including:
-- Machine-Cognition Protocol (MCP)
+- Model Context Protocol (MCP)
 - AI Agent development
 - Prompt engineering
 - LLM systems
