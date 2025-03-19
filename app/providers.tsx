@@ -4,6 +4,7 @@ import React from 'react'
 import { ThemeProvider } from "@/components/providers/theme-provider"
 import { EnhancedChatProvider } from "@/lib/hooks/use-enhanced-chat"
 import { NavigationProvider } from "@/contexts/navigation-context"
+import { ChatProvider } from "@/contexts/chat-context"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -13,11 +14,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
       enableSystem
       disableTransitionOnChange
     >
-      <EnhancedChatProvider>
-        <NavigationProvider>
-          {children}
-        </NavigationProvider>
-      </EnhancedChatProvider>
+      <ChatProvider>
+        <EnhancedChatProvider>
+          <NavigationProvider>
+            {children}
+          </NavigationProvider>
+        </EnhancedChatProvider>
+      </ChatProvider>
     </ThemeProvider>
   )
 } 
