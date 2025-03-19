@@ -18,11 +18,11 @@ export default function ChatPage() {
         </div>
         
         <Suspense fallback={<div className="text-center p-12">Loading chat interface...</div>}>
-          <EnhancedChatProvider>
-            <ChatProvider>
+          <ChatProvider>
+            <EnhancedChatProvider>
               <ChatClient />
-            </ChatProvider>
-          </EnhancedChatProvider>
+            </EnhancedChatProvider>
+          </ChatProvider>
         </Suspense>
       </main>
     </ChatClientLayout>
