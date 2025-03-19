@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
 import { 
   Settings, Cpu, Zap, Share2, Download, 
-  SquareTerminal, MessageSquare, Sparkles
+  SquareTerminal, MessageSquare, Sparkles, Tags, FileText
 } from "lucide-react"
 import { ModelSelector } from "@/components/chat/model-selector"
 import {
@@ -19,6 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { TopicDisplay } from "@/components/topic-display"
+import { ContentRecommendations } from "@/components/content-recommendations"
 
 export function UserPreferences() {
   const { selectedModel, setModel, availableModels } = useChat()
@@ -52,6 +54,12 @@ export function UserPreferences() {
             </TabsTrigger>
             <TabsTrigger value="advanced" className="flex-1">
               Advanced
+            </TabsTrigger>
+            <TabsTrigger value="topics" className="flex-1">
+              Topics
+            </TabsTrigger>
+            <TabsTrigger value="content" className="flex-1">
+              Content
             </TabsTrigger>
           </TabsList>
         </div>
@@ -147,6 +155,32 @@ export function UserPreferences() {
               />
             </div>
           </TabsContent>
+
+          <TabsContent value="topics" className="space-y-4 mt-2">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 mb-2">
+                <Tags className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-medium">Conversation Topics</h3>
+              </div>
+              <p className="text-xs text-muted-foreground mb-2">
+                Topics are automatically extracted from your conversation using semantic analysis.
+              </p>
+              <TopicDisplay />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="content" className="space-y-4 mt-2">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-medium">Recommended Content</h3>
+              </div>
+              <p className="text-xs text-muted-foreground mb-2">
+                Content recommendations based on your conversation topics.
+              </p>
+              <ContentRecommendations limit={5} />
+            </div>
+          </TabsContent>
         </div>
       </Tabs>
 
@@ -170,6 +204,24 @@ export function UserPreferences() {
           <Button variant="outline" size="sm" className="w-full justify-start">
             <Sparkles className="mr-2 h-4 w-4" />
             Analyze Chat
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="w-full justify-start"
+            onClick={() => setActiveTab('topics')}
+          >
+            <Tags className="mr-2 h-4 w-4" />
+            View Topics
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="w-full justify-start"
+            onClick={() => setActiveTab('content')}
+          >
+            <FileText className="mr-2 h-4 w-4" />
+            Recommendations
           </Button>
         </div>
       </div>

@@ -16,7 +16,10 @@ import {
   ChevronRight,
   SkipBack,
   SkipForward,
-  Keyboard
+  Keyboard,
+  PanelBottom,
+  SendHorizonal,
+  Search
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -39,6 +42,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { ConversationSearch } from "@/components/conversation-search"
 
 // Temporary inline implementation to avoid import issues
 function NavigationRecommendation({ recommendation }: { recommendation: NavigationRecommendationType }) {
@@ -153,6 +157,7 @@ export default function ChatContainer({ onMessageSend }: ChatContainerProps) {
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [showEmergencyReset, setShowEmergencyReset] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   
   // Helper to force a re-render
   const forceUpdate = () => {
@@ -303,9 +308,64 @@ export default function ChatContainer({ onMessageSend }: ChatContainerProps) {
     }
   };
 
+  // Add a function to handle when a message is selected in search
+  const handleSearchMessageSelect = (messageId: string) => {
+    // Scroll to the message
+    const messageElement = document.getElementById(`message-${messageId}`)
+    if (messageElement) {
+      messageElement.scrollIntoView({ behavior: "smooth" })
+      // Highlight the message briefly
+      messageElement.classList.add("bg-accent")
+      setTimeout(() => {
+        messageElement.classList.remove("bg-accent")
+      }, 2000)
+    }
+  }
+
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
       <div className="flex flex-col h-full border rounded-lg overflow-hidden bg-background">
+        <div className="absolute top-0 w-full z-10 flex items-center justify-between p-2 bg-gradient-to-b from-background to-transparent">
+          <div className="flex items-center gap-2">
+            {showEmergencyReset && (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-8 gap-1"
+                onClick={handleEmergencyReset}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Force Reset</span>
+              </Button>
+            )}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1"
+                    onClick={handleNewChat}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    <span>New Chat</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Start a new conversation</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-8 w-8"
+            onClick={() => setShowSearch(true)}
+            title="Search conversation"
+          >
+            <Search className="h-4 w-4" />
+          </Button>
+        </div>
+        
         {totalChunks > 1 && (
           <div className="px-4 py-2 border-b flex items-center justify-between bg-muted/30">
             <div className="text-xs text-muted-foreground flex items-center gap-2">
@@ -434,17 +494,6 @@ export default function ChatContainer({ onMessageSend }: ChatContainerProps) {
         <div className="px-4 py-2 flex justify-between items-center border-b">
           <h2 className="font-medium text-sm">Chat with AI Tutor</h2>
           <div className="flex items-center gap-2">
-            {showEmergencyReset && (
-              <Button
-                variant="destructive"
-                size="sm"
-                className="h-8 gap-1"
-                onClick={handleEmergencyReset}
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                <span>Force Reset</span>
-              </Button>
-            )}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -452,13 +501,13 @@ export default function ChatContainer({ onMessageSend }: ChatContainerProps) {
                     variant="outline"
                     size="sm"
                     className="h-8 gap-1"
-                    onClick={handleNewChat}
+                    onClick={() => setShowSearch(true)}
                   >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    <span>New Chat</span>
+                    <Search className="h-3.5 w-3.5" />
+                    <span>Search</span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Start a new conversation</TooltipContent>
+                <TooltipContent>Search conversation</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
@@ -537,6 +586,13 @@ export default function ChatContainer({ onMessageSend }: ChatContainerProps) {
             />
           </div>
         </div>
+
+        {/* Conversation search dialog */}
+        <ConversationSearch 
+          isOpen={showSearch}
+          onClose={() => setShowSearch(false)}
+          onSelect={handleSearchMessageSelect}
+        />
       </div>
     </ErrorBoundary>
   );

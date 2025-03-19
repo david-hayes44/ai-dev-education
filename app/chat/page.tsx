@@ -3,6 +3,7 @@
 import { Suspense } from "react"
 import { ChatClient } from "@/components/chat/chat-client"
 import { ChatProvider } from "@/contexts/chat-context"
+import { EnhancedChatProvider } from "@/lib/hooks/use-enhanced-chat"
 import { ChatClientLayout } from "./client-layout"
 
 export default function ChatPage() {
@@ -17,9 +18,11 @@ export default function ChatPage() {
         </div>
         
         <Suspense fallback={<div className="text-center p-12">Loading chat interface...</div>}>
-          <ChatProvider>
-            <ChatClient />
-          </ChatProvider>
+          <EnhancedChatProvider>
+            <ChatProvider>
+              <ChatClient />
+            </ChatProvider>
+          </EnhancedChatProvider>
         </Suspense>
       </main>
     </ChatClientLayout>
