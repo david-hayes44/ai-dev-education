@@ -2,22 +2,22 @@
 
 import React from 'react'
 import { ThemeProvider } from "@/components/providers/theme-provider"
-import { EnhancedChatProvider } from "@/contexts/enhanced-chat-context"
+import { EnhancedChatProvider } from "@/lib/hooks/use-enhanced-chat"
 import { NavigationProvider } from "@/contexts/navigation-context"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider
       attribute="class"
-      defaultTheme="dark"
+      defaultTheme="system"
       enableSystem
       disableTransitionOnChange
     >
-      <NavigationProvider>
-        <EnhancedChatProvider>
+      <EnhancedChatProvider>
+        <NavigationProvider>
           {children}
-        </EnhancedChatProvider>
-      </NavigationProvider>
+        </NavigationProvider>
+      </EnhancedChatProvider>
     </ThemeProvider>
   )
 } 
