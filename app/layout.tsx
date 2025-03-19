@@ -1,13 +1,11 @@
 import { Inter as FontSans } from "next/font/google"
 import "@/app/globals.css"
-import { ThemeProvider } from "@/components/providers/theme-provider"
-import { AuthProvider } from "@/components/providers/auth-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { cn } from "@/lib/utils"
 import TanstackClientProvider from "@/components/providers/tanstack-client-provider"
 import ClientLayout from "@/components/layout/client-layout"
-import { NavigationProvider } from "@/contexts/navigation-context"
-import { ChatProvider } from "@/contexts/chat-context"
+import { AuthProvider } from "@/components/providers/auth-provider"
+import { Providers } from "./providers"
 
 const fontSans = FontSans({
   subsets: ["latin"],
@@ -43,22 +41,14 @@ export default function RootLayout({
         )}
       >
         <TanstackClientProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <AuthProvider>
-              <NavigationProvider>
-                <ChatProvider>
-                  <ClientLayout>
-                    <div className="flex-1">{children}</div>
-                  </ClientLayout>
-                </ChatProvider>
-              </NavigationProvider>
-            </AuthProvider>
-          </ThemeProvider>
+          <AuthProvider>
+            <Providers>
+              <ClientLayout>
+                <div className="flex-1">{children}</div>
+              </ClientLayout>
+              <Toaster />
+            </Providers>
+          </AuthProvider>
         </TanstackClientProvider>
       </body>
     </html>

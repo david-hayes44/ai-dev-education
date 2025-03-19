@@ -27,7 +27,8 @@
     "supabase:apply-storage-rls": "node --experimental-modules scripts/apply-storage-rls.js",
     "supabase:indexes": "node --experimental-modules scripts/run-sql.js scripts/optimize-indexes.sql",
     "supabase:rls": "node --experimental-modules scripts/run-sql.js scripts/rls-policies.sql",
-    "supabase:storage-rls": "node --experimental-modules scripts/run-sql.js scripts/storage-rls-policies.sql"
+    "supabase:storage-rls": "node --experimental-modules scripts/run-sql.js scripts/storage-rls-policies.sql",
+    "migrate:chats": "node scripts/migrate-chats-to-supabase.js"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.10.2",

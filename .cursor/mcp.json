@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "supabase": {
-      "command": "scripts/start-mcp-bridge.bat",
-      "args": []
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://postgres:Fourth_2025#@!@db.mbabelguxbendvcawgnu.supabase.co:5432/postgres"]
     }
   }
 }

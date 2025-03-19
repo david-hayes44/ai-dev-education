@@ -1,9 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { useRef, useEffect } from "react"
+import { useRef, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { X, MessageCircle, Settings, Maximize2, Minimize2, Search, Compass, ExternalLink, ChevronRight, Info, ArrowRight } from "lucide-react"
+import { X, MessageCircle, Settings, Maximize2, Minimize2, Search, Compass, ExternalLink, ChevronRight, Info, ArrowRight, Download, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ChatContainer } from "@/components/chat/chat-container"
@@ -18,6 +18,14 @@ import {
 } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import { NavigationSuggestion } from "@/components/chat/navigation-suggestion"
+import { ConversationExportDialog } from "./conversation-export-dialog"
+import { ConversationImportDialog } from "./conversation-import-dialog"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { ConversationActions } from "./conversation-actions"
 
 // Interface for ChatService with only the methods we need
 interface ChatServiceInterface {
@@ -243,6 +251,7 @@ function ChatHeader({ isLarge, toggleSize, onClose }: {
         <span className="truncate max-w-[200px]">{displayTitle}</span>
       </h3>
       <div className="flex items-center gap-3">
+        <ConversationActions />
         <Button
           variant="ghost"
           size="icon"
@@ -302,6 +311,8 @@ export function FloatingChat() {
     height: DEFAULT_HEIGHT,
   });
   const router = useRouter();
+  const [showExportDialog, setShowExportDialog] = useState(false)
+  const [showImportDialog, setShowImportDialog] = useState(false)
   
   // Define chat service reference to handle chat functionality
   const chatServiceRef = useRef<ChatServiceInterface | null>(null);
