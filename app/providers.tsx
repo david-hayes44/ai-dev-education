@@ -14,13 +14,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
       enableSystem
       disableTransitionOnChange
     >
-      <ChatProvider>
-        <EnhancedChatProvider>
-          <NavigationProvider>
+      <NavigationProvider>
+        <ChatProvider>
+          <EnhancedChatProvider>
             {children}
-          </NavigationProvider>
-        </EnhancedChatProvider>
-      </ChatProvider>
+          </EnhancedChatProvider>
+        </ChatProvider>
+      </NavigationProvider>
     </ThemeProvider>
   )
 } 
