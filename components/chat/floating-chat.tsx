@@ -153,7 +153,6 @@ function NavigationContainer({ onClose, onNavigate }: {
             {/* Prompt to search */}
             {!relatedPages.length && (
               <div className="flex flex-col items-center justify-center py-10 text-center">
-                <Search className="h-12 w-12 text-primary/20 mb-4" />
                 <h3 className="text-lg font-medium mb-2">Find Content</h3>
                 <p className="text-muted-foreground mb-4 max-w-xs mx-auto">
                   Use the search bar to find relevant content across the site
@@ -429,7 +428,7 @@ export function FloatingChat() {
             </button>
             <button
               className={cn(
-                "flex-1 flex justify-center items-center gap-1 text-sm font-medium",
+                "flex-1 flex justify-center items-center gap-1 text-sm font-medium relative z-10",
                 activeTab === 'navigation'
                   ? "bg-background text-foreground"
                   : "bg-muted/50 text-muted-foreground hover:bg-muted/80"

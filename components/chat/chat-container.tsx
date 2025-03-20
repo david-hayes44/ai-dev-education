@@ -339,15 +339,9 @@ export default function ChatContainer({ onMessageSend }: ChatContainerProps) {
               </Button>
             )}
           </div>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-8 w-8"
-            onClick={() => setShowSearch(true)}
-            title="Search conversation"
-          >
-            <Search className="h-4 w-4" />
-          </Button>
+          <div>
+            {/* Right side buttons could go here */}
+          </div>
         </div>
         
         {totalChunks > 1 && (
