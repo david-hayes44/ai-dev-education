@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useRef, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { X, MessageCircle, Settings, Maximize2, Minimize2, Search, Compass, ExternalLink, ChevronRight, Info, ArrowRight, Download, Upload } from "lucide-react"
+import { X, MessageCircle, Settings, Maximize2, Minimize2, Search, Compass, ExternalLink, ChevronRight, Info, ArrowRight, Download, Upload, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ChatContainer } from "@/components/chat/chat-container"
@@ -83,10 +83,6 @@ function NavigationContainer({ onClose, onNavigate }: {
             placeholder="Search for content..."
             className="flex-1"
           />
-          <Button type="submit" disabled={isLoading || isSearching}>
-            <Search className="h-4 w-4 mr-2" />
-            Search
-          </Button>
         </form>
       </div>
       
@@ -238,18 +234,36 @@ function ChatHeader({ isLarge, toggleSize, onClose }: {
   toggleSize: () => void;
   onClose: () => void;
 }) {
-  const { selectedModel, setModel } = useChat();
+  const { selectedModel, setModel, resetChat } = useChat();
   const [isOpen, setIsOpen] = React.useState(false);
   const { pageTitle, pageDescription } = useNavigation();
 
   // Show current page in header if available
   const displayTitle = pageTitle || "AI Navigation Assistant";
+  
+  // Handle starting a new chat
+  const handleNewChat = () => {
+    if (resetChat) {
+      resetChat();
+    }
+  };
 
   return (
     <div className="flex items-center justify-between border-b p-4 h-16">
-      <h3 className="font-semibold text-base flex items-center">
-        <span className="truncate max-w-[200px]">{displayTitle}</span>
-      </h3>
+      <div className="flex items-center gap-2">
+        <h3 className="font-semibold text-base">
+          <span className="truncate max-w-[150px]">{displayTitle}</span>
+        </h3>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1"
+          onClick={handleNewChat}
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          <span>New Chat</span>
+        </Button>
+      </div>
       <div className="flex items-center gap-3">
         <ConversationActions />
         <Button

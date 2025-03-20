@@ -338,22 +338,6 @@ export default function ChatContainer({ onMessageSend }: ChatContainerProps) {
                 <span>Force Reset</span>
               </Button>
             )}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 gap-1"
-                    onClick={handleNewChat}
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    <span>New Chat</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Start a new conversation</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
           </div>
           <Button 
             variant="ghost" 
@@ -494,6 +478,22 @@ export default function ChatContainer({ onMessageSend }: ChatContainerProps) {
         <div className="px-4 py-2 flex justify-between items-center border-b">
           <h2 className="font-medium text-sm">Chat with AI Tutor</h2>
           <div className="flex items-center gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1"
+                    onClick={handleNewChat}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    <span>New Chat</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Start a new conversation</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
