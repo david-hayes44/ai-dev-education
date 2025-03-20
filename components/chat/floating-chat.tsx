@@ -253,15 +253,6 @@ function ChatHeader({ isLarge, toggleSize, onClose }: {
         <h3 className="font-semibold text-base">
           <span className="truncate max-w-[150px]">{displayTitle}</span>
         </h3>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 gap-1"
-          onClick={handleNewChat}
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          <span>New Chat</span>
-        </Button>
       </div>
       <div className="flex items-center gap-3">
         <ConversationActions />
