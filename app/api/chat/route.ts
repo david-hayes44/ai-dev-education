@@ -364,6 +364,10 @@ function extractContentReferences(query: string, relevantContent: ContentChunk[]
  * Main API handler for chat endpoint with streaming support
  */
 export async function POST(req: NextRequest) {
+  // Set a longer timeout for the response
+  const responseTimeout = 120000; // 2 minutes
+  let timeoutId: NodeJS.Timeout | null = null;
+
   try {
     // Process request with improved error handling
     const body = await req.json() as ChatRequest;
@@ -454,6 +458,26 @@ export async function POST(req: NextRequest) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
+        // Set a timeout to prevent hanging connections
+        timeoutId = setTimeout(() => {
+          try {
+            const timeoutResponse = {
+              id: messageId,
+              role: 'assistant',
+              content: "I'm sorry, the request timed out. Please try again.",
+              timestamp: Date.now(),
+              metadata: { ...responseMetadata, type: 'error' }
+            };
+            
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(timeoutResponse)}\n\n`));
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+            console.error('[chat API] Request timed out after', responseTimeout, 'ms');
+          } catch (e) {
+            console.error('[chat API] Error during timeout handling:', e);
+          }
+        }, responseTimeout);
+
         try {
           // Send initial response with metadata
           const initialResponseChunk = {
@@ -467,23 +491,46 @@ export async function POST(req: NextRequest) {
           
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(initialResponseChunk)}\n\n`));
           
-          // Call OpenRouter with streaming enabled
+          // Call OpenRouter with streaming enabled - enhanced error handling
           console.log(`[chat API] Sending streaming request to OpenRouter with model: ${model}, messages length: ${chatMessages.length}`);
-          const apiStream = await sendChatCompletion({
-            messages: chatMessages,
-            model,
-            stream: true,
-            temperature: 0.7,
-            // Add retry options for better reliability
-            retry_options: {
-              max_retries: 3,
-              initial_delay: 1000,
-              max_delay: 10000,
-              backoff_factor: 2
+          let apiStream: ReadableStream;
+          try {
+            apiStream = await sendChatCompletion({
+              messages: chatMessages,
+              model,
+              stream: true,
+              temperature: 0.7,
+              // Add retry options for better reliability
+              retry_options: {
+                max_retries: 5, // Increase max retries
+                initial_delay: 1000,
+                max_delay: 15000, // Increase max delay
+                backoff_factor: 2
+              }
+            }) as ReadableStream;
+            
+            console.log(`[chat API] OpenRouter streaming response received, processing stream`);
+          } catch (apiError) {
+            console.error('[chat API] Error getting stream from OpenRouter:', apiError);
+            const errorResponse = {
+              id: messageId,
+              role: 'assistant',
+              content: `I'm sorry, I couldn't connect to the AI service. ${apiError instanceof Error ? apiError.message : 'Please try again later.'}`,
+              timestamp: Date.now(),
+              metadata: { type: 'error' }
+            };
+            
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorResponse)}\n\n`));
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            
+            // Clear timeout since we're done
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+              timeoutId = null;
             }
-          }) as ReadableStream;
-          
-          console.log(`[chat API] OpenRouter streaming response received, processing stream`);
+            
+            return;
+          }
           
           if (!apiStream) {
             throw new Error('Failed to get streaming response from OpenRouter');
@@ -493,72 +540,109 @@ export async function POST(req: NextRequest) {
           const reader = apiStream.getReader();
           let accumulatedResponse = '';
           
-          while (true) {
-            const { done, value } = await reader.read();
-            
-            if (done) {
-              console.log(`[chat API] Stream processing complete, total response length: ${accumulatedResponse.length}`);
-              // Final chunk with complete response
-              const finalResponse: ChatResponse = {
-                id: messageId,
-                role: 'assistant',
-                content: accumulatedResponse,
-                timestamp: Date.now(),
-                metadata: responseMetadata
-              };
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
               
-              // Add follow-up questions for a better user experience
-              if (accumulatedResponse) {
-                finalResponse.metadata!.followUpQuestions = generateFollowUpQuestions(userQuery, accumulatedResponse);
-              }
-              
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalResponse)}\n\n`));
-              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-              break;
-            }
-            
-            // Process the chunk
-            const decoder = new TextDecoder();
-            const chunk = decoder.decode(value, { stream: true });
-            console.log(`[chat API] Received stream chunk of size: ${value.byteLength}`);
-            const lines = chunk.split('\n\n');
-            
-            for (const line of lines) {
-              if (line.trim() === '' || !line.startsWith('data: ')) continue;
-              
-              const data = line.slice(6).trim();
-              
-              if (data === '[DONE]') continue;
-              
-              try {
-                const parsed = JSON.parse(data);
-                const content = parsed.choices?.[0]?.delta?.content || '';
+              if (done) {
+                console.log(`[chat API] Stream processing complete, total response length: ${accumulatedResponse.length}`);
+                // Final chunk with complete response
+                const finalResponse: ChatResponse = {
+                  id: messageId,
+                  role: 'assistant',
+                  content: accumulatedResponse,
+                  timestamp: Date.now(),
+                  metadata: responseMetadata
+                };
                 
-                if (content) {
-                  // Accumulate content
-                  accumulatedResponse += content;
-                  
-                  // Log every 100 characters to avoid excessive logging
-                  if (accumulatedResponse.length % 100 === 0) {
-                    console.log(`[chat API] Accumulated ${accumulatedResponse.length} characters so far`);
-                  }
-                  
-                  // Send stream update
-                  const streamUpdate: ChatResponse = {
-                    id: messageId,
-                    role: 'assistant',
-                    content: accumulatedResponse,
-                    timestamp: Date.now(),
-                    metadata: responseMetadata,
-                    isStreaming: true
-                  };
-                  
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(streamUpdate)}\n\n`));
+                // Add follow-up questions for a better user experience
+                if (accumulatedResponse) {
+                  finalResponse.metadata!.followUpQuestions = generateFollowUpQuestions(userQuery, accumulatedResponse);
                 }
-              } catch (error) {
-                console.error('Error parsing streaming response:', error);
+                
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalResponse)}\n\n`));
+                controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                break;
+              }
+              
+              // Process the chunk
+              const decoder = new TextDecoder();
+              const chunk = decoder.decode(value, { stream: true });
+              console.log(`[chat API] Received stream chunk of size: ${value.byteLength}`);
+              const lines = chunk.split('\n\n');
+              
+              for (const line of lines) {
+                if (line.trim() === '' || !line.startsWith('data: ')) continue;
+                
+                const data = line.slice(6).trim();
+                
+                if (data === '[DONE]') continue;
+                
+                try {
+                  const parsed = JSON.parse(data);
+                  const content = parsed.choices?.[0]?.delta?.content || '';
+                  
+                  if (content) {
+                    // Accumulate content
+                    accumulatedResponse += content;
+                    
+                    // Reset the timeout with each successful chunk
+                    if (timeoutId) {
+                      clearTimeout(timeoutId);
+                      timeoutId = setTimeout(() => {
+                        try {
+                          const timeoutResponse = {
+                            id: messageId,
+                            role: 'assistant',
+                            content: accumulatedResponse + "\n\n[Response was cut off due to timeout. Please try again.]",
+                            timestamp: Date.now(),
+                            metadata: { ...responseMetadata, type: 'error' }
+                          };
+                          
+                          controller.enqueue(encoder.encode(`data: ${JSON.stringify(timeoutResponse)}\n\n`));
+                          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                          controller.close();
+                        } catch (e) {
+                          console.error('[chat API] Error during timeout handling:', e);
+                        }
+                      }, responseTimeout);
+                    }
+                    
+                    // Log every 100 characters to avoid excessive logging
+                    if (accumulatedResponse.length % 100 === 0) {
+                      console.log(`[chat API] Accumulated ${accumulatedResponse.length} characters so far`);
+                    }
+                    
+                    // Send stream update
+                    const streamUpdate: ChatResponse = {
+                      id: messageId,
+                      role: 'assistant',
+                      content: accumulatedResponse,
+                      timestamp: Date.now(),
+                      metadata: responseMetadata,
+                      isStreaming: true
+                    };
+                    
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(streamUpdate)}\n\n`));
+                  }
+                } catch (error) {
+                  console.error('Error parsing streaming response:', error);
+                }
               }
             }
+          } catch (streamError) {
+            console.error('[chat API] Error processing stream:', streamError);
+            // Send what we have so far with an error message
+            const errorResponse = {
+              id: messageId,
+              role: 'assistant',
+              content: accumulatedResponse + "\n\n[The response was interrupted. Here's what I was able to provide.]",
+              timestamp: Date.now(),
+              metadata: { ...responseMetadata, type: 'error' }
+            };
+            
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorResponse)}\n\n`));
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
           }
         } catch (error) {
           // Handle errors gracefully in the stream
@@ -573,19 +657,31 @@ export async function POST(req: NextRequest) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorResponse)}\n\n`));
           controller.enqueue(encoder.encode('data: [DONE]\n\n'));
           console.error('Chat streaming error:', error);
+        } finally {
+          // Clear the timeout in all cases
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
         }
       }
     });
     
-    // Return the stream with proper headers
+    // Return the stream with proper headers and a longer timeout
     return new Response(stream, {
       headers: {
         'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive'
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no' // Disable proxy buffering for NGINX
       }
     });
   } catch (error) {
+    // Clear any remaining timeout
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    
     console.error('Chat API error:', error);
     return NextResponse.json(
       { error: `Error processing message: ${error instanceof Error ? error.message : 'Unknown error'}` }, 
