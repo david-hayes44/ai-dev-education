@@ -355,21 +355,23 @@ export default function ReportBuilderPage() {
         
         // Enhanced debug logging
         console.log('Report generation response received:', data);
-        console.log('Report state from response:', JSON.stringify(data.reportState, null, 2));
+        console.log('Initial report state:', JSON.stringify(data.reportState, null, 2));
         
-        if (data.reportState?.sections) {
-          console.log('Sections in response:', {
-            accomplishments: data.reportState.sections.accomplishments?.length || 0,
-            insights: data.reportState.sections.insights?.length || 0,
-            decisions: data.reportState.sections.decisions?.length || 0,
-            nextSteps: data.reportState.sections.nextSteps?.length || 0
-          });
-        } else {
-          console.error('No sections found in report state from API response');
-        }
-        
-        // Update report state with verified content
-        if (data.reportState) {
+        // Check if we have a reportId for background processing
+        if (data.reportId) {
+          console.log(`Report is being processed in background with ID: ${data.reportId}`);
+          
+          // Set the initial report state
+          setReportState(data.reportState);
+          
+          // Start polling for updates
+          pollForReportUpdates(data.reportId, systemMessage.id);
+          
+          // Break out of retry loop since we have a valid response
+          break;
+        } else if (data.reportState?.sections) {
+          console.log('Received complete report state from API');
+          
           // Verify that all required fields are present and provide fallbacks
           const validatedReportState: ReportState = {
             title: data.reportState.title || "Status Report",
@@ -544,6 +546,132 @@ export default function ReportBuilderPage() {
                        !reportState.sections.insights && 
                        !reportState.sections.decisions && 
                        !reportState.sections.nextSteps;
+
+  // Function to poll for report updates in the background
+  const pollForReportUpdates = async (reportId: string, messageId: string) => {
+    // Update message to show polling status
+    setMessages(prev => prev.map(msg => 
+      msg.id === messageId
+        ? {
+            ...msg,
+            content: "⏳ **Processing your documents**... This may take up to 30 seconds.",
+            isStreaming: false,
+            timestamp: Date.now()
+          }
+        : msg
+    ));
+    
+    // Start polling with a 3-second interval
+    let attempts = 0;
+    const maxAttempts = 30; // 90 seconds max (30 * 3s)
+    const pollInterval = 3000; // 3 seconds
+    
+    const poll = async () => {
+      if (attempts >= maxAttempts) {
+        console.warn(`Exceeded max polling attempts (${maxAttempts}) for report ${reportId}`);
+        
+        setMessages(prev => prev.map(msg => 
+          msg.id === messageId
+            ? {
+                ...msg,
+                content: "⚠️ **Processing timed out**. The report may be too large or complex. " +
+                         "Try using the chat to ask about specific content in your documents.",
+                isStreaming: false,
+                metadata: { type: 'error' },
+                timestamp: Date.now()
+              }
+            : msg
+        ));
+        
+        return;
+      }
+      
+      try {
+        attempts++;
+        
+        const response = await fetch(`/api/report-builder/check-report?reportId=${reportId}`);
+        
+        if (!response.ok) {
+          throw new Error(`API request failed with status ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log(`Polling attempt ${attempts}: Status=${data.status}`, data);
+        
+        if (data.status === 'completed' && data.reportState) {
+          // We have a completed report - update the UI
+          console.log('Report processing completed:', data.reportState);
+          
+          // Update report state with the completed report
+          setReportState(data.reportState);
+          
+          // Update message to show completion
+          setMessages(prev => prev.map(msg => 
+            msg.id === messageId
+              ? {
+                  ...msg,
+                  content: "✅ **Report generation complete!** Your document analysis is ready. " +
+                           "You can refine it using the chat.",
+                  isStreaming: false,
+                  timestamp: Date.now()
+                }
+              : msg
+          ));
+          
+          return; // Stop polling
+        } else if (data.status === 'error') {
+          // Handle error state
+          console.error('Error in report processing:', data.error);
+          
+          setMessages(prev => prev.map(msg => 
+            msg.id === messageId
+              ? {
+                  ...msg,
+                  content: `❌ **Error generating report**: ${data.error || 'Unknown error'}. ` +
+                           "Try with smaller documents or use the chat to analyze specific parts.",
+                  isStreaming: false,
+                  metadata: { type: 'error' },
+                  timestamp: Date.now()
+                }
+              : msg
+          ));
+          
+          return; // Stop polling
+        } else if (data.status === 'processing') {
+          // Still processing - update message with progress indication
+          if (attempts % 3 === 0) { // Update message every ~9 seconds
+            const dots = '.'.repeat((attempts / 3) % 4); // Creates animated dots ...
+            
+            setMessages(prev => prev.map(msg => 
+              msg.id === messageId
+                ? {
+                    ...msg,
+                    content: `⏳ **Processing your documents${dots}** ` +
+                             `(${attempts * 3}s) This may take up to 90 seconds for large files.`,
+                    timestamp: Date.now()
+                  }
+                : msg
+            ));
+          }
+          
+          // Continue polling
+          setTimeout(poll, pollInterval);
+        } else {
+          // Unknown status - continue polling
+          setTimeout(poll, pollInterval);
+        }
+        
+      } catch (error) {
+        console.error('Error polling for report updates:', error);
+        
+        // Continue polling despite error (could be temporary network issue)
+        setTimeout(poll, pollInterval);
+      }
+    };
+    
+    // Start polling immediately
+    poll();
+  };
 
   // Only render the components when mounted to prevent hydration issues
   return (

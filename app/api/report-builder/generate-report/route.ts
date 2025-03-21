@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendChatCompletion, ChatMessage } from "@/lib/openrouter";
 import { UploadedDocument, ReportState } from "@/components/report-builder/types";
+import { 
+  storeReportForProcessing, 
+  triggerBackgroundProcessing 
+} from "@/lib/report-processor";
+import crypto from 'crypto';
 
 // System prompt for generating the initial report from documents
 const getGenerationPrompt = (documents: UploadedDocument[], projectContext?: string) => {
@@ -223,6 +228,10 @@ const processResponseForReportGeneration = (response: string): Partial<ReportSta
   return reportState;
 };
 
+/**
+ * API endpoint to generate a 4-box report from uploaded documents
+ * Now uses a two-stage approach with background processing to prevent timeouts
+ */
 export async function POST(request: NextRequest) {
   try {
     const { documents = [], projectContext = "" } = await request.json() as { 
@@ -237,38 +246,42 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // Generate a unique ID for this report processing job
+    const reportId = crypto.randomUUID();
+    console.log(`Starting report generation job: ${reportId} with ${documents.length} documents`);
+    
     // Create a minimal report without any AI processing
-    const emptyReport = createEmptyReport();
-    emptyReport.title = documents.length === 1 
+    const initialReport = createEmptyReport();
+    initialReport.title = documents.length === 1 
       ? `Report: ${documents[0].name}` 
       : `Report: ${documents.length} Documents`;
     
     // Instead of trying to analyze all documents, just acknowledge their receipt
-    emptyReport.sections.accomplishments = documents.map(doc => 
+    initialReport.sections.accomplishments = documents.map(doc => 
       `* Document "${doc.name}" received (${Math.round(doc.size / 1024)} KB)`
     ).join('\n');
     
     // Add instructions for using chat with clearer guidance
-    emptyReport.sections.insights = "* Processing your documents...";
-    emptyReport.sections.insights += "\n* Please wait while AI analyzes your content";
-    emptyReport.sections.insights += "\n* You can ask in chat: 'What are the key insights from my documents?'";
+    initialReport.sections.insights = "* Processing your documents...";
+    initialReport.sections.insights += "\n* Your report will update automatically when ready";
+    initialReport.sections.insights += "\n* You can ask in chat: 'What are the key insights from my documents?'";
     
-    emptyReport.sections.decisions = "* If this message remains after 10 seconds:";
-    emptyReport.sections.decisions += "\n* Try the 'Regenerate Report' button below";
-    emptyReport.sections.decisions += "\n* Or use the chat to identify decisions and risks";
+    initialReport.sections.decisions = "* AI analysis is running in the background";
+    initialReport.sections.decisions += "\n* This may take up to 30 seconds for large documents";
+    initialReport.sections.decisions += "\n* You can continue using the chat while waiting";
     
-    emptyReport.sections.nextSteps = "* When analysis completes, this section will update";
-    emptyReport.sections.nextSteps += "\n* You can also try: 'What are the next steps in my documents?'";
+    initialReport.sections.nextSteps = "* When analysis completes, this section will update";
+    initialReport.sections.nextSteps += "\n* You can also try: 'What are the next steps in my documents?'";
     
     // Ensure the report structure is valid and complete
     const reportToReturn: ReportState = {
-      title: emptyReport.title,
-      date: emptyReport.date,
+      title: initialReport.title,
+      date: initialReport.date,
       sections: {
-        accomplishments: emptyReport.sections.accomplishments,
-        insights: emptyReport.sections.insights,
-        decisions: emptyReport.sections.decisions,
-        nextSteps: emptyReport.sections.nextSteps
+        accomplishments: initialReport.sections.accomplishments,
+        insights: initialReport.sections.insights,
+        decisions: initialReport.sections.decisions,
+        nextSteps: initialReport.sections.nextSteps
       },
       metadata: {
         lastUpdated: Date.now(),
@@ -276,11 +289,19 @@ export async function POST(request: NextRequest) {
       }
     };
     
-    console.log("Sending report state to client:", JSON.stringify(reportToReturn, null, 2));
+    // Store the documents for background processing
+    await storeReportForProcessing(reportId, documents, projectContext);
     
-    // Return the minimal report immediately with proper structure
+    // Trigger background processing without waiting for completion
+    triggerBackgroundProcessing(reportId);
+    
+    console.log("Started background processing for report:", reportId);
+    
+    // Return the minimal report immediately along with the reportId for polling
     return NextResponse.json({
-      reportState: reportToReturn
+      reportState: reportToReturn,
+      reportId: reportId,
+      message: "Report generation started. Check status using the reportId."
     });
     
   } catch (error) {
