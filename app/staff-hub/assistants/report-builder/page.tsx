@@ -299,77 +299,128 @@ export default function ReportBuilderPage() {
     
     setMessages(prev => [...prev, systemMessage]);
     
-    try {
-      // Call the generate report API
-      const response = await fetch('/api/report-builder/generate-report', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          documents,
-          projectContext: ""
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      // Debug logging
-      console.log('Report generation response:', data);
-      console.log('Report state from response:', data.reportState);
-      if (data.reportState?.sections) {
-        console.log('Sections in response:', {
-          accomplishments: data.reportState.sections.accomplishments?.length || 0,
-          insights: data.reportState.sections.insights?.length || 0,
-          decisions: data.reportState.sections.decisions?.length || 0,
-          nextSteps: data.reportState.sections.nextSteps?.length || 0
-        });
-      }
-      
-      // Update report state
-      if (data.reportState) {
-        setReportState(data.reportState);
+    let attempts = 0;
+    const maxAttempts = 2;
+    
+    while (attempts < maxAttempts) {
+      try {
+        attempts++;
+        console.log(`Attempting to generate report (attempt ${attempts}/${maxAttempts})`);
         
-        // Debug log of what we're setting
-        console.log('Setting report state to:', JSON.stringify(data.reportState, null, 2));
-      } else {
-        console.warn('No reportState in API response');
+        // Call the generate report API with a timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+        
+        const response = await fetch('/api/report-builder/generate-report', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            documents,
+            projectContext: ""
+          }),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`API request failed with status ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Debug logging
+        console.log('Report generation response:', data);
+        console.log('Report state from response:', data.reportState);
+        if (data.reportState?.sections) {
+          console.log('Sections in response:', {
+            accomplishments: data.reportState.sections.accomplishments?.length || 0,
+            insights: data.reportState.sections.insights?.length || 0,
+            decisions: data.reportState.sections.decisions?.length || 0,
+            nextSteps: data.reportState.sections.nextSteps?.length || 0
+          });
+        }
+        
+        // Update report state
+        if (data.reportState) {
+          setReportState(data.reportState);
+          
+          // Debug log of what we're setting
+          console.log('Setting report state to:', JSON.stringify(data.reportState, null, 2));
+          
+          // Check if we got a partial (error) report
+          const hasError = data.error && data.reportState.title === "Partial Report";
+          
+          // Update system message based on success or partial success
+          setMessages(prev => prev.map(msg => 
+            msg.id === systemMessage.id
+              ? {
+                  ...msg,
+                  content: hasError 
+                    ? "⚠️ **Partial report generated.** " + data.error
+                    : "✅ **Initial report generated** based on your documents. You can now refine it using the chat.",
+                  isStreaming: false,
+                  timestamp: Date.now(),
+                  metadata: hasError ? { type: 'info' } : undefined
+                }
+              : msg
+          ));
+          
+          // Break out of retry loop on success
+          break;
+        } else {
+          console.warn('No reportState in API response');
+          throw new Error('Missing report state in response');
+        }
+        
+      } catch (error) {
+        console.error('Error generating report:', error);
+        
+        // If we've exhausted our retries, show error message
+        if (attempts >= maxAttempts) {
+          // Update system message with error
+          setMessages(prev => prev.map(msg => 
+            msg.id === systemMessage.id
+              ? {
+                  ...msg,
+                  content: "❌ **Error generating report**. The server is taking too long to respond. Try with smaller or fewer documents.",
+                  isStreaming: false,
+                  metadata: { type: 'error' },
+                  timestamp: Date.now()
+                }
+              : msg
+          ));
+          
+          // Create fallback report with error messaging
+          const fallbackReport = createEmptyReport();
+          fallbackReport.sections.accomplishments = "* Error generating report - try uploading smaller documents";
+          fallbackReport.sections.insights = "* You can still add content using the chat interface";
+          fallbackReport.sections.decisions = "* Try asking specific questions to build your report section by section";
+          fallbackReport.sections.nextSteps = "* Use 'add X to next steps' to build this section";
+          
+          setReportState(fallbackReport);
+        } else {
+          // If there are retries left, update message to indicate retrying
+          setMessages(prev => prev.map(msg => 
+            msg.id === systemMessage.id
+              ? {
+                  ...msg,
+                  content: `⏳ **Retrying report generation** (attempt ${attempts}/${maxAttempts})`,
+                  isStreaming: true,
+                  timestamp: Date.now()
+                }
+              : msg
+          ));
+          
+          // Wait briefly before retrying
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
-      
-      // Update system message
-      setMessages(prev => prev.map(msg => 
-        msg.id === systemMessage.id
-          ? {
-              ...msg,
-              content: "✅ **Initial report generated** based on your documents. You can now refine it using the chat.",
-              isStreaming: false,
-              timestamp: Date.now()
-            }
-          : msg
-      ));
-      
-    } catch (error) {
-      console.error('Error generating report:', error);
-      
-      // Update system message with error
-      setMessages(prev => prev.map(msg => 
-        msg.id === systemMessage.id
-          ? {
-              ...msg,
-              content: "❌ **Error generating report**. Please try again or upload additional documents.",
-              isStreaming: false,
-              metadata: { type: 'error' },
-              timestamp: Date.now()
-            }
-          : msg
-      ));
-    } finally {
-      setIsProcessing(false);
     }
+    
+    setIsProcessing(false);
   };
 
   // Function to force regenerate the report
@@ -456,22 +507,35 @@ export default function ReportBuilderPage() {
               onReportChange={handleReportChange}
             />
             
-            {isReportEmpty && uploadedDocuments.length > 0 && (
+            {(isReportEmpty || reportState.sections.accomplishments.includes("Error generating report")) && uploadedDocuments.length > 0 && (
               <div className="mt-2 text-center">
                 <p className="text-sm text-slate-500 mb-2">
-                  Report appears to be empty. Would you like to regenerate it?
+                  {reportState.sections.accomplishments.includes("Error generating report") 
+                    ? "Report generation timed out. You can regenerate with fewer documents or build your report using the chat."
+                    : "Report appears to be empty. Would you like to regenerate it?"}
                 </p>
-                <button
-                  onClick={forceRegenerateReport}
-                  disabled={regenerating}
-                  className={`px-3 py-1.5 rounded-md text-sm ${
-                    regenerating 
-                      ? 'bg-gray-200 text-gray-500 cursor-not-allowed' 
-                      : 'bg-blue-600 text-white hover:bg-blue-700'
-                  }`}
-                >
-                  {regenerating ? 'Regenerating...' : 'Regenerate Report'}
-                </button>
+                <div className="flex justify-center gap-3">
+                  <button
+                    onClick={forceRegenerateReport}
+                    disabled={regenerating}
+                    className={`px-3 py-1.5 rounded-md text-sm ${
+                      regenerating 
+                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed' 
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    {regenerating ? 'Regenerating...' : 'Regenerate Report'}
+                  </button>
+                  
+                  {reportState.sections.accomplishments.includes("Error generating report") && (
+                    <button
+                      onClick={() => handleSendMessage("Can you help me build this report step by step?")}
+                      className="px-3 py-1.5 rounded-md text-sm bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    >
+                      Build with Chat
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>

@@ -249,8 +249,20 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // OPTIMIZATION: Limit document content length to prevent timeouts
+    const optimizedDocuments = documents.map(doc => {
+      if (doc.textContent && doc.textContent.length > 10000) {
+        console.log(`Truncating large document ${doc.name} from ${doc.textContent.length} chars to 10,000 chars`);
+        return {
+          ...doc,
+          textContent: doc.textContent.substring(0, 10000) + "\n\n[Content truncated for performance]"
+        };
+      }
+      return doc;
+    });
+    
     // Generate prompt with document content
-    const prompt = getGenerationPrompt(documents, projectContext);
+    const prompt = getGenerationPrompt(optimizedDocuments, projectContext);
     
     // Create messages array for the chat
     const messages: ChatMessage[] = [
@@ -258,12 +270,18 @@ export async function POST(request: NextRequest) {
     ];
     
     try {
-      // Call OpenRouter API
+      // OPTIMIZATION: Reduce max tokens and set timeout options
       const response = await sendChatCompletion({
         model: "google/gemini-2.0-pro-exp-02-05:free", // Using the correct Gemini model
         messages,
         temperature: 0.7,
-        max_tokens: 2000,
+        max_tokens: 1500, // Reduced from 2000 to help with performance
+        retry_options: {
+          max_retries: 2,
+          initial_delay: 500,
+          max_delay: 2000,
+          backoff_factor: 1.5
+        }
       });
       
       // Check response structure
@@ -315,12 +333,24 @@ export async function POST(request: NextRequest) {
       
     } catch (apiError) {
       console.error('Error calling OpenRouter API:', apiError);
+      
+      // OPTIMIZATION: Return a partial report with error message on timeout
+      // Create a default report with error feedback
+      const errorReport = createEmptyReport();
+      errorReport.title = "Partial Report";
+      
+      // Add error messaging to the report
+      errorReport.sections.accomplishments = "* An error occurred while generating the full report";
+      errorReport.sections.insights = "* The service timed out while processing your documents";
+      errorReport.sections.decisions = "* Try uploading smaller documents or fewer documents at once";
+      errorReport.sections.nextSteps = "* You can still use the chat to add specific content to each section";
+      
       return NextResponse.json(
         { 
-          error: apiError instanceof Error ? apiError.message : "Unknown API error",
-          reportState: createEmptyReport()
+          error: apiError instanceof Error ? apiError.message : "API timeout or error",
+          reportState: errorReport
         },
-        { status: 500 }
+        { status: 200 } // Return 200 instead of 500 so client can still work with partial report
       );
     }
     

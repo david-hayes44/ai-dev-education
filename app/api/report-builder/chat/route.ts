@@ -408,8 +408,20 @@ export async function POST(request: NextRequest) {
     // Special case: If report is completely empty, force a regeneration instead of an add
     const forceFullReport = Object.values(reportState.sections).every(s => !s);
     
+    // OPTIMIZATION: Trim existing report sections to reduce token count
+    const optimizedReportState = {
+      ...reportState,
+      sections: {
+        accomplishments: trimSection(reportState.sections.accomplishments, 500),
+        insights: trimSection(reportState.sections.insights, 500),
+        decisions: trimSection(reportState.sections.decisions, 500),
+        nextSteps: trimSection(reportState.sections.nextSteps, 500)
+      },
+      metadata: reportState.metadata
+    };
+    
     // Modify the system prompt to indicate this is an add request if applicable
-    let systemPrompt = getSystemPrompt(reportState);
+    let systemPrompt = getSystemPrompt(optimizedReportState);
     if (isAddRequest && targetSection && !forceFullReport) {
       systemPrompt += `\n\nThis appears to be a request to UPDATE the "${targetSection}" section. 
 IMPORTANT INSTRUCTIONS:
@@ -431,12 +443,33 @@ IMPORTANT INSTRUCTIONS:
     // Call OpenRouter API
     try {
       console.log('Sending chat completion request to model');
-      const response = await sendChatCompletion({
+      
+      // OPTIMIZATION: Set a timeout for the API request to prevent long-running requests
+      const fetchTimeoutMs = 15000; // 15 seconds
+      
+      // Create a promise that will resolve with the API response
+      const fetchPromise = sendChatCompletion({
         model: "google/gemini-2.0-pro-exp-02-05:free",
         messages,
         temperature: 0.7,
-        max_tokens: 1000,
+        max_tokens: 800, // Reduced from 1000 to improve performance
+        retry_options: {
+          max_retries: 1, // Reduce retries to speed up response time
+          initial_delay: 200,
+          max_delay: 1000,
+          backoff_factor: 1.5
+        }
       });
+      
+      // Create a timeout promise
+      const timeoutPromise = new Promise<{id: string; choices: {message: {content: string}; finish_reason: string; index: number}[]}>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Request timed out after ' + fetchTimeoutMs + 'ms'));
+        }, fetchTimeoutMs);
+      });
+      
+      // Race the fetch and timeout promises
+      const response = await Promise.race([fetchPromise, timeoutPromise]);
       
       // Check response structure
       if (!response) {
@@ -489,12 +522,52 @@ IMPORTANT INSTRUCTIONS:
       
     } catch (apiError) {
       console.error('Error calling OpenRouter API:', apiError);
+      
+      // OPTIMIZATION: For timeouts, try to still be helpful
+      const errorMessage = apiError instanceof Error ? apiError.message : "Unknown API error";
+      let userFriendlyReply = "❌ **Error:** I apologize, but I encountered an error while processing your request. Please try again later.";
+      
+      // Give more specific help for timeout errors
+      if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
+        userFriendlyReply = "⏱️ **Request timed out:** I'm sorry, but your request took too long to process. Please try a shorter message or break your request into smaller parts.";
+        
+        // If this was an "add to section" request, try to still add the content
+        if (isAddRequest && targetSection) {
+          // Extract what the user wanted to add
+          const contentToAdd = extractContentFromUserMessage(message, targetSection);
+          if (contentToAdd) {
+            // Create a modified report with just this addition
+            const partialReport = { ...reportState };
+            const formattedContent = formatAsBulletPoint(contentToAdd);
+            
+            if (targetSection === 'accomplishments') {
+              partialReport.sections.accomplishments = appendToSection(partialReport.sections.accomplishments, formattedContent);
+            } else if (targetSection === 'insights') {
+              partialReport.sections.insights = appendToSection(partialReport.sections.insights, formattedContent);
+            } else if (targetSection === 'decisions') {
+              partialReport.sections.decisions = appendToSection(partialReport.sections.decisions, formattedContent);
+            } else if (targetSection === 'nextSteps') {
+              partialReport.sections.nextSteps = appendToSection(partialReport.sections.nextSteps, formattedContent);
+            }
+            
+            userFriendlyReply += `\n\n✅ I've added your content directly to the ${targetSection} section: "${contentToAdd}"`;
+            
+            // Return a successful response with the modified report
+            return NextResponse.json({
+              reply: userFriendlyReply,
+              updatedReport: partialReport
+            });
+          }
+        }
+      }
+      
+      // Return error response
       return NextResponse.json(
         { 
-          reply: "❌ **Error:** I apologize, but I encountered an error while processing your request. Please try again later.",
-          error: apiError instanceof Error ? apiError.message : "Unknown API error"
+          reply: userFriendlyReply,
+          error: errorMessage
         },
-        { status: 500 }
+        { status: 200 } // Use 200 status to avoid client-side errors
       );
     }
     
@@ -507,5 +580,26 @@ IMPORTANT INSTRUCTIONS:
       },
       { status: 500 }
     );
+  }
+}
+
+// OPTIMIZATION: Helper function to trim section content to reduce token count
+function trimSection(content: string, maxLength: number): string {
+  if (!content || content.length <= maxLength) return content;
+  
+  // Count the number of bullet points
+  const bulletPoints = content.split(/\n+/).filter(line => line.trim().startsWith('*') || line.trim().startsWith('-'));
+  
+  if (bulletPoints.length <= 3) {
+    // If few bullet points, keep them all but truncate each if needed
+    return bulletPoints.map(point => {
+      if (point.length <= maxLength / bulletPoints.length) return point;
+      return point.substring(0, Math.floor(maxLength / bulletPoints.length) - 3) + '...';
+    }).join('\n');
+  } else {
+    // If many bullet points, keep the first 2 and last 1, with a note about trimming
+    return bulletPoints.slice(0, 2).join('\n') + 
+      '\n* [... additional items truncated for performance ...]\n' + 
+      bulletPoints[bulletPoints.length - 1];
   }
 } 
