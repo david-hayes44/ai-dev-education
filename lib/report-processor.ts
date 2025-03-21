@@ -337,10 +337,17 @@ async function processReportAsync(reportId: string): Promise<void> {
     console.log(`Completed processing report ${reportId}`);
   } catch (error) {
     console.error(`Error processing report ${reportId}:`, error);
-    report.status = 'error';
-    report.error = error instanceof Error ? error.message : String(error);
-    report.updatedAt = Date.now();
-    await storage.set(reportId, report);
+    
+    // Fetch the report again to update its status
+    const report = await storage.get(reportId);
+    if (report) {
+      report.status = 'error';
+      report.error = error instanceof Error ? error.message : String(error);
+      report.updatedAt = Date.now();
+      await storage.set(reportId, report);
+    } else {
+      console.error(`[report-processor] Could not update error status: Report ${reportId} not found`);
+    }
   }
 }
 
