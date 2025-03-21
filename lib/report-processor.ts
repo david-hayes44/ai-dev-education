@@ -31,45 +31,15 @@ interface ReportStorage {
 }
 
 /**
- * In-memory storage implementation
- */
-class InMemoryStorage implements ReportStorage {
-  private store = new Map<string, ReportProcessingState>();
-
-  async get(reportId: string): Promise<ReportProcessingState | undefined> {
-    return this.store.get(reportId);
-  }
-
-  async set(reportId: string, state: ReportProcessingState): Promise<void> {
-    this.store.set(reportId, state);
-  }
-
-  async delete(reportId: string): Promise<void> {
-    this.store.delete(reportId);
-  }
-
-  async cleanup(): Promise<void> {
-    const now = Date.now();
-    const REPORT_TTL = 3600 * 1000; // 1 hour in milliseconds
-    
-    for (const [id, report] of this.store.entries()) {
-      if (now - report.updatedAt > REPORT_TTL) {
-        this.store.delete(id);
-      }
-    }
-  }
-}
-
-/**
  * File system storage implementation for development
  */
 class FileSystemStorage implements ReportStorage {
   private dataDir: string;
   
   constructor() {
-    // Use absolute path to .data directory in project root
-    // This ensures consistent paths across multiple Next.js instances
-    this.dataDir = path.resolve(process.cwd(), '.data', 'reports');
+    // Use /tmp directory in serverless environments like Vercel
+    const basePath = process.env.VERCEL ? '/tmp' : process.cwd();
+    this.dataDir = path.resolve(basePath, '.data', 'reports');
     console.log(`FileSystemStorage initialized with data directory: ${this.dataDir}`);
     // Ensure directory exists
     this.ensureDataDir().catch(err => 
@@ -81,8 +51,14 @@ class FileSystemStorage implements ReportStorage {
     try {
       await fs.mkdir(this.dataDir, { recursive: true });
       console.log(`Ensured data directory exists: ${this.dataDir}`);
+      
+      // Check if directory is actually writable
+      const testFile = path.join(this.dataDir, '.write-test');
+      await fs.writeFile(testFile, 'test', 'utf8');
+      await fs.unlink(testFile);
+      console.log(`Confirmed directory is writable: ${this.dataDir}`);
     } catch (err) {
-      console.error('Error creating data directory:', err);
+      console.error('Error creating or testing data directory:', err);
       throw err; // Re-throw to ensure callers know there was a problem
     }
   }
@@ -178,12 +154,10 @@ class FileSystemStorage implements ReportStorage {
 }
 
 // Initialize the appropriate storage based on environment
-// In a real production app, you might use Redis or a database here
-const storage: ReportStorage = isDevelopment
-  ? new FileSystemStorage()
-  : new InMemoryStorage();
+// Use FileSystemStorage for both dev and production, but use /tmp in serverless environments
+const storage: ReportStorage = new FileSystemStorage();
 
-console.log(`Using ${isDevelopment ? 'FileSystemStorage' : 'InMemoryStorage'} for report processing`);
+console.log(`Using FileSystemStorage for report processing with NODE_ENV=${process.env.NODE_ENV}, VERCEL=${process.env.VERCEL}`);
 
 // Set up periodic cleanup
 const CLEANUP_INTERVAL = 15 * 60 * 1000; // 15 minutes
