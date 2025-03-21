@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getReportState, ProcessingStatus } from "@/lib/report-processor";
 import { ReportState } from "@/components/report-builder/types";
 
+/**
+ * NOTE: This API endpoint is being kept for backward compatibility.
+ * The preferred approach for getting report updates is now using the streaming response
+ * from the generate-report-stream endpoint, which eliminates the need for polling
+ * and provides real-time updates as they become available.
+ */
+
 // Define the interface for the report status response
 interface ReportStatusResponse {
   status: string;

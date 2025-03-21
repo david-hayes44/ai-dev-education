@@ -292,204 +292,196 @@ export default function ReportBuilderPage() {
     const systemMessage: Message = {
       id: uuidv4(),
       role: 'assistant',
-      content: "⏳ **Generating initial report** from uploaded documents...",
+      content: "🔄 Generating your 4-box report... This process uses streaming responses, so you'll see results as they become available.",
       timestamp: Date.now(),
       isStreaming: true
     };
     
     setMessages(prev => [...prev, systemMessage]);
     
-    // Define formatDate function here
-    const formatDate = () => {
-      const now = new Date();
-      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    try {
+      // Request report generation using the streaming endpoint
+      const response = await fetch('/api/report-builder/generate-report-stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          documents,
+          projectContext: "" // Add project context if available
+        }),
+      });
       
-      const month = monthNames[now.getMonth()];
-      const day = now.getDate();
-      const year = now.getFullYear();
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${await response.text()}`);
+      }
       
-      const getOrdinalSuffix = (d: number) => {
-        if (d > 3 && d < 21) return 'th';
-        switch (d % 10) {
-          case 1: return "st";
-          case 2: return "nd";
-          case 3: return "rd";
-          default: return "th";
-        }
-      };
+      // Handle the streaming response
+      if (!response.body) {
+        throw new Error('Response body is null');
+      }
       
-      return `${month} ${day}${getOrdinalSuffix(day)} ${year}`;
-    };
-    
-    let attempts = 0;
-    const maxAttempts = 2;
-    
-    while (attempts < maxAttempts) {
-      try {
-        attempts++;
-        console.log(`Attempting to generate report (attempt ${attempts}/${maxAttempts})`);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedResponse = '';
+      let hasEncounteredError = false;
+      
+      // Initialize report sections based on empty report
+      const newReport = createEmptyReport();
+      
+      // Process the stream
+      while (true) {
+        const { value, done } = await reader.read();
         
-        // Call the generate report API with a timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
-        
-        const response = await fetch('/api/report-builder/generate-report', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            documents,
-            projectContext: ""
-          }),
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          throw new Error(`API request failed with status ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        // Enhanced debug logging
-        console.log('Report generation response received:', data);
-        console.log('Initial report state:', JSON.stringify(data.reportState, null, 2));
-        
-        // Check if we have a reportId for background processing
-        if (data.reportId) {
-          console.log(`Report is being processed in background with ID: ${data.reportId}`);
-          
-          // Set the initial report state
-          setReportState(data.reportState);
-          
-          // Start polling for updates
-          pollForReportUpdates(data.reportId, systemMessage.id);
-          
-          // Break out of retry loop since we have a valid response
+        if (done) {
+          console.log('Stream complete');
           break;
-        } else if (data.reportState?.sections) {
-          console.log('Received complete report state from API');
+        }
+        
+        // Decode and process the chunk
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n\n');
+        
+        for (const line of lines) {
+          if (line.trim() === '' || !line.startsWith('data: ')) continue;
           
-          // Verify that all required fields are present and provide fallbacks
-          const validatedReportState: ReportState = {
-            title: data.reportState.title || "Status Report",
-            date: data.reportState.date || formatDate(),
-            sections: {
-              accomplishments: data.reportState.sections?.accomplishments || "* No accomplishments detected",
-              insights: data.reportState.sections?.insights || "* No insights detected",
-              decisions: data.reportState.sections?.decisions || "* No decisions detected",
-              nextSteps: data.reportState.sections?.nextSteps || "* No next steps detected"
-            },
-            metadata: {
-              lastUpdated: Date.now(),
-              relatedDocuments: data.reportState.metadata?.relatedDocuments || [],
-              fullReport: data.reportState.metadata?.fullReport || ""
-            }
-          };
+          const data = line.slice(6).trim();
           
-          console.log('Setting validated report state:', JSON.stringify(validatedReportState, null, 2));
-          
-          // Update state with the validated report data
-          setReportState(validatedReportState);
-          
-          // Check if we got a partial (error) report
-          const hasError = data.error && data.reportState.title === "Partial Report";
-          
-          // Show a helpful message if there's no meaningful content
-          const isEmpty = !validatedReportState.sections.accomplishments.includes("*") &&
-                        !validatedReportState.sections.insights.includes("*") &&
-                        !validatedReportState.sections.decisions.includes("*") &&
-                        !validatedReportState.sections.nextSteps.includes("*");
-                          
-          if (isEmpty) {
-            console.warn("Report appears empty, adding guidance for user");
-            // Add guidance for empty reports
-            validatedReportState.sections.accomplishments = "* No specific accomplishments found in your documents";
-            validatedReportState.sections.insights = "* Try asking in chat: 'What insights can you find in my documents?'";
-            validatedReportState.sections.decisions = "* Try asking in chat: 'What decisions need to be made based on my documents?'";
-            validatedReportState.sections.nextSteps = "* Try asking in chat: 'What next steps are mentioned in my documents?'";
-            setReportState(validatedReportState);
+          if (data === '[DONE]') {
+            console.log('Stream done marker received');
+            continue;
           }
           
-          // Update system message based on success or partial success
-          setMessages(prev => prev.map(msg => 
-            msg.id === systemMessage.id
-              ? {
-                  ...msg,
-                  content: hasError 
-                    ? "⚠️ **Partial report generated.** " + data.error
-                    : "✅ **Initial report generated** based on your documents. You can now refine it using the chat.",
-                  isStreaming: false,
-                  timestamp: Date.now(),
-                  metadata: hasError ? { type: 'info' } : undefined
+          try {
+            // Parse the JSON data
+            const parsed = JSON.parse(data);
+            
+            // Check for errors
+            if (parsed.id === 'error' || parsed.report_metadata?.error) {
+              const errorMessage = parsed.report_metadata?.error || 
+                parsed.choices?.[0]?.delta?.content || 
+                'Unknown error occurred';
+              
+              console.error('Streaming error:', errorMessage);
+              hasEncounteredError = true;
+              
+              // Update the streaming message with the error
+              setMessages(prev => prev.map(msg => 
+                msg.id === systemMessage.id
+                  ? {
+                      ...msg,
+                      content: `❌ Error generating report: ${errorMessage}`,
+                      isStreaming: false,
+                      metadata: { type: 'error' },
+                      timestamp: Date.now()
+                    }
+                  : msg
+              ));
+              
+              break;
+            }
+            
+            // Get the content and section information
+            const content = parsed.choices?.[0]?.delta?.content || '';
+            const reportMetadata = parsed.report_metadata;
+            
+            if (content) {
+              // Accumulate the response
+              accumulatedResponse += content;
+              
+              // Update the streaming message with progress
+              setMessages(prev => prev.map(msg => 
+                msg.id === systemMessage.id
+                  ? {
+                      ...msg,
+                      content: `🔄 Generating your 4-box report (${accumulatedResponse.length} chars so far)...`,
+                      timestamp: Date.now()
+                    }
+                  : msg
+              ));
+              
+              // If we have section information, update the report sections
+              if (reportMetadata?.section_content) {
+                // Update the report with streaming content
+                for (const [sectionKey, sectionContent] of Object.entries(reportMetadata.section_content)) {
+                  if (sectionContent && sectionKey in newReport.sections) {
+                    // Use type assertion to safely access newReport.sections
+                    (newReport.sections as Record<string, string>)[sectionKey] = sectionContent as string;
+                  }
                 }
-              : msg
-          ));
-          
-          // Break out of retry loop on success
-          break;
-        } else {
-          console.error('No reportState in API response');
-          throw new Error('Missing report state in response');
+                
+                // Update the UI with progress
+                setReportState(newReport);
+              }
+            }
+          } catch (error) {
+            console.warn('Error parsing streaming response:', error, 'Raw data:', data);
+          }
         }
         
-      } catch (error) {
-        console.error('Error generating report:', error);
-        
-        // If we've exhausted our retries, show error message with better guidance
-        if (attempts >= maxAttempts) {
-          // Update system message with error and troubleshooting steps
-          setMessages(prev => prev.map(msg => 
-            msg.id === systemMessage.id
-              ? {
-                  ...msg,
-                  content: "❌ **Error generating report**. This could be due to:\n\n" +
-                           "1. The OpenRouter service may be experiencing issues\n" + 
-                           "2. The account may have insufficient credits\n" +
-                           "3. The request may have timed out\n\n" +
-                           "Try with smaller or fewer documents, or build your report using the chat.",
-                  isStreaming: false,
-                  metadata: { type: 'error' },
-                  timestamp: Date.now()
-                }
-              : msg
-          ));
-          
-          // Create fallback report with error messaging and clear guidance
-          const fallbackReport = createEmptyReport();
-          fallbackReport.title = "Error Generating Report";
-          fallbackReport.sections.accomplishments = "* Error generating report - try uploading smaller documents";
-          fallbackReport.sections.accomplishments += "\n* Or try one document at a time";
-          fallbackReport.sections.insights = "* You can still add content using the chat interface";
-          fallbackReport.sections.insights += "\n* Try asking: 'What are the key insights from my documents?'";
-          fallbackReport.sections.decisions = "* Try asking specific questions to build your report section by section";
-          fallbackReport.sections.decisions += "\n* For example: 'What decisions are mentioned in my documents?'";
-          fallbackReport.sections.nextSteps = "* Use 'add X to next steps' to build this section";
-          fallbackReport.sections.nextSteps += "\n* Or try: 'What next steps should I take based on these documents?'";
-          
-          setReportState(fallbackReport);
-        } else {
-          // If there are retries left, update message to indicate retrying
-          setMessages(prev => prev.map(msg => 
-            msg.id === systemMessage.id
-              ? {
-                  ...msg,
-                  content: `⏳ **Retrying report generation** (attempt ${attempts}/${maxAttempts})`,
-                  isStreaming: true,
-                  timestamp: Date.now()
-                }
-              : msg
-          ));
-          
-          // Wait briefly before retrying
-          await new Promise(resolve => setTimeout(resolve, 1000));
+        // If we encountered an error, stop processing
+        if (hasEncounteredError) {
+          break;
         }
       }
+      
+      // Clean up
+      try {
+        await reader.cancel();
+      } catch (e) {
+        console.warn('Error cancelling reader:', e);
+      }
+      
+      // If we didn't encounter an error, finalize the report
+      if (!hasEncounteredError) {
+        // Update the message to show completion
+        setMessages(prev => prev.map(msg => 
+          msg.id === systemMessage.id
+            ? {
+                ...msg,
+                content: '✅ Your 4-box report has been generated! You can now review and edit it.',
+                isStreaming: false,
+                timestamp: Date.now()
+              }
+            : msg
+        ));
+        
+        // Update UI state
+        setIsProcessing(false);
+      } else {
+        // Reset processing state on error
+        setIsProcessing(false);
+      }
+    } catch (error) {
+      console.error('Error generating report:', error);
+      setIsProcessing(false);
+      
+      // Update messages with error
+      setMessages(prev => prev.map(msg => 
+        msg.isStreaming 
+          ? { 
+              ...msg, 
+              content: `❌ Error generating report: ${error instanceof Error ? error.message : 'Unknown error'}`, 
+              isStreaming: false,
+              metadata: { type: 'error' }
+            }
+          : msg
+      ));
+      
+      // Create fallback report with error messaging and clear guidance
+      const fallbackReport = createEmptyReport();
+      fallbackReport.title = "Error Generating Report";
+      fallbackReport.sections.accomplishments = "* Error generating report - try uploading smaller documents";
+      fallbackReport.sections.accomplishments += "\n* Or try one document at a time";
+      fallbackReport.sections.insights = "* You can still add content using the chat interface";
+      fallbackReport.sections.insights += "\n* Try asking: 'What are the key insights from my documents?'";
+      fallbackReport.sections.decisions = "* Try asking specific questions to build your report section by section";
+      fallbackReport.sections.decisions += "\n* For example: 'What decisions are mentioned in my documents?'";
+      fallbackReport.sections.nextSteps = "* Use 'add X to next steps' to build this section";
+      fallbackReport.sections.nextSteps += "\n* Or try: 'What next steps should I take based on these documents?'";
+      
+      setReportState(fallbackReport);
     }
-    
-    setIsProcessing(false);
   };
 
   // Function to force regenerate the report
@@ -502,7 +494,7 @@ export default function ReportBuilderPage() {
     const systemMessage: Message = {
       id: uuidv4(),
       role: 'assistant',
-      content: "⏳ **Regenerating report** from uploaded documents...",
+      content: "🔄 Regenerating your report using streaming responses. You'll see results as they become available...",
       timestamp: Date.now(),
       isStreaming: true
     };
@@ -546,194 +538,6 @@ export default function ReportBuilderPage() {
                        !reportState.sections.insights && 
                        !reportState.sections.decisions && 
                        !reportState.sections.nextSteps;
-
-  // Function to poll for report updates in the background
-  const pollForReportUpdates = async (reportId: string, messageId: string) => {
-    // Update message to show polling status
-    setMessages(prev => prev.map(msg => 
-      msg.id === messageId
-        ? {
-            ...msg,
-            content: "⏳ **Processing your documents**... This may take up to 30 seconds.",
-            isStreaming: false,
-            timestamp: Date.now()
-          }
-        : msg
-    ));
-    
-    // Start polling with a 3-second interval
-    let attempts = 0;
-    const maxAttempts = 30; // 90 seconds max (30 * 3s)
-    const pollInterval = 3000; // 3 seconds
-    
-    // Track consecutive errors
-    let consecutiveErrors = 0;
-    const maxConsecutiveErrors = 3;
-    
-    const poll = async () => {
-      if (attempts >= maxAttempts) {
-        console.warn(`Exceeded max polling attempts (${maxAttempts}) for report ${reportId}`);
-        
-        setMessages(prev => prev.map(msg => 
-          msg.id === messageId
-            ? {
-                ...msg,
-                content: "⚠️ **Processing timed out**. The report may be too large or complex. " +
-                         "Try using the chat to ask about specific content in your documents.",
-                isStreaming: false,
-                metadata: { type: 'error' },
-                timestamp: Date.now()
-              }
-            : msg
-        ));
-        
-        return;
-      }
-      
-      try {
-        attempts++;
-        
-        // Add a very small delay between attempts to reduce server load
-        if (attempts > 1) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        
-        const response = await fetch(`/api/report-builder/check-report?reportId=${reportId}`);
-        
-        if (!response.ok) {
-          throw new Error(`API request failed with status ${response.status}`);
-        }
-        
-        const data = await response.json();
-        console.log(`Polling attempt ${attempts}: Status=${data.status}`, data);
-        
-        if (data.status === 'completed' && data.reportState) {
-          // We have a completed report - update the UI
-          console.log('Report processing completed:', data.reportState);
-          
-          // Update report state with the completed report
-          setReportState(data.reportState);
-          
-          // Update message to show completion
-          setMessages(prev => prev.map(msg => 
-            msg.id === messageId
-              ? {
-                  ...msg,
-                  content: "✅ **Report generation complete!** Your document analysis is ready. " +
-                           "You can refine it using the chat.",
-                  isStreaming: false,
-                  timestamp: Date.now()
-                }
-              : msg
-          ));
-          
-          return; // Stop polling
-        } else if (data.status === 'error') {
-          // Check if the error is "Report not found" - this could be temporary due to file system sync
-          if (data.error === 'Report not found' && consecutiveErrors < maxConsecutiveErrors) {
-            consecutiveErrors++;
-            console.warn(`Report not found (error ${consecutiveErrors}/${maxConsecutiveErrors}), will retry`);
-            
-            // Continue polling with a slightly longer delay
-            setTimeout(poll, pollInterval * 1.5);
-            return;
-          }
-          
-          // Handle error state
-          console.error('Error in report processing:', data.error);
-          
-          setMessages(prev => prev.map(msg => 
-            msg.id === messageId
-              ? {
-                  ...msg,
-                  content: `❌ **Error generating report**: ${data.error || 'Unknown error'}. ` +
-                           "Try with smaller documents or use the chat to analyze specific parts.",
-                  isStreaming: false,
-                  metadata: { type: 'error' },
-                  timestamp: Date.now()
-                }
-              : msg
-          ));
-          
-          return; // Stop polling
-        } else if (data.status === 'processing') {
-          // Reset consecutive errors counter since we got a valid response
-          consecutiveErrors = 0;
-          
-          // Still processing - update message with progress indication
-          if (attempts % 3 === 0) { // Update message every ~9 seconds
-            const dots = '.'.repeat((attempts / 3) % 4 + 1); // Creates animated dots ...
-            const padded = dots.padEnd(4, ' '); // Ensure consistent length
-            
-            setMessages(prev => prev.map(msg => 
-              msg.id === messageId
-                ? {
-                    ...msg,
-                    content: `⏳ **Processing your documents${padded}** ` +
-                             `(${Math.min(attempts * 3, 90)}s) This may take up to 90 seconds for large files.`,
-                    timestamp: Date.now()
-                  }
-                : msg
-            ));
-          }
-          
-          // Continue polling
-          setTimeout(poll, pollInterval);
-        } else if (data.status === 'pending') {
-          // Reset consecutive errors counter
-          consecutiveErrors = 0;
-          
-          // Waiting to start processing - update message
-          if (attempts % 3 === 0) {
-            setMessages(prev => prev.map(msg => 
-              msg.id === messageId
-                ? {
-                    ...msg,
-                    content: `⏳ **Waiting to start processing** (${attempts * 3}s)`,
-                    timestamp: Date.now()
-                  }
-                : msg
-            ));
-          }
-          
-          // Continue polling
-          setTimeout(poll, pollInterval);
-        } else {
-          // Unknown status - continue polling
-          setTimeout(poll, pollInterval);
-        }
-        
-      } catch (error) {
-        console.error('Error polling for report updates:', error);
-        
-        // Count as a consecutive error
-        consecutiveErrors++;
-        
-        // Stop after too many consecutive errors
-        if (consecutiveErrors >= maxConsecutiveErrors) {
-          setMessages(prev => prev.map(msg => 
-            msg.id === messageId
-              ? {
-                  ...msg,
-                  content: `❌ **Error checking report status**: Network or server error. ` +
-                           "Please try again with smaller documents.",
-                  isStreaming: false,
-                  metadata: { type: 'error' },
-                  timestamp: Date.now()
-                }
-              : msg
-          ));
-          return;
-        }
-        
-        // Continue polling despite error (could be temporary network issue)
-        setTimeout(poll, pollInterval);
-      }
-    };
-    
-    // Start polling immediately
-    poll();
-  };
 
   // Only render the components when mounted to prevent hydration issues
   return (

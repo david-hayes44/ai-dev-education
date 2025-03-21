@@ -21,15 +21,10 @@ function LoadingSpinner({ size = 'lg' }: { size?: 'sm' | 'md' | 'lg' }) {
   );
 }
 
-// Wait time between polling attempts 
-const POLL_INTERVAL = 3000; // 3 seconds
-const MAX_POLL_ATTEMPTS = 40; // Increase from 30 to 40 attempts
-
 export default function ReportBuilder() {
   const [reportId, setReportId] = useState<string>('');
   const [uploadedDocuments, setUploadedDocuments] = useState<UploadedDocument[]>([]);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [pollingCount, setPollingCount] = useState<number>(0);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
@@ -66,17 +61,15 @@ export default function ReportBuilder() {
     if (!reportIdToCheck) return;
     
     let attempts = 0;
-    setPollingCount(0);
     
     // Implement exponential backoff
-    let currentPollInterval = POLL_INTERVAL;
+    let currentPollInterval = 3000; // 3 seconds
     const MAX_POLL_INTERVAL = 15000; // 15 seconds max between attempts
     const BACKOFF_FACTOR = 1.5; // Increase interval by 50% each time
 
     const startPolling = () => {
       const pollInterval = setInterval(async () => {
         attempts++;
-        setPollingCount(attempts);
         
         try {
           const response = await fetch(`/api/report-builder/check-report?reportId=${reportIdToCheck}`, {
@@ -107,7 +100,7 @@ export default function ReportBuilder() {
             setReportState(data.reportState);
             
             // Reset backoff after successful partial result
-            currentPollInterval = POLL_INTERVAL;
+            currentPollInterval = 3000;
           }
           
           // If report is complete, stop polling and update the report state
@@ -152,12 +145,12 @@ export default function ReportBuilder() {
           }
           
           // If we've reached max polling attempts and the report is still not complete
-          if (attempts >= MAX_POLL_ATTEMPTS) {
+          if (attempts >= 40) {
             clearInterval(pollInterval);
             setIsProcessing(false);
             setIsGeneratingReport(false);
             setShowProgressIndicator(false);
-            console.error(`Exceeded max polling attempts (${MAX_POLL_ATTEMPTS}) for report ${reportIdToCheck}`);
+            console.error(`Exceeded max polling attempts (${40}) for report ${reportIdToCheck}`);
             
             // Add timeout message to chat, but don't clear the partial report
             // This way users can still see whatever was processed
@@ -621,13 +614,11 @@ export default function ReportBuilder() {
               {showProgressIndicator ? 'Generating Report' : 'Processing Documents'}
             </h3>
             
-            {pollingCount > 0 && (
-              <div className="text-sm text-slate-500">
-                {showProgressIndicator 
-                  ? 'Filling in each section of your report...' 
-                  : `Processing document chunks (attempt ${pollingCount}/${MAX_POLL_ATTEMPTS})...`}
-              </div>
-            )}
+            <div className="text-sm text-slate-500">
+              {showProgressIndicator 
+                ? 'Filling in each section of your report...' 
+                : 'Streaming document content...'}
+            </div>
             
             {reportProcessingError && (
               <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm max-w-md">
