@@ -264,14 +264,14 @@ export async function sendChatCompletion(
   
   // If streaming is requested, use the streaming-specific implementation
   if (request.stream === true) {
-    console.log(`Sending OpenRouter request to model: ${request.model}`);
+    console.log(`[OpenRouter] Sending streaming request to model: ${request.model}, message count: ${request.messages.length}`);
     
     try {
       // Create a longer timeout for streaming requests to ensure we get a response
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
         controller.abort();
-        console.error(`OpenRouter streaming request aborted due to timeout (30s)`);
+        console.error(`[OpenRouter] Streaming request aborted due to timeout (30s)`);
       }, 30000);
       
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -297,18 +297,22 @@ export async function sendChatCompletion(
       // Clear the timeout since we got a response
       clearTimeout(timeoutId);
       
+      console.log(`[OpenRouter] Received response status: ${response.status}`);
+      
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`OpenRouter API error (${response.status}): ${errorText}`);
+        console.error(`[OpenRouter] API error (${response.status}): ${errorText}`);
         
         // Return a fallback stream that immediately errors
         return createErrorStream(`OpenRouter API error: ${response.status} - ${errorText}`);
       }
       
       if (!response.body) {
-        console.error('OpenRouter API returned empty response body');
+        console.error('[OpenRouter] API returned empty response body');
         return createErrorStream('OpenRouter API returned empty response body');
       }
+      
+      console.log(`[OpenRouter] Successfully received streaming response body`);
       
       // Create a robust streaming response with error handling
       return response.body;

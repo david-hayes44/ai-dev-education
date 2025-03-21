@@ -300,6 +300,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       
       // Process message with streaming updates on the client side
       try {
+        console.log("Starting AI Tutor chat request...");
+        
         // First, create a placeholder for the assistant's response
         const placeholderMessage: Message = {
           id: `msg_${Date.now().toString()}`,
@@ -314,6 +316,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         setMessages(prev => [...prev, placeholderMessage]);
         
         // Create an EventSource to receive streaming updates from the server
+        console.log("Making fetch request to /api/chat...");
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: {
@@ -333,11 +336,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         });
         
         // Ensure we got a response with the right content type
+        console.log("Response received:", response.status, response.headers.get('Content-Type'));
         if (!response.ok || !response.body) {
           throw new Error(`Server error: ${response.status}`);
         }
         
         // Process the streaming response
+        console.log("Starting to process response stream...");
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         
@@ -351,6 +356,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           
           // Decode the chunk and handle data events
           const chunk = decoder.decode(value, { stream: true });
+          console.log("Stream chunk received:", chunk);
+          
+          // Process line by line
           const lines = chunk.split('\n\n');
           
           for (const line of lines) {
@@ -365,6 +373,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             
             try {
               // Parse the JSON data from the stream
+              console.log("Parsing JSON from stream:", data);
               const parsed = JSON.parse(data);
               
               // Create a properly typed message
@@ -377,6 +386,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                 }
               };
               
+              console.log("Updating message with:", updatedMessage.content ? updatedMessage.content.substring(0, 50) + "..." : "(empty content)");
+              
               // Update messages with the typed message
               setMessages(prev => prev.map(m => 
                 m.id === placeholderMessage.id ? updatedMessage : m
@@ -387,7 +398,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                 setNavigationSuggestions(parsed.metadata.navigationSuggestions);
               }
             } catch (error) {
-              console.warn("Error parsing streaming response:", error);
+              console.warn("Error parsing streaming response:", error, "Raw data:", data);
             }
           }
         }

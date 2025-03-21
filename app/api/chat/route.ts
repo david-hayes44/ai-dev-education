@@ -22,6 +22,10 @@ const apiKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY;
 // Update the model to use the working model from the report builder
 const model = 'google/gemini-2.0-flash-001';
 
+// Log API key presence for debugging
+console.log(`[chat API] OpenRouter API key present: ${!!apiKey}`);
+console.log(`[chat API] Using model: ${model}`);
+
 // Specify role type explicitly to match the expected literal union type
 type MessageRole = 'user' | 'assistant' | 'system';
 
@@ -464,6 +468,7 @@ export async function POST(req: NextRequest) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(initialResponseChunk)}\n\n`));
           
           // Call OpenRouter with streaming enabled
+          console.log(`[chat API] Sending streaming request to OpenRouter with model: ${model}, messages length: ${chatMessages.length}`);
           const apiStream = await sendChatCompletion({
             messages: chatMessages,
             model,
@@ -478,6 +483,8 @@ export async function POST(req: NextRequest) {
             }
           }) as ReadableStream;
           
+          console.log(`[chat API] OpenRouter streaming response received, processing stream`);
+          
           if (!apiStream) {
             throw new Error('Failed to get streaming response from OpenRouter');
           }
@@ -490,6 +497,7 @@ export async function POST(req: NextRequest) {
             const { done, value } = await reader.read();
             
             if (done) {
+              console.log(`[chat API] Stream processing complete, total response length: ${accumulatedResponse.length}`);
               // Final chunk with complete response
               const finalResponse: ChatResponse = {
                 id: messageId,
@@ -512,6 +520,7 @@ export async function POST(req: NextRequest) {
             // Process the chunk
             const decoder = new TextDecoder();
             const chunk = decoder.decode(value, { stream: true });
+            console.log(`[chat API] Received stream chunk of size: ${value.byteLength}`);
             const lines = chunk.split('\n\n');
             
             for (const line of lines) {
@@ -528,6 +537,11 @@ export async function POST(req: NextRequest) {
                 if (content) {
                   // Accumulate content
                   accumulatedResponse += content;
+                  
+                  // Log every 100 characters to avoid excessive logging
+                  if (accumulatedResponse.length % 100 === 0) {
+                    console.log(`[chat API] Accumulated ${accumulatedResponse.length} characters so far`);
+                  }
                   
                   // Send stream update
                   const streamUpdate: ChatResponse = {
