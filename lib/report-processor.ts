@@ -433,12 +433,14 @@ ${chunk}
 Provide a concise summary that captures the essential information.`;
   
   try {
+    console.log(`Sending summarization request for ${docName} chunk ${chunkIndex+1}/${totalChunks} using model google/gemini-2.0-flash-thinking-exp:free`);
+    
     // Use a faster, smaller model with lower token count
     const response = await sendChatCompletion({
-      model: "google/gemini-1.5-pro-latest",
+      model: "google/gemini-2.0-flash-thinking-exp:free",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.5,
-      max_tokens: 500, // Keep the summary short
+      max_tokens: 2000, // Increased from 500
       retry_options: {
         max_retries: 1,
         initial_delay: 200,
@@ -448,14 +450,35 @@ Provide a concise summary that captures the essential information.`;
     });
     
     if (response instanceof ReadableStream) {
+      console.warn(`Received streaming response for chunk summarization, which is not supported`);
       return `[Error: Streaming response not supported for chunk summarization]`;
     }
     
-    return response.choices?.[0]?.message?.content || '';
+    const summaryText = response.choices?.[0]?.message?.content || '';
+    
+    // Log summary stats for debugging
+    console.log(`Received summary for ${docName} chunk ${chunkIndex+1}/${totalChunks}: ${summaryText.length} chars`);
+    
+    return summaryText;
     
   } catch (error) {
-    console.error(`Error summarizing chunk:`, error);
-    return `[Error summarizing chunk: ${error instanceof Error ? error.message : 'Unknown error'}]`;
+    console.error(`Error summarizing chunk of ${docName}:`, error);
+    
+    // Enhanced error reporting
+    let errorMessage = "Unknown error";
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      console.error('Error details:', error.stack);
+      
+      // Check for specific error types
+      if (errorMessage.includes('timeout') || errorMessage.includes('aborted')) {
+        errorMessage = "Request timed out - server may be overloaded";
+      } else if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+        errorMessage = "API rate limit exceeded";
+      }
+    }
+    
+    return `[Error summarizing chunk: ${errorMessage}]`;
   }
 }
 
@@ -490,10 +513,10 @@ Use bullet points for each item. Focus on key information that would be most rel
     
     // Send the request with a reasonable timeout
     const response = await sendChatCompletion({
-      model: "google/gemini-1.5-pro-latest",
+      model: "google/gemini-2.0-flash-thinking-exp:free",
       messages: [{ role: "system", content: prompt }],
       temperature: 0.7,
-      max_tokens: 1500,
+      max_tokens: 4000, // Increased from 1500
       retry_options: {
         max_retries: 1,
         initial_delay: 500,
@@ -514,11 +537,19 @@ Use bullet points for each item. Focus on key information that would be most rel
     // Process the response to create a report
     const responseText = response.choices?.[0]?.message?.content || '';
     
+    // Log response for debugging
+    console.log(`OpenRouter API response for report generation:`, {
+      hasContent: !!responseText.trim(),
+      contentLength: responseText.length,
+      firstFewWords: responseText.substring(0, 100) + '...'
+    });
+
     if (!responseText.trim()) {
       // Fall back to an empty report if no content
       const emptyReport = createEmptyReport();
       emptyReport.sections.accomplishments = "* No content was generated from your documents";
       emptyReport.sections.insights = "* Try uploading different documents or adding specific details via chat";
+      emptyReport.metadata.error = "API returned empty response";
       return emptyReport;
     }
     
@@ -544,13 +575,29 @@ Use bullet points for each item. Focus on key information that would be most rel
     
   } catch (error) {
     console.error('Error generating report from summaries:', error);
+    
+    // Capture more specific error details for debugging
+    let errorMessage = "Error generating report from document summaries";
+    if (error instanceof Error) {
+      errorMessage += `: ${error.message}`;
+      console.error('Error details:', error.stack);
+    }
+    
     // Create a fallback report with error information
     const fallbackReport = createEmptyReport();
     fallbackReport.title = "Error Report";
-    fallbackReport.sections.accomplishments = "* Error generating report from document summaries";
+    fallbackReport.sections.accomplishments = `* ${errorMessage}`;
     fallbackReport.sections.insights = "* You can still add content using the chat interface";
     fallbackReport.sections.decisions = "* Try asking specific questions to build your report section by section";
     fallbackReport.sections.nextSteps = "* Use 'add X to next steps' to build this section manually";
+    
+    // Add error metadata for debugging
+    fallbackReport.metadata = {
+      ...fallbackReport.metadata,
+      error: errorMessage,
+      lastUpdated: Date.now()
+    };
+    
     return fallbackReport;
   }
 }
@@ -738,7 +785,9 @@ function createEmptyReport(): ReportState {
     },
     metadata: {
       lastUpdated: Date.now(),
-      relatedDocuments: []
+      relatedDocuments: [],
+      fullReport: "",
+      error: ""
     }
   };
 }
