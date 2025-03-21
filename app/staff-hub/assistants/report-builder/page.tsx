@@ -566,6 +566,10 @@ export default function ReportBuilderPage() {
     const maxAttempts = 30; // 90 seconds max (30 * 3s)
     const pollInterval = 3000; // 3 seconds
     
+    // Track consecutive errors
+    let consecutiveErrors = 0;
+    const maxConsecutiveErrors = 3;
+    
     const poll = async () => {
       if (attempts >= maxAttempts) {
         console.warn(`Exceeded max polling attempts (${maxAttempts}) for report ${reportId}`);
@@ -588,6 +592,11 @@ export default function ReportBuilderPage() {
       
       try {
         attempts++;
+        
+        // Add a very small delay between attempts to reduce server load
+        if (attempts > 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
         
         const response = await fetch(`/api/report-builder/check-report?reportId=${reportId}`);
         
@@ -620,6 +629,16 @@ export default function ReportBuilderPage() {
           
           return; // Stop polling
         } else if (data.status === 'error') {
+          // Check if the error is "Report not found" - this could be temporary due to file system sync
+          if (data.error === 'Report not found' && consecutiveErrors < maxConsecutiveErrors) {
+            consecutiveErrors++;
+            console.warn(`Report not found (error ${consecutiveErrors}/${maxConsecutiveErrors}), will retry`);
+            
+            // Continue polling with a slightly longer delay
+            setTimeout(poll, pollInterval * 1.5);
+            return;
+          }
+          
           // Handle error state
           console.error('Error in report processing:', data.error);
           
@@ -638,16 +657,39 @@ export default function ReportBuilderPage() {
           
           return; // Stop polling
         } else if (data.status === 'processing') {
+          // Reset consecutive errors counter since we got a valid response
+          consecutiveErrors = 0;
+          
           // Still processing - update message with progress indication
           if (attempts % 3 === 0) { // Update message every ~9 seconds
-            const dots = '.'.repeat((attempts / 3) % 4); // Creates animated dots ...
+            const dots = '.'.repeat((attempts / 3) % 4 + 1); // Creates animated dots ...
+            const padded = dots.padEnd(4, ' '); // Ensure consistent length
             
             setMessages(prev => prev.map(msg => 
               msg.id === messageId
                 ? {
                     ...msg,
-                    content: `⏳ **Processing your documents${dots}** ` +
-                             `(${attempts * 3}s) This may take up to 90 seconds for large files.`,
+                    content: `⏳ **Processing your documents${padded}** ` +
+                             `(${Math.min(attempts * 3, 90)}s) This may take up to 90 seconds for large files.`,
+                    timestamp: Date.now()
+                  }
+                : msg
+            ));
+          }
+          
+          // Continue polling
+          setTimeout(poll, pollInterval);
+        } else if (data.status === 'pending') {
+          // Reset consecutive errors counter
+          consecutiveErrors = 0;
+          
+          // Waiting to start processing - update message
+          if (attempts % 3 === 0) {
+            setMessages(prev => prev.map(msg => 
+              msg.id === messageId
+                ? {
+                    ...msg,
+                    content: `⏳ **Waiting to start processing** (${attempts * 3}s)`,
                     timestamp: Date.now()
                   }
                 : msg
@@ -663,6 +705,26 @@ export default function ReportBuilderPage() {
         
       } catch (error) {
         console.error('Error polling for report updates:', error);
+        
+        // Count as a consecutive error
+        consecutiveErrors++;
+        
+        // Stop after too many consecutive errors
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          setMessages(prev => prev.map(msg => 
+            msg.id === messageId
+              ? {
+                  ...msg,
+                  content: `❌ **Error checking report status**: Network or server error. ` +
+                           "Please try again with smaller documents.",
+                  isStreaming: false,
+                  metadata: { type: 'error' },
+                  timestamp: Date.now()
+                }
+              : msg
+          ));
+          return;
+        }
         
         // Continue polling despite error (could be temporary network issue)
         setTimeout(poll, pollInterval);

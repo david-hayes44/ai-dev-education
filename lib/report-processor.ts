@@ -1,8 +1,9 @@
 import { UploadedDocument, ReportState } from "@/components/report-builder/types";
 import { sendChatCompletion, ChatMessage } from "@/lib/openrouter";
+import fs from 'fs/promises';
+import path from 'path';
 
-// In-memory store of report processing state
-// In production, this would be replaced with Redis or a database
+// Type definitions
 type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'error';
 
 interface ReportProcessingState {
@@ -16,19 +17,160 @@ interface ReportProcessingState {
   error?: string;
 }
 
-// Simple in-memory store (would be replaced in production)
-const reportStore: Map<string, ReportProcessingState> = new Map();
+// Determine if we're in development mode
+const isDevelopment = process.env.NODE_ENV === 'development';
 
-// Clean up old reports periodically (every hour)
-const REPORT_TTL = 3600 * 1000; // 1 hour in milliseconds
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, report] of reportStore.entries()) {
-    if (now - report.updatedAt > REPORT_TTL) {
-      reportStore.delete(id);
+/**
+ * Storage interface for report processing state
+ */
+interface ReportStorage {
+  get(reportId: string): Promise<ReportProcessingState | undefined>;
+  set(reportId: string, state: ReportProcessingState): Promise<void>;
+  delete(reportId: string): Promise<void>;
+  cleanup(): Promise<void>;
+}
+
+/**
+ * In-memory storage implementation
+ */
+class InMemoryStorage implements ReportStorage {
+  private store = new Map<string, ReportProcessingState>();
+
+  async get(reportId: string): Promise<ReportProcessingState | undefined> {
+    return this.store.get(reportId);
+  }
+
+  async set(reportId: string, state: ReportProcessingState): Promise<void> {
+    this.store.set(reportId, state);
+  }
+
+  async delete(reportId: string): Promise<void> {
+    this.store.delete(reportId);
+  }
+
+  async cleanup(): Promise<void> {
+    const now = Date.now();
+    const REPORT_TTL = 3600 * 1000; // 1 hour in milliseconds
+    
+    for (const [id, report] of this.store.entries()) {
+      if (now - report.updatedAt > REPORT_TTL) {
+        this.store.delete(id);
+      }
     }
   }
-}, 15 * 60 * 1000); // Clean every 15 minutes
+}
+
+/**
+ * File system storage implementation for development
+ */
+class FileSystemStorage implements ReportStorage {
+  private dataDir: string;
+  
+  constructor() {
+    // Use .data directory in project root
+    this.dataDir = path.join(process.cwd(), '.data', 'reports');
+    // Ensure directory exists
+    this.ensureDataDir().catch(err => 
+      console.error('Error creating data directory:', err)
+    );
+  }
+  
+  private async ensureDataDir(): Promise<void> {
+    try {
+      await fs.mkdir(this.dataDir, { recursive: true });
+    } catch (err) {
+      console.error('Error creating data directory:', err);
+    }
+  }
+  
+  private getFilePath(reportId: string): string {
+    return path.join(this.dataDir, `report-${reportId}.json`);
+  }
+  
+  async get(reportId: string): Promise<ReportProcessingState | undefined> {
+    try {
+      const filePath = this.getFilePath(reportId);
+      const data = await fs.readFile(filePath, 'utf8');
+      return JSON.parse(data) as ReportProcessingState;
+    } catch (err) {
+      // File not found is expected for non-existent reports
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.error(`Error reading report ${reportId}:`, err);
+      }
+      return undefined;
+    }
+  }
+  
+  async set(reportId: string, state: ReportProcessingState): Promise<void> {
+    try {
+      await this.ensureDataDir();
+      const filePath = this.getFilePath(reportId);
+      await fs.writeFile(
+        filePath, 
+        JSON.stringify(state, null, 2),
+        'utf8'
+      );
+    } catch (err) {
+      console.error(`Error writing report ${reportId}:`, err);
+      throw err;
+    }
+  }
+  
+  async delete(reportId: string): Promise<void> {
+    try {
+      const filePath = this.getFilePath(reportId);
+      await fs.unlink(filePath);
+    } catch (err) {
+      // Ignore file not found errors
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.error(`Error deleting report ${reportId}:`, err);
+      }
+    }
+  }
+  
+  async cleanup(): Promise<void> {
+    try {
+      const files = await fs.readdir(this.dataDir);
+      const now = Date.now();
+      const REPORT_TTL = 3600 * 1000; // 1 hour
+      
+      for (const file of files) {
+        if (!file.startsWith('report-') || !file.endsWith('.json')) continue;
+        
+        try {
+          const filePath = path.join(this.dataDir, file);
+          const stats = await fs.stat(filePath);
+          
+          // Delete files older than TTL
+          if (now - stats.mtimeMs > REPORT_TTL) {
+            await fs.unlink(filePath);
+          }
+        } catch (err) {
+          console.error(`Error processing file ${file} during cleanup:`, err);
+        }
+      }
+    } catch (err) {
+      // Directory might not exist yet
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.error('Error during storage cleanup:', err);
+      }
+    }
+  }
+}
+
+// Initialize the appropriate storage based on environment
+// In a real production app, you might use Redis or a database here
+const storage: ReportStorage = isDevelopment
+  ? new FileSystemStorage()
+  : new InMemoryStorage();
+
+// Set up periodic cleanup
+const CLEANUP_INTERVAL = 15 * 60 * 1000; // 15 minutes
+setInterval(() => {
+  storage.cleanup().catch(err => 
+    console.error('Error during storage cleanup:', err)
+  );
+}, CLEANUP_INTERVAL);
 
 /**
  * Store a report for background processing
@@ -38,6 +180,8 @@ export async function storeReportForProcessing(
   documents: UploadedDocument[],
   projectContext?: string
 ): Promise<string> {
+  console.log(`Storing report ${reportId} for processing (using ${isDevelopment ? 'file system' : 'in-memory'} storage)`);
+  
   const reportState: ReportProcessingState = {
     reportId,
     status: 'pending',
@@ -47,7 +191,7 @@ export async function storeReportForProcessing(
     updatedAt: Date.now()
   };
   
-  reportStore.set(reportId, reportState);
+  await storage.set(reportId, reportState);
   return reportId;
 }
 
@@ -60,9 +204,10 @@ export async function getReportState(reportId: string): Promise<{
   status: ProcessingStatus;
   error?: string;
 }> {
-  const report = reportStore.get(reportId);
+  const report = await storage.get(reportId);
   
   if (!report) {
+    console.warn(`Report ${reportId} not found in ${isDevelopment ? 'file system' : 'in-memory'} storage`);
     return { 
       isComplete: false, 
       status: 'error', 
@@ -82,7 +227,7 @@ export async function getReportState(reportId: string): Promise<{
  * Trigger background processing of a report
  */
 export async function triggerBackgroundProcessing(reportId: string): Promise<void> {
-  const report = reportStore.get(reportId);
+  const report = await storage.get(reportId);
   
   if (!report) {
     console.error(`Report ${reportId} not found for processing`);
@@ -92,21 +237,29 @@ export async function triggerBackgroundProcessing(reportId: string): Promise<voi
   // Update status to processing
   report.status = 'processing';
   report.updatedAt = Date.now();
-  reportStore.set(reportId, report);
+  await storage.set(reportId, report);
   
   // Process in the background
   processReportAsync(reportId).catch(err => {
     console.error(`Error processing report ${reportId}:`, err);
     
     // Update with error status
-    const report = reportStore.get(reportId);
-    if (report) {
-      report.status = 'error';
-      report.error = err.message;
-      report.updatedAt = Date.now();
-      reportStore.set(reportId, report);
-    }
+    updateReportError(reportId, err instanceof Error ? err.message : String(err))
+      .catch(updateErr => console.error(`Error updating report error status: ${updateErr}`));
   });
+}
+
+/**
+ * Update a report with error status
+ */
+async function updateReportError(reportId: string, errorMessage: string): Promise<void> {
+  const report = await storage.get(reportId);
+  if (report) {
+    report.status = 'error';
+    report.error = errorMessage;
+    report.updatedAt = Date.now();
+    await storage.set(reportId, report);
+  }
 }
 
 /**
@@ -114,7 +267,7 @@ export async function triggerBackgroundProcessing(reportId: string): Promise<voi
  * This runs in the background and updates the report state when complete
  */
 async function processReportAsync(reportId: string): Promise<void> {
-  const report = reportStore.get(reportId);
+  const report = await storage.get(reportId);
   
   if (!report) {
     throw new Error(`Report ${reportId} not found`);
@@ -137,7 +290,7 @@ async function processReportAsync(reportId: string): Promise<void> {
     report.status = 'completed';
     report.result = reportState;
     report.updatedAt = Date.now();
-    reportStore.set(reportId, report);
+    await storage.set(reportId, report);
     
     console.log(`Completed processing report ${reportId}`);
   } catch (error) {
@@ -145,7 +298,7 @@ async function processReportAsync(reportId: string): Promise<void> {
     report.status = 'error';
     report.error = error instanceof Error ? error.message : String(error);
     report.updatedAt = Date.now();
-    reportStore.set(reportId, report);
+    await storage.set(reportId, report);
   }
 }
 
