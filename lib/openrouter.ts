@@ -251,79 +251,28 @@ export async function sendChatCompletion(
         
         if (message.content.includes('data:')) {
           dataUrls++;
-        }
-        if (message.content.includes('http')) {
+        } else if (message.content.includes('http')) {
           httpUrls++;
-        }
-        if (message.content.includes('PLAINTEXT_ATTACHMENT')) {
+        } else {
           plainTextAttachments++;
         }
       }
     }
   }
   
-  if (hasAttachments) {
-    console.log(`Request contains file references: data_urls=${dataUrls}, http_urls=${httpUrls}, plaintext_attachments=${plainTextAttachments}`);
-  }
+  console.log(`OpenRouter request stats: model=${request.model}, message_count=${request.messages.length}, total_content_length=${totalContentLength}${hasAttachments ? ` (attachments: ${dataUrls} data URLs, ${httpUrls} HTTP URLs, ${plainTextAttachments} plain text)` : ''}`);
   
-  console.log(`Sending OpenRouter request to model: ${request.model}`);
-  if (hasAttachments) {
-    console.log("Request includes file attachments");
-  }
-  
-  // Track message count for debugging
-  console.log(`OpenRouter request stats: model=${request.model}, message_count=${request.messages.length}, total_content_length=${totalContentLength}`);
-  
-  // If streaming is requested, handle it differently
+  // If streaming is requested, use the streaming-specific implementation
   if (request.stream === true) {
+    console.log(`Sending OpenRouter request to model: ${request.model}`);
+    
     try {
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY}`,
-          "HTTP-Referer": `${process.env.NEXT_PUBLIC_SITE_URL || ""}`,
-        },
-        body: JSON.stringify({
-          model: request.model,
-          messages: request.messages,
-          stream: true,
-          temperature: request.temperature,
-          max_tokens: request.max_tokens,
-          top_p: request.top_p,
-          response_format: request.response_format,
-          safe_mode: request.safe_mode,
-        }),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.error?.message || `HTTP error ${response.status}`;
-        console.error("Error from OpenRouter API:", errorMessage);
-        throw new Error(`API error: ${errorMessage}`);
-      }
-      
-      return response.body!;
-    } catch (error) {
-      console.error("Error calling OpenRouter API for streaming:", error);
-      throw new Error(`Error calling OpenRouter API for streaming: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-  
-  // For non-streaming requests, use the existing implementation with retries
-  while (true) {
-    try {
-      console.log(`Sending OpenRouter request to model: ${request.model}`);
-      if (hasAttachments) {
-        console.log('Request includes file attachments');
-      }
-      
-      // CRITICAL CHANGE: Implement timeout handling using AbortController
+      // Create a longer timeout for streaming requests to ensure we get a response
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
         controller.abort();
-        console.warn('Aborting OpenRouter request due to timeout (15s)');
-      }, 15000); // 15 second hard timeout to prevent server-side timeouts
+        console.error(`OpenRouter streaming request aborted due to timeout (30s)`);
+      }, 30000);
       
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -334,142 +283,142 @@ export async function sendChatCompletion(
           'X-Title': 'AI-Dev Education Platform',
         },
         body: JSON.stringify({
-          model: request.model || 'openai/gpt-3.5-turbo', // Default model
+          model: request.model || 'openai/gpt-3.5-turbo',
           messages: request.messages,
-          temperature: request.temperature || 0.7,
-          max_tokens: request.max_tokens || 1000,
-          stream: request.stream || false,
+          temperature: request.temperature !== undefined ? request.temperature : 0.7,
+          max_tokens: request.max_tokens,
+          stream: true,
           response_format: request.response_format,
           safe_mode: request.safe_mode || 'standard'
         }),
-        signal: controller.signal, // Add abort signal for timeout
+        signal: controller.signal,
       });
       
-      // Clear the timeout if response received
+      // Clear the timeout since we got a response
       clearTimeout(timeoutId);
-
-      // Handle rate limiting specifically
-      if (response.status === 429) {
-        const retryAfter = response.headers.get('Retry-After');
-        const retryDelay = retryAfter ? parseInt(retryAfter) * 1000 : delay;
-        
-        if (retries < retry_options.max_retries) {
-          console.warn(`Rate limited by OpenRouter API. Retrying after ${retryDelay}ms. Retry ${retries + 1}/${retry_options.max_retries}`);
-          
-          await new Promise(resolve => setTimeout(resolve, retryDelay));
-          retries++;
-          delay = Math.min(delay * retry_options.backoff_factor, retry_options.max_delay);
-          continue;
-        } else {
-          throw new Error(`Rate limited by OpenRouter API and exceeded maximum retries (${retry_options.max_retries})`);
-        }
-      }
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`OpenRouter API request failed: ${response.status} ${response.statusText}`, errorText);
+        console.error(`OpenRouter API error (${response.status}): ${errorText}`);
         
-        // Enhanced error handling with specific error codes
-        if (response.status === 400) {
-          // Try to parse the error message
-          try {
-            const errorJson = JSON.parse(errorText);
-            if (errorJson.error && errorJson.error.message) {
-              console.error('Parsed error message:', errorJson.error.message);
-              
-              if (errorJson.error.message.includes('token limit') || 
-                  errorJson.error.message.includes('maximum context length')) {
-                throw new Error('Your message with attachments exceeds the token limit. Please try with a shorter message or fewer/smaller attachments.');
-              }
-              
-              // Check for file-specific errors
-              if (hasAttachments && 
-                 (errorJson.error.message.includes('file') || 
-                  errorJson.error.message.includes('url') || 
-                  errorJson.error.message.includes('attachment'))) {
-                throw new Error(`Error processing file: ${errorJson.error.message}`);
-              }
-              
-              throw new Error(errorJson.error.message);
-            }
-          } catch (e) {
-            // If JSON parsing fails, just use the original error text
-            if (e instanceof Error) {
-              console.error('Error parsing JSON error:', e);
-            }
-          }
-          
-          // Generic 400 error
-          throw new Error(`Bad request: The API could not process your request. ${hasAttachments ? 'This might be due to issues with your file attachments.' : ''}`);
-        }
-        
-        if (response.status === 401) {
-          throw new Error('Authentication error: Invalid or missing API key');
-        }
-        
-        if (response.status === 403) {
-          throw new Error('Permission denied: Your API key does not have access to the requested model');
-        }
-        
-        if (response.status === 404) {
-          throw new Error(`Model not found: The requested model '${request.model}' is not available`);
-        }
-        
-        if (response.status === 500) {
-          throw new Error('Server error: OpenRouter is experiencing issues. Please try again later.');
-        }
-        
-        // Generic error for other status codes
-        throw new Error(`OpenRouter API request failed with status ${response.status}`);
+        // Return a fallback stream that immediately errors
+        return createErrorStream(`OpenRouter API error: ${response.status} - ${errorText}`);
       }
       
-      if (request.stream) {
-        if (!response.body) {
-          throw new Error("OpenRouter API returned an empty stream");
-        }
-        return response.body;
-      } else {
-        const data = await response.json();
-        return data as ChatCompletionResponse;
+      if (!response.body) {
+        console.error('OpenRouter API returned empty response body');
+        return createErrorStream('OpenRouter API returned empty response body');
       }
+      
+      // Create a robust streaming response with error handling
+      return response.body;
     } catch (error) {
-      // If we've already retried the maximum number of times, throw the error
-      if (retries >= retry_options.max_retries) {
-        console.error('OpenRouter request failed after maximum retries:', error);
-        
-        // Add custom messaging for file-related errors
-        if (hasAttachments && error instanceof Error) {
-          if (error.message.includes('token limit') || error.message.includes('too large')) {
-            throw new Error('Your file is too large for the AI to process. Please try with a smaller file or summarize its content.');
-          }
-          if (error.message.includes('file') || error.message.includes('url') || error.message.includes('attachment')) {
-            throw new Error(`File processing error: ${error.message}`);
-          }
-        }
-        
-        throw error;
-      }
-      
-      console.warn(`OpenRouter request failed (attempt ${retries + 1}/${retry_options.max_retries}):`, error);
-      
-      // Only retry for network errors and server errors, not for client errors
-      if (error instanceof Error) {
-        const errorMessage = error.message.toLowerCase();
-        
-        // Don't retry for client errors like invalid API key, bad request, etc.
-        if (errorMessage.includes('api key') || 
-            errorMessage.includes('authentication') || 
-            errorMessage.includes('bad request') ||
-            errorMessage.includes('permission denied')) {
-          throw error;
-        }
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, delay));
-      retries++;
-      delay = Math.min(delay * retry_options.backoff_factor, retry_options.max_delay);
+      console.error(`Error calling OpenRouter API in streaming mode:`, error);
+      return createErrorStream(`Error calling OpenRouter API: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
+  
+  // Non-streaming implementation with retries
+  while (retries <= retry_options.max_retries) {
+    try {
+      console.log(`Sending OpenRouter request to model: ${request.model}`);
+      
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_OPENROUTER_API_KEY}`,
+          'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_BASE_URL || 'https://ai-dev-education.com'),
+          'X-Title': 'AI-Dev Education Platform',
+        },
+        body: JSON.stringify({
+          model: request.model || 'openai/gpt-3.5-turbo',
+          messages: request.messages,
+          temperature: request.temperature !== undefined ? request.temperature : 0.7,
+          max_tokens: request.max_tokens,
+          stream: false,
+          response_format: request.response_format,
+          safe_mode: request.safe_mode || 'standard'
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.warn(`OpenRouter API request failed (${response.status}): ${errorText}`);
+        
+        // Check for retry-able errors
+        if (response.status === 429 || response.status === 500 || response.status === 502 || response.status === 503) {
+          console.log(`Retrying OpenRouter API call after error (attempt ${retries + 1}/${retry_options.max_retries + 1})`);
+          retries++;
+          
+          if (retries <= retry_options.max_retries) {
+            // Calculate backoff delay with jitter for more robust retries
+            delay = Math.min(
+              delay * retry_options.backoff_factor * (0.5 + Math.random()), 
+              retry_options.max_delay
+            );
+            
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+        }
+        
+        // For non-retryable errors or if we've exhausted retries
+        console.error(`OpenRouter API request failed after ${retries} retries: ${response.status}`);
+        return createFallbackResponse(new Error(`OpenRouter API request failed: ${response.status}`));
+      }
+      
+      // Parse and return the successful response
+      const data = await response.json();
+      return data as ChatCompletionResponse;
+      
+    } catch (error) {
+      console.error('Error calling OpenRouter API:', error);
+      
+      // Retry on network errors
+      retries++;
+      
+      if (retries <= retry_options.max_retries) {
+        delay = Math.min(delay * retry_options.backoff_factor, retry_options.max_delay);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      
+      return createFallbackResponse(error);
+    }
+  }
+  
+  // This should never be reached due to the return in the error case above
+  return createFallbackResponse(new Error("Failed to get response from OpenRouter API after maximum retries"));
+}
+
+/**
+ * Creates a ReadableStream that immediately returns an error message
+ * This is used as a fallback when the OpenRouter API streaming request fails
+ */
+function createErrorStream(errorMessage: string): ReadableStream {
+  // Create a readable stream that emits a properly formatted SSE error
+  return new ReadableStream({
+    start(controller) {
+      // Format as a proper server-sent event with error
+      const errorEvent = `data: ${JSON.stringify({
+        id: 'error',
+        choices: [{
+          delta: { content: `Error: ${errorMessage}` },
+          finish_reason: 'error',
+          index: 0
+        }]
+      })}\n\n`;
+      
+      // Send the error event
+      const encoder = new TextEncoder();
+      controller.enqueue(encoder.encode(errorEvent));
+      
+      // Send a [DONE] event and close the stream
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      controller.close();
+    }
+  });
 }
 
 /**

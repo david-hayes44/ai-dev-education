@@ -28,9 +28,34 @@ export async function GET(request: NextRequest) {
     }
     
     console.log(`[check-report API] Received request for reportId: ${reportId}`);
-    console.log(`[check-report API] Fetching state for report: ${reportId}`);
     
-    const { isComplete, reportState, status, error } = await getReportState(reportId);
+    // Set timeout for Supabase retrieval
+    const timeoutPromise = new Promise<{timeout: true}>(resolve => {
+      setTimeout(() => resolve({timeout: true}), 15000); // 15 second timeout
+    });
+    
+    // Fetch the report state with timeout protection
+    const fetchPromise = getReportState(reportId)
+      .then(result => ({timeout: false, result}));
+    
+    // Race between fetch and timeout
+    const result = await Promise.race([fetchPromise, timeoutPromise]);
+    
+    if ('timeout' in result && result.timeout) {
+      console.log(`[check-report API] Timeout waiting for report ${reportId}`);
+      return NextResponse.json(
+        { 
+          status: 'processing',
+          isComplete: false,
+          error: 'Timeout waiting for report state',
+          hasPartialResults: false
+        },
+        { status: 408 } // Request Timeout status
+      );
+    }
+    
+    // We know this is a fetch result if we get here
+    const { isComplete, reportState, status, error } = (result as {timeout: false, result: any}).result;
     
     console.log(`[check-report API] Report state retrieved:`, {
       status,
@@ -70,7 +95,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       { 
         error: "Failed to check report status",
-        details: error instanceof Error ? error.message : String(error)
+        details: error instanceof Error ? error.message : String(error),
+        status: 'error',
+        isComplete: false,
       },
       { status: 500 }
     );

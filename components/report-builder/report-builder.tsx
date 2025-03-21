@@ -23,7 +23,7 @@ function LoadingSpinner({ size = 'lg' }: { size?: 'sm' | 'md' | 'lg' }) {
 
 // Wait time between polling attempts 
 const POLL_INTERVAL = 3000; // 3 seconds
-const MAX_POLL_ATTEMPTS = 30;
+const MAX_POLL_ATTEMPTS = 40; // Increase from 30 to 40 attempts
 
 export default function ReportBuilder() {
   const [reportId, setReportId] = useState<string>('');
@@ -68,96 +68,143 @@ export default function ReportBuilder() {
     let attempts = 0;
     setPollingCount(0);
     
-    const pollInterval = setInterval(async () => {
-      attempts++;
-      setPollingCount(attempts);
+    // Implement exponential backoff
+    let currentPollInterval = POLL_INTERVAL;
+    const MAX_POLL_INTERVAL = 15000; // 15 seconds max between attempts
+    const BACKOFF_FACTOR = 1.5; // Increase interval by 50% each time
+
+    const startPolling = () => {
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        setPollingCount(attempts);
+        
+        try {
+          const response = await fetch(`/api/report-builder/check-report?reportId=${reportIdToCheck}`, {
+            // Add timeout to the fetch request
+            signal: AbortSignal.timeout(20000) // 20-second timeout
+          });
+          
+          if (!response.ok) {
+            if (response.status === 504) {
+              console.warn(`Polling attempt ${attempts}: Gateway timeout (504) - will retry with longer interval`);
+              // Increase the polling interval more aggressively for timeouts
+              currentPollInterval = Math.min(currentPollInterval * 2, MAX_POLL_INTERVAL);
+              clearInterval(pollInterval);
+              setTimeout(startPolling, currentPollInterval);
+              return;
+            }
+            
+            console.error(`Error checking report status: ${response.status}`);
+            return;
+          }
+          
+          const data = await response.json();
+          console.log(`Polling attempt ${attempts}: Status=${data.status}`, data);
+          
+          // Handle streaming partial results
+          if (data.hasPartialResults && data.reportState) {
+            setShowProgressIndicator(true);
+            setReportState(data.reportState);
+            
+            // Reset backoff after successful partial result
+            currentPollInterval = POLL_INTERVAL;
+          }
+          
+          // If report is complete, stop polling and update the report state
+          if (data.isComplete && data.reportState) {
+            clearInterval(pollInterval);
+            setIsProcessing(false);
+            setIsGeneratingReport(false);
+            setShowProgressIndicator(false);
+            setReportState(data.reportState);
+            
+            // Add a message about report completion
+            setMessages(prev => [...prev, {
+              id: uuidv4(),
+              role: 'assistant',
+              content: '✅ Your 4-box report has been generated! You can now review and edit it.',
+              timestamp: Date.now()
+            }]);
+            
+            return;
+          }
+          
+          // Handle error states
+          if (data.error) {
+            clearInterval(pollInterval);
+            setIsProcessing(false);
+            setIsGeneratingReport(false);
+            setShowProgressIndicator(false);
+            setReportProcessingError(data.error);
+            
+            // Add error message to chat
+            setMessages(prev => [...prev, {
+              id: uuidv4(),
+              role: 'assistant',
+              content: `❌ Error generating report: ${data.error}\n\nPlease try again with different documents or contact support if the issue persists.`,
+              timestamp: Date.now(),
+              metadata: {
+                type: 'error'
+              }
+            }]);
+            
+            return;
+          }
+          
+          // If we've reached max polling attempts and the report is still not complete
+          if (attempts >= MAX_POLL_ATTEMPTS) {
+            clearInterval(pollInterval);
+            setIsProcessing(false);
+            setIsGeneratingReport(false);
+            setShowProgressIndicator(false);
+            console.error(`Exceeded max polling attempts (${MAX_POLL_ATTEMPTS}) for report ${reportIdToCheck}`);
+            
+            // Add timeout message to chat, but don't clear the partial report
+            // This way users can still see whatever was processed
+            setMessages(prev => [...prev, {
+              id: uuidv4(),
+              role: 'assistant',
+              content: "⚠️ The report is taking longer than expected. You can continue working with the partial results or try again with fewer or smaller documents.",
+              timestamp: Date.now(),
+              metadata: {
+                type: 'error'
+              }
+            }]);
+            
+            return;
+          }
+          
+          // Implement exponential backoff for subsequent polls
+          if (attempts > 1) {
+            // Increase the interval (with a maximum cap)
+            currentPollInterval = Math.min(currentPollInterval * BACKOFF_FACTOR, MAX_POLL_INTERVAL);
+            
+            // Clear the current interval and set a new one with the updated timing
+            clearInterval(pollInterval);
+            setTimeout(startPolling, currentPollInterval);
+            return;
+          }
+        } catch (error) {
+          console.error('Error polling for report updates:', error);
+          
+          // Implement backoff for errors too
+          currentPollInterval = Math.min(currentPollInterval * BACKOFF_FACTOR, MAX_POLL_INTERVAL);
+          clearInterval(pollInterval);
+          setTimeout(startPolling, currentPollInterval);
+        }
+      }, currentPollInterval);
       
-      try {
-        const response = await fetch(`/api/report-builder/check-report?reportId=${reportIdToCheck}`);
-        
-        if (!response.ok) {
-          console.error(`Error checking report status: ${response.status}`);
-          return;
-        }
-        
-        const data = await response.json();
-        
-        // Handle streaming partial results
-        if (data.hasPartialResults && data.reportState) {
-          setShowProgressIndicator(true);
-          setReportState(data.reportState);
-        }
-        
-        // If report is complete, stop polling and update the report state
-        if (data.isComplete && data.reportState) {
-          clearInterval(pollInterval);
-          setIsProcessing(false);
-          setIsGeneratingReport(false);
-          setShowProgressIndicator(false);
-          setReportState(data.reportState);
-          
-          // Add a message about report completion
-          setMessages(prev => [...prev, {
-            id: uuidv4(),
-            role: 'assistant',
-            content: '✅ Your 4-box report has been generated! You can now review and edit it.',
-            timestamp: Date.now()
-          }]);
-          
-          return;
-        }
-        
-        // Handle error states
-        if (data.error) {
-          clearInterval(pollInterval);
-          setIsProcessing(false);
-          setIsGeneratingReport(false);
-          setShowProgressIndicator(false);
-          setReportProcessingError(data.error);
-          
-          // Add error message to chat
-          setMessages(prev => [...prev, {
-            id: uuidv4(),
-            role: 'assistant',
-            content: `❌ Error generating report: ${data.error}\n\nPlease try again with different documents or contact support if the issue persists.`,
-            timestamp: Date.now(),
-            metadata: {
-              type: 'error'
-            }
-          }]);
-          
-          return;
-        }
-        
-        // If we've reached max polling attempts and the report is still not complete
-        if (attempts >= MAX_POLL_ATTEMPTS) {
-          clearInterval(pollInterval);
-          setIsProcessing(false);
-          setIsGeneratingReport(false);
-          setShowProgressIndicator(false);
-          console.error(`Exceeded max polling attempts (${MAX_POLL_ATTEMPTS}) for report ${reportIdToCheck}`);
-          
-          // Add timeout message to chat, but don't clear the partial report
-          // This way users can still see whatever was processed
-          setMessages(prev => [...prev, {
-            id: uuidv4(),
-            role: 'assistant',
-            content: "⚠️ The report is taking longer than expected. You can continue working with the partial results or try again with fewer or smaller documents.",
-            timestamp: Date.now(),
-            metadata: {
-              type: 'error'
-            }
-          }]);
-          
-          return;
-        }
-      } catch (error) {
-        console.error('Error polling report status:', error);
-      }
-    }, POLL_INTERVAL);
+      // Return the interval ID for cleanup
+      return pollInterval;
+    };
+    
+    // Start initial polling and store the interval ID
+    const initialInterval = startPolling();
     
     // Cleanup function to clear the interval if component unmounts
-    return () => clearInterval(pollInterval);
+    return () => {
+      if (initialInterval) clearInterval(initialInterval);
+    };
   }, []);
   
   // When a new document is uploaded, add it to the state
