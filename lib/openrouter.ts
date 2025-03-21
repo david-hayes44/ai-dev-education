@@ -285,6 +285,13 @@ export async function sendChatCompletion(
         console.log('Request includes file attachments');
       }
       
+      // CRITICAL CHANGE: Implement timeout handling using AbortController
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+        console.warn('Aborting OpenRouter request due to timeout (15s)');
+      }, 15000); // 15 second hard timeout to prevent server-side timeouts
+      
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -302,7 +309,11 @@ export async function sendChatCompletion(
           response_format: request.response_format,
           safe_mode: request.safe_mode || 'standard'
         }),
+        signal: controller.signal, // Add abort signal for timeout
       });
+      
+      // Clear the timeout if response received
+      clearTimeout(timeoutId);
 
       // Handle rate limiting specifically
       if (response.status === 429) {

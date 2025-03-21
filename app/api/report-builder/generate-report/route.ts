@@ -237,27 +237,30 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Validate OpenRouter API key
-    const openRouterApiKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY;
-    if (!openRouterApiKey) {
-      return NextResponse.json(
-        { 
-          error: "OpenRouter API key is missing",
-          reportState: createEmptyReport()
-        },
-        { status: 500 }
-      );
-    }
+    // Create a minimal report without any AI processing
+    const emptyReport = createEmptyReport();
+    emptyReport.title = documents.length === 1 
+      ? `Report: ${documents[0].name}` 
+      : `Report: ${documents.length} Documents`;
     
-    // CRITICAL CHANGE: Process documents in chunks and individual summaries first
-    const summaries = await processDocumentsSequentially(documents);
+    // Instead of trying to analyze all documents, just acknowledge their receipt
+    emptyReport.sections.accomplishments = documents.map(doc => 
+      `* Document "${doc.name}" received (${Math.round(doc.size / 1024)} KB)`
+    ).join('\n');
     
-    // Generate a consolidated report from the summaries
-    const reportState = await generateReportFromSummaries(summaries, projectContext);
+    // Add instructions for using chat
+    emptyReport.sections.insights = "* Use the chat to analyze your documents";
+    emptyReport.sections.insights += "\n* Try asking: 'What are the key insights from my documents?'";
     
-    // Return the generated report state
+    emptyReport.sections.decisions = "* Use the chat to identify decisions needed";
+    emptyReport.sections.decisions += "\n* Try asking: 'What decisions or risks are mentioned in my documents?'";
+    
+    emptyReport.sections.nextSteps = "* Use the chat to extract next steps";
+    emptyReport.sections.nextSteps += "\n* Try asking: 'What are the upcoming tasks mentioned in my documents?'";
+    
+    // Return the minimal report immediately
     return NextResponse.json({
-      reportState
+      reportState: emptyReport
     });
     
   } catch (error) {

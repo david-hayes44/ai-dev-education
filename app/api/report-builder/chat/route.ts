@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sendChatCompletion, ChatMessage } from "@/lib/openrouter";
+import { sendChatCompletion, ChatMessage, ChatCompletionResponse } from "@/lib/openrouter";
 import { ChatRequest, ReportState, ReportSectionKey } from "@/components/report-builder/types";
 
 // System prompt for the report builder assistant
@@ -440,15 +440,28 @@ IMPORTANT INSTRUCTIONS:
       { role: "user", content: message }
     ];
     
-    // Call OpenRouter API
+    // Direct handling for specific question types without waiting for AI
+    const directResponse = getDirectResponse(message, targetSection);
+    if (directResponse) {
+      console.log('Using direct response pattern for common question');
+      return NextResponse.json({
+        reply: directResponse.reply,
+        updatedReport: directResponse.update ? updateReportSection(reportState, targetSection, directResponse.update) : undefined
+      });
+    }
+    
+    // Call OpenRouter API with retry and timeout handling
     try {
       console.log('Sending chat completion request to model');
       
-      // OPTIMIZATION: Set a timeout for the API request to prevent long-running requests
-      const fetchTimeoutMs = 15000; // 15 seconds
+      // Create a timeout promise for server-side timeout handling
+      const TIMEOUT_MS = 10000; // 10 seconds maximum wait time
+      const timeoutPromise = new Promise<ChatCompletionResponse>((_, reject) => {
+        setTimeout(() => reject(new Error('Server timeout after 10s')), TIMEOUT_MS);
+      });
       
-      // Create a promise that will resolve with the API response
-      const fetchPromise = sendChatCompletion({
+      // Create a promise for the OpenRouter API call
+      const apiPromise = sendChatCompletion({
         model: "google/gemini-2.0-pro-exp-02-05:free",
         messages,
         temperature: 0.7,
@@ -461,15 +474,8 @@ IMPORTANT INSTRUCTIONS:
         }
       });
       
-      // Create a timeout promise
-      const timeoutPromise = new Promise<{id: string; choices: {message: {content: string}; finish_reason: string; index: number}[]}>((_, reject) => {
-        setTimeout(() => {
-          reject(new Error('Request timed out after ' + fetchTimeoutMs + 'ms'));
-        }, fetchTimeoutMs);
-      });
-      
-      // Race the fetch and timeout promises
-      const response = await Promise.race([fetchPromise, timeoutPromise]);
+      // Race between API call and timeout
+      const response = await Promise.race([apiPromise, timeoutPromise]);
       
       // Check response structure
       if (!response) {
@@ -528,7 +534,7 @@ IMPORTANT INSTRUCTIONS:
       let userFriendlyReply = "❌ **Error:** I apologize, but I encountered an error while processing your request. Please try again later.";
       
       // Give more specific help for timeout errors
-      if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
+      if (errorMessage.includes('timeout') || errorMessage.includes('timed out') || errorMessage.includes('abort')) {
         userFriendlyReply = "⏱️ **Request timed out:** I'm sorry, but your request took too long to process. Please try a shorter message or break your request into smaller parts.";
         
         // If this was an "add to section" request, try to still add the content
@@ -581,6 +587,51 @@ IMPORTANT INSTRUCTIONS:
       { status: 500 }
     );
   }
+}
+
+// Helper function to provide immediate responses for common questions
+function getDirectResponse(message: string, targetSection: ReportSectionKey | null): {reply: string; update?: string} | null {
+  const lowerMessage = message.toLowerCase();
+  
+  // Help request patterns
+  if (lowerMessage.includes('help') && lowerMessage.includes('report')) {
+    return {
+      reply: "📋 **Report Help**\n\nYou can build your report in several ways:\n\n1. **Add content** - Say 'Add X to accomplishments' or similar\n2. **Ask questions** - Ask 'What insights are in my documents?'\n3. **Edit directly** - Click on any section to edit it manually\n\nTry starting with: 'Create a summary of my documents'"
+    };
+  }
+  
+  // Add to section patterns - attempt direct extraction for very simple cases
+  if ((lowerMessage.startsWith('add ') || lowerMessage.includes(' add ')) && targetSection) {
+    const content = extractContentFromUserMessage(message, targetSection);
+    if (content && content.length > 5 && content.length < 100) {
+      return {
+        reply: `✅ Added: "${content}" to the ${targetSection} section.`,
+        update: content
+      };
+    }
+  }
+  
+  return null;
+}
+
+// Helper function to update report section
+function updateReportSection(reportState: ReportState, section: ReportSectionKey | null, content: string): ReportState {
+  if (!section) return reportState;
+  
+  const updatedReport = { ...reportState };
+  const formattedContent = formatAsBulletPoint(content);
+  
+  if (section === 'accomplishments') {
+    updatedReport.sections.accomplishments = appendToSection(updatedReport.sections.accomplishments, formattedContent);
+  } else if (section === 'insights') {
+    updatedReport.sections.insights = appendToSection(updatedReport.sections.insights, formattedContent);
+  } else if (section === 'decisions') {
+    updatedReport.sections.decisions = appendToSection(updatedReport.sections.decisions, formattedContent);
+  } else if (section === 'nextSteps') {
+    updatedReport.sections.nextSteps = appendToSection(updatedReport.sections.nextSteps, formattedContent);
+  }
+  
+  return updatedReport;
 }
 
 // OPTIMIZATION: Helper function to trim section content to reduce token count
