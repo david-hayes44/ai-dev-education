@@ -545,4 +545,4 @@ function FollowUpQuestions({ questions, onQuestionClick }: FollowUpQuestionProps
       </div>
     </div>
   );
-} 
+} // Adding a comment
