@@ -94,6 +94,18 @@ const navItems = [
     ]
   },
   {
+    path: "/staff-hub",
+    label: "AIssistant Hub",
+    icon: <Database className="w-4 h-4 mr-2" />,
+    dropdown: [
+      { label: "Overview", path: "/staff-hub" },
+      { label: "Department Tools", path: "/staff-hub/department-tools" },
+      { label: "Custom Assistants", path: "/staff-hub/assistants" },
+      { label: "Workflows", path: "/staff-hub/workflows" },
+    ]
+  },
+  /* Hidden for now
+  {
     path: "/learning-paths",
     label: "Learning Paths",
     icon: <BookMarked className="w-4 h-4 mr-2" />,
@@ -116,6 +128,7 @@ const navItems = [
       { label: "External Resources", path: "/resources/external-resources" },
     ]
   }
+  */
 ]
 
 export function Header() {

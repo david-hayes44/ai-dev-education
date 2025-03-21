@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -74,6 +74,7 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
   const [attachmentError, setAttachmentError] = useState<Record<string, boolean>>({});
   const [loadingAttachments, setLoadingAttachments] = useState<Record<string, boolean>>({});
   const [showRetryButton, setShowRetryButton] = useState(false);
+  const [forceUpdateKey, setForceUpdateKey] = useState(0);
   
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
@@ -291,97 +292,24 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
               >
                 Cancel
               </Button>
-              <Button 
-                variant="ghost" 
-                className="h-6 text-xs px-2 py-0 text-destructive"
-                onClick={() => {
-                  // Force immediate error state
-                  console.error("DEBUG: Force error triggered by user");
-                  // Log debug info
-                  console.log("DEBUG INFO:", {
-                    messageId: message.id,
-                    isStreaming,
-                    isLoading,
-                    hasOpenRouterKey: !!process.env.NEXT_PUBLIC_OPENROUTER_API_KEY?.substring(0, 3),
-                    metadataType: message.metadata?.type,
-                    browserInfo: navigator.userAgent
-                  });
-                  if (chatService) {
-                    chatService.updateAssistantMessageWithError(new Error("User forced error"));
-                  }
-                }}
-              >
-                Force Error
-              </Button>
-            </div>
-          )}
-        </div>
-      );
-    } 
-    
-    if (isLoading) {
-      return (
-        <div className="flex items-center">
-          <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary animate-pulse">
-            Loading...
-          </span>
-          {showRetryButton && (
-            <div className="flex gap-1">
-              <Button 
-                variant="ghost" 
-                className="h-6 ml-2 text-xs px-2 py-0 text-muted-foreground hover:text-destructive"
-                onClick={handleRetry}
-              >
-                Cancel
-              </Button>
-              <Button 
-                variant="ghost" 
-                className="h-6 text-xs px-2 py-0 text-destructive"
-                onClick={() => {
-                  // Force immediate error state
-                  console.error("DEBUG: Force error triggered by user");
-                  // Log debug info
-                  console.log("DEBUG INFO:", {
-                    messageId: message.id,
-                    isStreaming,
-                    isLoading,
-                    hasOpenRouterKey: !!process.env.NEXT_PUBLIC_OPENROUTER_API_KEY?.substring(0, 3),
-                    metadataType: message.metadata?.type,
-                    browserInfo: navigator.userAgent
-                  });
-                  if (chatService) {
-                    chatService.updateAssistantMessageWithError(new Error("User forced error"));
-                  }
-                }}
-              >
-                Force Error
-              </Button>
             </div>
           )}
         </div>
       );
     }
     
-    if (isThinking) {
+    if (isLoading) {
       return (
-        <span className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground animate-pulse">
-          Thinking...
+        <span className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+          Loading...
         </span>
       );
     }
     
     if (isRechunking) {
       return (
-        <span className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground animate-pulse">
+        <span className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
           Processing...
-        </span>
-      );
-    }
-    
-    if (message.metadata?.type === "fallback") {
-      return (
-        <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-800 dark:text-amber-100">
-          Fallback Mode
         </span>
       );
     }
@@ -396,6 +324,21 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
     
     return null;
   };
+
+  // Force a re-render every 500ms during streaming to ensure content updates are visible
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    
+    if (message.isStreaming) {
+      interval = setInterval(() => {
+        setForceUpdateKey(prev => prev + 1);
+      }, 500);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [message.isStreaming]);
 
   return (
     <div
@@ -431,6 +374,7 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
             isThinking && "text-muted-foreground italic",
             isRechunking && "text-muted-foreground",
             isError && "text-destructive",
+            isStreaming && "chat-streaming-active",
             message.metadata?.type === "fallback" && "text-amber-800 dark:text-amber-300"
           )}>
             {isLoading ? (
@@ -439,18 +383,29 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
                 <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '200ms' }}></div>
                 <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '400ms' }}></div>
               </div>
-            ) : isRechunking ? (
+            ) : isThinking ? (
               <div className="flex items-center space-x-2">
                 <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></div>
                 <span>Processing message history...</span>
               </div>
             ) : isStreaming ? (
-              <div className={cn("transition-all duration-200", isStreaming ? "border-l-2 border-primary pl-2" : "")}>
-                {message.content ? (
-                  <ReactMarkdown>{message.content}</ReactMarkdown>
-                ) : (
-                  <span className="text-muted-foreground">Generating response...</span>
+              <div className="transition-all duration-200 border-l-2 border-primary pl-2 min-h-[24px] relative streaming-container">
+                {/* Debug info - helpful during troubleshooting */}
+                {process.env.NODE_ENV === 'development' && (
+                  <div className="absolute -top-4 right-0 text-xs bg-yellow-100 text-yellow-800 px-1 rounded">
+                    Streaming: {message.content?.length || 0} chars | Key: {forceUpdateKey}
+                  </div>
                 )}
+                {/* Always render the ReactMarkdown component during streaming */}
+                <div className="streaming-content animate-pulse-subtle" key={`streaming-${message.id}-${forceUpdateKey}`}>
+                  {message.content ? (
+                    <ReactMarkdown key={`md-${message.id}-${forceUpdateKey}`}>
+                      {message.content}
+                    </ReactMarkdown>
+                  ) : (
+                    <span className="text-muted-foreground">Generating response...</span>
+                  )}
+                </div>
               </div>
             ) : (
               <ReactMarkdown>{message.content || ""}</ReactMarkdown>
@@ -609,4 +564,4 @@ function FollowUpQuestions({ questions, onQuestionClick }: FollowUpQuestionProps
       </div>
     </div>
   );
-} 
+}

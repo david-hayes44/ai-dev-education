@@ -19,7 +19,12 @@ const AI_TOPICS = [
 
 // Server-side environment variables
 const apiKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY;
-const model = 'anthropic/claude-3-opus:1:0';
+// Update the model to use the working model from the report builder
+const model = 'google/gemini-2.0-flash-001';
+
+// Log API key presence for debugging
+console.log(`[chat API] OpenRouter API key present: ${!!apiKey}`);
+console.log(`[chat API] Using model: ${model}`);
 
 // Specify role type explicitly to match the expected literal union type
 type MessageRole = 'user' | 'assistant' | 'system';
@@ -51,6 +56,7 @@ interface ChatResponse {
     followUpQuestions?: string[];
     contentReferences?: ContentReference[];
   };
+  isStreaming?: boolean;
 }
 
 // Initialize OpenAI client for OpenRouter
@@ -354,184 +360,331 @@ function extractContentReferences(query: string, relevantContent: ContentChunk[]
   }
 }
 
-// Enhanced POST handler that integrates semantic search and content references
+/**
+ * Main API handler for chat endpoint with streaming support
+ */
 export async function POST(req: NextRequest) {
-  try {
-    const { message, messages = [], context = {} } = await req.json() as ChatRequest;
-    
-    if (!message) {
-      return NextResponse.json(
-        { error: "Missing message parameter" },
-        { status: 400 }
-      );
-    }
-    
-    // Detect if this is a concept explanation query
-    const conceptExplanation = isConceptExplanationQuery(message);
-    
-    // Detect if this is a navigation request
-    const isNavRequest = isNavigationRequest(message);
-    
-    // Prepare context data
-    const relevantContent: ContentChunk[] = context.relevantContent || [];
-    
-    // If we don't have relevant content yet, search for it
-    if (relevantContent.length === 0) {
-      const searchResults = await searchContent(message, 5);
-      relevantContent.push(...searchResults);
-    }
-    
-    // Update context with relevant content
-    const enhancedContext = {
-      ...context,
-      relevantContent
-    };
-    
-    // Add system context message
-    const contextMessage = generateContextMessage(enhancedContext);
-    
-    // Call OpenRouter if API key is available
-    const openRouterApiKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY;
-    let content = '';
-    let navigationSuggestions: NavigationSuggestion[] = [];
-    let followUpQuestions: string[] = [];
-    
-    if (openRouterApiKey) {
-      // If this is potentially a concept explanation, use enhanced prompt
-      if (conceptExplanation.isConceptExplanation) {
-        // Generate structured explanation using schema
-        try {
-          // Fix: Call the function with optional parameters or directly without args
-          const knowledgeLevel = detectKnowledgeLevel(message);
-          const includeCode = isCodeExampleRequested(message);
-          
-          // Pass options object directly to function that expects optional parameters
-          const conceptSchema = createEnhancedConceptSchema();
-          
-          // Streaming full response
-          const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${openRouterApiKey}`,
-              'HTTP-Referer': process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000',
-              'X-Title': 'AI Education Platform'
-            },
-            body: JSON.stringify({
-              model: 'anthropic/claude-3-sonnet:beta',
-              messages: [
-                {
-                  role: 'system',
-                  content: `You are an AI education assistant focused on explaining AI concepts clearly and accurately. ${contextMessage}
-                  
-When explaining AI concepts, use this JSON schema to structure your response:
-${JSON.stringify(conceptSchema, null, 2)}
+  // Set a longer timeout for the response
+  const responseTimeout = 120000; // 2 minutes
+  let timeoutId: NodeJS.Timeout | null = null;
 
-Make sure your response is valid JSON that follows this schema exactly, with all required fields. Do not include any markdown formatting, just the pure JSON.`
-                },
-                ...messages.map((msg): { role: string; content: string } => ({ 
-                  role: msg.role, 
-                  content: msg.content 
-                })),
-                { role: 'user', content: message }
-              ],
-              response_format: { type: "json_object" }
-            })
-          });
-          
-          if (!response.ok) {
-            throw new Error(`OpenRouter API error: ${response.status}`);
-          }
-          
-          const responseData = await response.json() as { choices: [{ message: { content: string } }] };
-          content = responseData.choices[0].message.content;
-          
-          // Generate navigation suggestions and follow-up questions
-          navigationSuggestions = await generateNavigationSuggestions(message);
-          followUpQuestions = generateFollowUpQuestions(message, content);
-        } catch (error) {
-          console.error('Error generating structured concept explanation:', error);
-          content = `I apologize, but I encountered an error while trying to explain this concept. Please try asking in a different way or about a different topic.`;
-        }
-      } else {
-        // Regular chat response
-        try {
-          const systemPrompt = getSystemPrompt();
-          
-          // Add context-specific information to the system prompt
-          const fullSystemPrompt = `${systemPrompt}\n\n${contextMessage}`;
-          
-          // Streaming full response
-          const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${openRouterApiKey}`,
-              'HTTP-Referer': process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000',
-              'X-Title': 'AI Education Platform'
-            },
-            body: JSON.stringify({
-              model: 'anthropic/claude-3-haiku',
-              messages: [
-                { role: 'system', content: fullSystemPrompt },
-                ...messages.map((msg): { role: string; content: string } => ({ 
-                  role: msg.role, 
-                  content: msg.content 
-                })),
-                { role: 'user', content: message }
-              ]
-            })
-          });
-          
-          if (!response.ok) {
-            throw new Error(`OpenRouter API error: ${response.status}`);
-          }
-          
-          const responseData = await response.json() as { choices: [{ message: { content: string } }] };
-          content = responseData.choices[0].message.content;
-          
-          // Generate navigation suggestions
-          if (isNavRequest) {
-            navigationSuggestions = await generateNavigationSuggestions(message);
-          }
-          
-          // Generate follow-up questions
-          followUpQuestions = generateFollowUpQuestions(message, content);
-          
-        } catch (error) {
-          console.error('Error calling OpenRouter API:', error);
-          content = `I apologize, but I encountered an error while processing your request. Please try again later.`;
-        }
-      }
-    } else {
-      // Fallback for when OpenRouter is not available
-      content = `I'm sorry, but I'm not fully configured yet. Please check that the OpenRouter API key is properly set up.`;
+  try {
+    // Process request with improved error handling
+    const body = await req.json() as ChatRequest;
+    const userQuery = body.message || '';
+    const messages = body.messages || [];
+    const userContext = body.context || {};
+    
+    if (!userQuery && messages.length === 0) {
+      return NextResponse.json({ error: "No message provided" }, { status: 400 });
     }
     
-    // Extract content references
-    const contentReferences = extractContentReferences(message, relevantContent);
+    // Generate a unique ID for the response message
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     
-    // Prepare the response
-    const chatResponse: ChatResponse = {
-      role: 'assistant',
-      content,
-      timestamp: Date.now(),
-      id: crypto.randomUUID(),
-      metadata: {
-        isNavigationRequest: isNavRequest,
-        type: conceptExplanation.isConceptExplanation ? 'concept' : 'answer',
-        navigationSuggestions,
-        followUpQuestions,
-        contentReferences
-      }
+    // Process query for special handling
+    const isNavRequest = isNavigationRequest(userQuery);
+    const conceptExplanation = isConceptExplanationQuery(userQuery);
+    const knowledgeLevel = detectKnowledgeLevel(userQuery);
+    const shouldIncludeCode = isCodeExampleRequested(userQuery);
+    
+    // Base system message
+    let systemMessage = getSystemPrompt();
+    
+    // Initialize metadata for the response
+    const responseMetadata: ChatResponse['metadata'] = {
+      type: 'standard'
     };
     
-    return NextResponse.json(chatResponse);
+    // Add relevant content to the context message if available
+    if (!userContext.relevantContent || userContext.relevantContent.length === 0) {
+      // If no content was provided, try to find relevant content
+      try {
+        const chunks = await searchContent(userQuery);
+        if (chunks.length > 0) {
+          userContext.relevantContent = chunks;
+          
+          // Extract potential references for citation
+          responseMetadata.contentReferences = extractContentReferences(userQuery, chunks);
+        }
+      } catch (error) {
+        console.error('Error searching for content:', error);
+      }
+    }
     
+    // Add context message with current page and relevant content
+    const contextMessage = generateContextMessage(userContext);
+    
+    // If it's a navigation request, handle special case
+    if (isNavRequest) {
+      // Mark as navigation request in the metadata
+      responseMetadata.isNavigationRequest = true;
+      
+      try {
+        // Generate navigation suggestions based on the query
+        const suggestions = await generateNavigationSuggestions(userQuery);
+        if (suggestions && suggestions.length > 0) {
+          responseMetadata.navigationSuggestions = suggestions;
+        }
+      } catch (error) {
+        console.error('Error generating navigation suggestions:', error);
+      }
+      
+      // Add navigation instruction to system prompt
+      systemMessage += "\nThe user is looking for navigation assistance. Please help them find the right page or section.";
+    }
+    
+    // If it's a concept explanation, add structured output request
+    if (conceptExplanation.isConceptExplanation) {
+      // Add structured output schema for concept explanations
+      systemMessage += `\nThe user is requesting an explanation of the concept "${conceptExplanation.topic}". Please provide a structured explanation.`;
+      responseMetadata.type = 'concept_explanation';
+      
+      // Add additional instruction based on knowledge level
+      systemMessage += `\nProvide the explanation at a ${knowledgeLevel} level.`;
+      
+      if (shouldIncludeCode) {
+        systemMessage += "\nInclude relevant code examples where appropriate.";
+      }
+    }
+    
+    // Create the message array for the chat completion
+    const chatMessages: ChatMessage[] = [
+      { role: "system", content: systemMessage + '\n' + contextMessage },
+      ...messages
+    ];
+    
+    // Use streaming response implementation
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        // Set a timeout to prevent hanging connections
+        timeoutId = setTimeout(() => {
+          try {
+            const timeoutResponse = {
+              id: messageId,
+              role: 'assistant',
+              content: "I'm sorry, the request timed out. Please try again.",
+              timestamp: Date.now(),
+              metadata: { ...responseMetadata, type: 'error' }
+            };
+            
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(timeoutResponse)}\n\n`));
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+            console.error('[chat API] Request timed out after', responseTimeout, 'ms');
+          } catch (e) {
+            console.error('[chat API] Error during timeout handling:', e);
+          }
+        }, responseTimeout);
+
+        try {
+          // Send initial response with metadata
+          const initialResponseChunk = {
+            id: messageId,
+            role: 'assistant',
+            content: '',
+            timestamp: Date.now(),
+            metadata: responseMetadata,
+            isStreaming: true
+          };
+          
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(initialResponseChunk)}\n\n`));
+          
+          // Call OpenRouter with streaming enabled - enhanced error handling
+          console.log(`[chat API] Sending streaming request to OpenRouter with model: ${model}, messages length: ${chatMessages.length}`);
+          let apiStream: ReadableStream;
+          try {
+            apiStream = await sendChatCompletion({
+              messages: chatMessages,
+              model,
+              stream: true,
+              temperature: 0.7,
+              // Add retry options for better reliability
+              retry_options: {
+                max_retries: 5, // Increase max retries
+                initial_delay: 1000,
+                max_delay: 15000, // Increase max delay
+                backoff_factor: 2
+              }
+            }) as ReadableStream;
+            
+            console.log(`[chat API] OpenRouter streaming response received, processing stream`);
+          } catch (apiError) {
+            console.error('[chat API] Error getting stream from OpenRouter:', apiError);
+            const errorResponse = {
+              id: messageId,
+              role: 'assistant',
+              content: `I'm sorry, I couldn't connect to the AI service. ${apiError instanceof Error ? apiError.message : 'Please try again later.'}`,
+              timestamp: Date.now(),
+              metadata: { type: 'error' }
+            };
+            
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorResponse)}\n\n`));
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            
+            // Clear timeout since we're done
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+              timeoutId = null;
+            }
+            
+            return;
+          }
+          
+          if (!apiStream) {
+            throw new Error('Failed to get streaming response from OpenRouter');
+          }
+          
+          // Process the streaming response
+          const reader = apiStream.getReader();
+          let accumulatedResponse = '';
+          
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              
+              if (done) {
+                console.log(`[chat API] Stream processing complete, total response length: ${accumulatedResponse.length}`);
+                // Final chunk with complete response
+                const finalResponse: ChatResponse = {
+                  id: messageId,
+                  role: 'assistant',
+                  content: accumulatedResponse,
+                  timestamp: Date.now(),
+                  metadata: responseMetadata
+                };
+                
+                // Add follow-up questions for a better user experience
+                if (accumulatedResponse) {
+                  finalResponse.metadata!.followUpQuestions = generateFollowUpQuestions(userQuery, accumulatedResponse);
+                }
+                
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalResponse)}\n\n`));
+                controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                break;
+              }
+              
+              // Process the chunk
+              const decoder = new TextDecoder();
+              const chunk = decoder.decode(value, { stream: true });
+              console.log(`[chat API] Received stream chunk of size: ${value.byteLength}`);
+              const lines = chunk.split('\n\n');
+              
+              for (const line of lines) {
+                if (line.trim() === '' || !line.startsWith('data: ')) continue;
+                
+                const data = line.slice(6).trim();
+                
+                if (data === '[DONE]') continue;
+                
+                try {
+                  const parsed = JSON.parse(data);
+                  const content = parsed.choices?.[0]?.delta?.content || '';
+                  
+                  if (content) {
+                    // Accumulate content
+                    accumulatedResponse += content;
+                    
+                    // Reset the timeout with each successful chunk
+                    if (timeoutId) {
+                      clearTimeout(timeoutId);
+                      timeoutId = setTimeout(() => {
+                        try {
+                          const timeoutResponse = {
+                            id: messageId,
+                            role: 'assistant',
+                            content: accumulatedResponse + "\n\n[Response was cut off due to timeout. Please try again.]",
+                            timestamp: Date.now(),
+                            metadata: { ...responseMetadata, type: 'error' }
+                          };
+                          
+                          controller.enqueue(encoder.encode(`data: ${JSON.stringify(timeoutResponse)}\n\n`));
+                          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                          controller.close();
+                        } catch (e) {
+                          console.error('[chat API] Error during timeout handling:', e);
+                        }
+                      }, responseTimeout);
+                    }
+                    
+                    // Log every 100 characters to avoid excessive logging
+                    if (accumulatedResponse.length % 100 === 0) {
+                      console.log(`[chat API] Accumulated ${accumulatedResponse.length} characters so far`);
+                    }
+                    
+                    // Send stream update
+                    const streamUpdate: ChatResponse = {
+                      id: messageId,
+                      role: 'assistant',
+                      content: accumulatedResponse,
+                      timestamp: Date.now(),
+                      metadata: responseMetadata,
+                      isStreaming: true
+                    };
+                    
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(streamUpdate)}\n\n`));
+                  }
+                } catch (error) {
+                  console.error('Error parsing streaming response:', error);
+                }
+              }
+            }
+          } catch (streamError) {
+            console.error('[chat API] Error processing stream:', streamError);
+            // Send what we have so far with an error message
+            const errorResponse = {
+              id: messageId,
+              role: 'assistant',
+              content: accumulatedResponse + "\n\n[The response was interrupted. Here's what I was able to provide.]",
+              timestamp: Date.now(),
+              metadata: { ...responseMetadata, type: 'error' }
+            };
+            
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorResponse)}\n\n`));
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          }
+        } catch (error) {
+          // Handle errors gracefully in the stream
+          const errorResponse = {
+            id: messageId,
+            role: 'assistant',
+            content: `I'm sorry, I encountered an error while processing your request. ${error instanceof Error ? error.message : 'Please try again.'}`,
+            timestamp: Date.now(),
+            metadata: { type: 'error' }
+          };
+          
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorResponse)}\n\n`));
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          console.error('Chat streaming error:', error);
+        } finally {
+          // Clear the timeout in all cases
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+        }
+      }
+    });
+    
+    // Return the stream with proper headers and a longer timeout
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no' // Disable proxy buffering for NGINX
+      }
+    });
   } catch (error) {
-    console.error('Chat error:', error);
+    // Clear any remaining timeout
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    
+    console.error('Chat API error:', error);
     return NextResponse.json(
-      { error: "Failed to process chat message" },
+      { error: `Error processing message: ${error instanceof Error ? error.message : 'Unknown error'}` }, 
       { status: 500 }
     );
   }

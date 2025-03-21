@@ -236,9 +236,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setIsTyping(true);
     
     // Create a timeout to reset the streaming state if it takes too long
-    let streamTimeout: NodeJS.Timeout | null = setTimeout(() => {
+    // Increased from 30s to 2 minutes to match API timeout
+    const streamTimeout: NodeJS.Timeout = setTimeout(() => {
       // If this executes, the streaming didn't complete properly
-      console.warn("Streaming request timed out after 30 seconds");
+      console.warn("Streaming request timed out after 2 minutes");
       setIsStreaming(false);
       setIsTyping(false);
       
@@ -249,165 +250,146 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             return {
               ...msg,
               isStreaming: false,
-              content: msg.content || "I'm sorry, I was unable to generate a response. Please try again.",
+              content: msg.content || "The response timed out. Please try again.",
               metadata: { type: "error" as MessageMetadataType }
             };
           }
           return msg;
         });
-        
-        // Update session with fixed messages
-        if (chatService) {
-          // Replace the current session's messages and update state
-          chatService.resetChat(); // Reset the current chat first
-          
-          // Then manually set our messages in the current context
-          setMessages(updatedMessages);
-          
-          // Refresh the session from the chat service
-          setCurrentSession(chatService.getCurrentSession());
-        }
+        setMessages(updatedMessages);
       }
-      
-      // Reset the timeout reference
-      streamTimeout = null;
-    }, 30000); // 30 second timeout
-    
-    // Define a cleanup function for the streaming state
-    const cleanupStreaming = () => {
-      // Clear the timeout if it's still active
-      if (streamTimeout) {
-        clearTimeout(streamTimeout);
-        streamTimeout = null;
-      }
-      
-      // Reset UI state
-      setIsStreaming(false);
-      setIsTyping(false);
-    };
+    }, 120000); // 2 minutes timeout
     
     try {
-      // Log attachment info for debugging
-      if (attachments && attachments.length > 0) {
-        console.log(`Processing message with ${attachments.length} attachments:`, 
-          attachments.map(a => ({ name: a.name, type: a.type, size: a.size })));
-        
-        // Check for image attachments and add a default prompt if the content is empty
-        const hasImageAttachments = attachments.some(file => file.type.startsWith('image/'));
-        if (hasImageAttachments && !content.trim()) {
-          // If the user just uploaded an image without text, use a default prompt
-          content = "Please describe this image for me.";
-        }
-        
-        // Add client-side validation for token estimation
-        const estimatedTokens = attachments.reduce((acc, file) => {
-          // Roughly estimate tokens based on file size and type
-          let tokenEstimate = 0;
-          
-          if (file.type.startsWith('image/')) {
-            // Images are usually described in a few hundred tokens
-            tokenEstimate = 1000;
-          } else if (file.type.includes('text') || 
-                    file.name.match(/\.(txt|md|json|csv|js|py|html|css|tsx?)$/i)) {
-            // Text files: ~4 chars per token, add 20% overhead
-            tokenEstimate = Math.ceil((file.size / 4) * 1.2);
-          } else if (file.name.match(/\.(pdf|doc|docx)$/i)) {
-            // Documents: more overhead due to formatting
-            tokenEstimate = Math.ceil((file.size / 3) * 1.5);
-          } else {
-            // Generic binary files
-            tokenEstimate = 500; // Placeholder for metadata description
-          }
-          
-          return acc + tokenEstimate;
-        }, 0);
-        
-        const userQueryTokens = Math.ceil(content.length / 4);
-        const totalEstimatedTokens = estimatedTokens + userQueryTokens;
-        
-        console.log(`Estimated tokens: ~${totalEstimatedTokens} (${userQueryTokens} from query, ${estimatedTokens} from attachments)`);
-        
-        // Warn if approaching token limits (16K is a common limit)
-        if (totalEstimatedTokens > 12000) {
-          console.warn('Warning: Approaching token limits with this file. The model may struggle to process it completely.');
+      // Search for relevant content if configured
+      let contentResults: ContentChunk[] = [];
+      
+      // Only search content if enabled and not using attachments
+      if (!attachments?.length) {
+        setIsSearchingContent(true);
+        try {
+          contentResults = await fetchRelevantContent(content);
+          setRelevantContent(contentResults);
+        } catch (error) {
+          console.error("Error fetching relevant content:", error);
+        } finally {
+          setIsSearchingContent(false);
         }
       }
-      
-      // Generate a unique ID for this streaming request to track it
-      const streamingRequestId = `req-${Date.now()}`;
-      
-      // Fetch relevant content first
-      const contentResults = await fetchRelevantContent(content);
-      setRelevantContent(contentResults);
       
       // Process navigation intents
       await processNavigationIntents(content);
       
-      // Before creating a new message, update the current session to get the latest state
-      const latestSession = chatService.getCurrentSession();
-      setCurrentSession(latestSession);
+      // Create a copy of the user's message to add to the messages
+      const userMessage: Message = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content,
+        timestamp: Date.now(),
+        attachments,
+      };
       
-      // Check again if we're still streaming (could have changed during async operations)
-      if (isStreaming && latestSession?.messages.some(m => m.isStreaming)) {
-        console.warn("Another streaming operation started during preparation");
-        cleanupStreaming();
-        return;
-      }
+      // Add the user message and create a placeholder for streaming
+      // Use functional updates to guarantee we're working with latest state
+      setMessages(prevMessages => [...prevMessages, userMessage]);
       
-      // Create a placeholder for the assistant's response with attachments
-      const assistantPlaceholder = chatService.createAssistantMessagePlaceholder(content, attachments);
-      setCurrentSession(chatService.getCurrentSession());
+      // A references cache to track streaming updates
+      const streamingUpdates = new Map<string, Message>();
       
-      // Track the message ID to avoid duplicates
-      const messageId = assistantPlaceholder.id;
-      
-      // Start streaming with the enriched context
-      await chatService.sendStreamingMessage(content, contentResults, (partialMessage) => {
-        // Check if this is the right message (to avoid updating the wrong message)
-        if (partialMessage.id === messageId) {
-          setMessages(chatService.getCurrentChunk());
-          
-          // Check if streaming has ended
-          if (!partialMessage.isStreaming) {
-            cleanupStreaming();
-          }
-        }
-      }, attachments);
-      
-      setMessages(chatService.getCurrentChunk());
-      
-      // Remember to clear the timeout when streaming completes successfully
-      cleanupStreaming();
-    } catch (error) {
-      console.error("Error in streaming message:", error);
-      
-      // Make sure we clean up properly even on error
-      cleanupStreaming();
-      
-      // Find and update any messages stuck in loading state
-      if (currentSession) {
-        const updatedMessages = currentSession.messages.map(msg => {
-          if (msg.isStreaming || (msg.metadata?.type === "loading")) {
-            return {
-              ...msg,
-              isStreaming: false,
-              content: "I'm sorry, I encountered an error while generating a response. Please try again.",
-              metadata: { type: "error" as MessageMetadataType }
-            };
-          }
-          return msg;
+      try {
+        console.log("Preparing streaming message with relevant content:", contentResults.length);
+        
+        const response = await chatService.sendStreamingMessage(
+          content,
+          contentResults,
+          (message) => {
+            // Important: Create a new reference by spreading the message
+            const updatedMessage = { ...message, timestamp: Date.now() };
+            
+            // Store in our cache with the message id as key
+            streamingUpdates.set(updatedMessage.id, updatedMessage);
+            
+            // Force a state update using a function to ensure we're using the latest state
+            setMessages(prevMessages => {
+              // Check if this message already exists in the array
+              const index = prevMessages.findIndex(m => m.id === updatedMessage.id);
+              
+              if (index >= 0) {
+                // Replace the existing message with the updated one
+                const newMessages = [...prevMessages];
+                newMessages[index] = updatedMessage;
+                return newMessages;
+              } else {
+                // Add the new message to the array
+                return [...prevMessages, updatedMessage];
+              }
+            });
+            
+            // Force a re-render by updating session timestamp
+            if (currentSession) {
+              setCurrentSession({
+                ...currentSession,
+                updatedAt: Date.now(),
+                messages: currentSession.messages.map(m => 
+                  m.id === updatedMessage.id ? updatedMessage : m
+                )
+              });
+            }
+          },
+          attachments
+        );
+        
+        // Once streaming is complete, update messages one final time from the cache
+        // to ensure we have the latest content
+        setMessages(prevMessages => {
+          // Create a new array with updated messages from our cache
+          return prevMessages.map(msg => {
+            const cachedUpdate = streamingUpdates.get(msg.id);
+            return cachedUpdate ? { ...cachedUpdate, timestamp: Date.now() } : msg;
+          });
         });
         
-        // Update session with fixed messages
-        if (chatService) {
-          // Use the chat service to update the assistant message with an error
-          chatService.updateAssistantMessageWithError(new Error("Streaming response error"));
-          
-          // Refresh our UI state from the chat service
-          setMessages(chatService.getCurrentChunk());
-          setCurrentSession(chatService.getCurrentSession());
+        // Update navigation suggestions if there are any in the response metadata
+        if (response.metadata?.navigationSuggestions) {
+          const suggestions = response.metadata.navigationSuggestions;
+          if (Array.isArray(suggestions)) {
+            setNavigationSuggestions(suggestions as NavigationSuggestion[]);
+          }
         }
+        
+        // Update sessions list to reflect new message
+        if (chatService) {
+          const updatedSessions = chatService.getSessions();
+          setSessions(updatedSessions);
+          setSessionsByCategory(chatService.getSessionsByCategory());
+          
+          // Update chunking information
+          setTotalChunks(chatService.getTotalChunks());
+          setCurrentChunkIndex(chatService.getCurrentChunkIndex());
+        }
+      } catch (error) {
+        console.error("Error streaming chat response:", error);
+        
+        // Add error message
+        const errorMessage: Message = {
+          id: `error-${Date.now()}`,
+          role: "assistant",
+          content: "I'm sorry, I encountered an error while processing your request. Please try again later.",
+          timestamp: Date.now(),
+          metadata: { type: "error" },
+        };
+        
+        // Use functional update to ensure we're operating on latest state
+        setMessages(prevMessages => [...prevMessages, errorMessage]);
       }
+    } catch (error) {
+      console.error("Error in streaming chat process:", error);
+    } finally {
+      // Clear the timeout and reset states
+      clearTimeout(streamTimeout);
+      setIsStreaming(false);
+      setIsTyping(false);
+      setInputValue(""); // Clear input after sending
     }
   };
   

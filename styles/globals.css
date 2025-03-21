@@ -59,4 +59,45 @@ code {
   border-bottom-left-radius: 0.375rem;
   z-index: 10;
   opacity: 0.8;
+}
+
+/* Streaming chat content styles */
+.chat-streaming-active {
+  border-color: hsl(var(--primary)) !important;
+  background-color: hsl(var(--primary) / 0.05);
+  position: relative;
+  padding-left: 1rem !important;
+  border-left-width: 3px !important;
+  transition: all 0.3s ease-in-out;
+  animation: subtle-glow 2s ease-in-out infinite;
+  visibility: visible !important;
+  display: block !important;
+  opacity: 1 !important;
+}
+
+.streaming-content {
+  display: block !important;
+  min-height: 20px;
+  position: relative;
+  word-break: break-word; /* Ensure long words don't overflow */
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.streaming-content:after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 14px;
+  background-color: hsl(var(--primary));
+  margin-left: 4px;
+  animation: blink 1s infinite;
+  vertical-align: middle;
+}
+
+/* Optional: Add a subtle animation to the streaming content container */
+@keyframes subtle-glow {
+  0%, 100% { box-shadow: 0 0 5px transparent; }
+  50% { box-shadow: 0 0 5px hsl(var(--primary) / 0.3); }
 } 

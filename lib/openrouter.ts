@@ -213,7 +213,7 @@ export function createEnhancedConceptSchema(options?: { knowledgeLevel?: string,
 }
 
 /**
- * Send a chat completion request to OpenRouter API
+ * Send a chat completion request to OpenRouter API with enhanced streaming support
  * 
  * @param request The chat completion request parameters
  * @returns A promise with the chat completion response or a readable stream for streaming responses
@@ -251,39 +251,28 @@ export async function sendChatCompletion(
         
         if (message.content.includes('data:')) {
           dataUrls++;
-        }
-        
-        if (message.content.match(/https?:\/\//)) {
+        } else if (message.content.includes('http')) {
           httpUrls++;
-        }
-        
-        // Look for text mentions of files
-        if (message.content.includes('text file') || 
-            message.content.includes('code file') || 
-            message.content.includes('document file')) {
+        } else {
           plainTextAttachments++;
         }
       }
     }
   }
   
-  console.log(`OpenRouter request stats: model=${request.model}, message_count=${request.messages.length}, total_content_length=${totalContentLength}`);
+  console.log(`OpenRouter request stats: model=${request.model}, message_count=${request.messages.length}, total_content_length=${totalContentLength}${hasAttachments ? ` (attachments: ${dataUrls} data URLs, ${httpUrls} HTTP URLs, ${plainTextAttachments} plain text)` : ''}`);
   
-  if (hasAttachments) {
-    console.log(`Request contains file references: data_urls=${dataUrls}, http_urls=${httpUrls}, plaintext_attachments=${plainTextAttachments}`);
-  }
-  
-  // For very large requests, add additional logging
-  if (totalContentLength > 50000) {
-    console.warn(`Request content is very large (${totalContentLength} chars). This might cause issues with some models.`);
-  }
-  
-  while (true) {
+  // If streaming is requested, use the streaming-specific implementation
+  if (request.stream === true) {
+    console.log(`[OpenRouter] Sending streaming request to model: ${request.model}, message count: ${request.messages.length}`);
+    
     try {
-      console.log(`Sending OpenRouter request to model: ${request.model}`);
-      if (hasAttachments) {
-        console.log('Request includes file attachments');
-      }
+      // Create a longer timeout for streaming requests to ensure we get a response
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+        console.error(`[OpenRouter] Streaming request aborted due to timeout (30s)`);
+      }, 30000);
       
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -294,297 +283,296 @@ export async function sendChatCompletion(
           'X-Title': 'AI-Dev Education Platform',
         },
         body: JSON.stringify({
-          model: request.model || 'openai/gpt-3.5-turbo', // Default model
+          model: request.model || 'openai/gpt-3.5-turbo',
           messages: request.messages,
-          temperature: request.temperature || 0.7,
-          max_tokens: request.max_tokens || 1000,
-          stream: request.stream || false,
+          temperature: request.temperature !== undefined ? request.temperature : 0.7,
+          max_tokens: request.max_tokens,
+          stream: true,
+          response_format: request.response_format,
+          safe_mode: request.safe_mode || 'standard'
+        }),
+        signal: controller.signal,
+      });
+      
+      // Clear the timeout since we got a response
+      clearTimeout(timeoutId);
+      
+      console.log(`[OpenRouter] Received response status: ${response.status}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[OpenRouter] API error (${response.status}): ${errorText}`);
+        
+        // Return a fallback stream that immediately errors
+        return createErrorStream(`OpenRouter API error: ${response.status} - ${errorText}`);
+      }
+      
+      if (!response.body) {
+        console.error('[OpenRouter] API returned empty response body');
+        return createErrorStream('OpenRouter API returned empty response body');
+      }
+      
+      console.log(`[OpenRouter] Successfully received streaming response body`);
+      
+      // Create a robust streaming response with error handling
+      return response.body;
+    } catch (error) {
+      console.error(`Error calling OpenRouter API in streaming mode:`, error);
+      return createErrorStream(`Error calling OpenRouter API: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  
+  // Non-streaming implementation with retries
+  while (retries <= retry_options.max_retries) {
+    try {
+      console.log(`Sending OpenRouter request to model: ${request.model}`);
+      
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_OPENROUTER_API_KEY}`,
+          'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_BASE_URL || 'https://ai-dev-education.com'),
+          'X-Title': 'AI-Dev Education Platform',
+        },
+        body: JSON.stringify({
+          model: request.model || 'openai/gpt-3.5-turbo',
+          messages: request.messages,
+          temperature: request.temperature !== undefined ? request.temperature : 0.7,
+          max_tokens: request.max_tokens,
+          stream: false,
           response_format: request.response_format,
           safe_mode: request.safe_mode || 'standard'
         }),
       });
-
-      // Handle rate limiting specifically
-      if (response.status === 429) {
-        const retryAfter = response.headers.get('Retry-After');
-        const retryDelay = retryAfter ? parseInt(retryAfter) * 1000 : delay;
-        
-        if (retries < retry_options.max_retries) {
-          console.warn(`Rate limited by OpenRouter API. Retrying after ${retryDelay}ms. Retry ${retries + 1}/${retry_options.max_retries}`);
-          
-          await new Promise(resolve => setTimeout(resolve, retryDelay));
-          retries++;
-          delay = Math.min(delay * retry_options.backoff_factor, retry_options.max_delay);
-          continue;
-        } else {
-          throw new Error(`Rate limited by OpenRouter API and exceeded maximum retries (${retry_options.max_retries})`);
-        }
-      }
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`OpenRouter API request failed: ${response.status} ${response.statusText}`, errorText);
+        console.warn(`OpenRouter API request failed (${response.status}): ${errorText}`);
         
-        // Enhanced error handling with specific error codes
-        if (response.status === 400) {
-          // Try to parse the error message
-          try {
-            const errorJson = JSON.parse(errorText);
-            if (errorJson.error && errorJson.error.message) {
-              console.error('Parsed error message:', errorJson.error.message);
-              
-              if (errorJson.error.message.includes('token limit') || 
-                  errorJson.error.message.includes('maximum context length')) {
-                throw new Error('Your message with attachments exceeds the token limit. Please try with a shorter message or fewer/smaller attachments.');
-              }
-              
-              // Check for file-specific errors
-              if (hasAttachments && 
-                 (errorJson.error.message.includes('file') || 
-                  errorJson.error.message.includes('url') || 
-                  errorJson.error.message.includes('attachment'))) {
-                throw new Error(`Error processing file: ${errorJson.error.message}`);
-              }
-              
-              throw new Error(errorJson.error.message);
-            }
-          } catch (e) {
-            // If JSON parsing fails, just use the original error text
-            if (e instanceof Error) {
-              console.error('Error parsing JSON error:', e);
-            }
-          }
+        // Check for retry-able errors
+        if (response.status === 429 || response.status === 500 || response.status === 502 || response.status === 503) {
+          console.log(`Retrying OpenRouter API call after error (attempt ${retries + 1}/${retry_options.max_retries + 1})`);
+          retries++;
           
-          // Generic 400 error
-          throw new Error(`Bad request: The API could not process your request. ${hasAttachments ? 'This might be due to issues with your file attachments.' : ''}`);
+          if (retries <= retry_options.max_retries) {
+            // Calculate backoff delay with jitter for more robust retries
+            delay = Math.min(
+              delay * retry_options.backoff_factor * (0.5 + Math.random()), 
+              retry_options.max_delay
+            );
+            
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
         }
         
-        if (response.status === 401) {
-          throw new Error('Authentication error: Invalid or missing API key');
-        }
-        
-        if (response.status === 403) {
-          throw new Error('Permission denied: Your API key does not have access to the requested model');
-        }
-        
-        if (response.status === 404) {
-          throw new Error(`Model not found: The requested model '${request.model}' is not available`);
-        }
-        
-        if (response.status === 500) {
-          throw new Error('Server error: OpenRouter is experiencing issues. Please try again later.');
-        }
-        
-        // Generic error for other status codes
-        throw new Error(`OpenRouter API request failed with status ${response.status}`);
+        // For non-retryable errors or if we've exhausted retries
+        console.error(`OpenRouter API request failed after ${retries} retries: ${response.status}`);
+        return createFallbackResponse(new Error(`OpenRouter API request failed: ${response.status}`));
       }
       
-      if (request.stream) {
-        if (!response.body) {
-          throw new Error("OpenRouter API returned an empty stream");
-        }
-        return response.body;
-      } else {
-        const data = await response.json();
-        return data as ChatCompletionResponse;
-      }
+      // Parse and return the successful response
+      const data = await response.json();
+      return data as ChatCompletionResponse;
+      
     } catch (error) {
-      // If we've already retried the maximum number of times, throw the error
-      if (retries >= retry_options.max_retries) {
-        console.error('OpenRouter request failed after maximum retries:', error);
-        
-        // Add custom messaging for file-related errors
-        if (hasAttachments && error instanceof Error) {
-          if (error.message.includes('token limit') || error.message.includes('too large')) {
-            throw new Error('Your file is too large for the AI to process. Please try with a smaller file or summarize its content.');
-          }
-          if (error.message.includes('file') || error.message.includes('url') || error.message.includes('attachment')) {
-            throw new Error(`File processing error: ${error.message}`);
-          }
-        }
-        
-        throw error;
-      }
+      console.error('Error calling OpenRouter API:', error);
       
-      console.warn(`OpenRouter request failed (attempt ${retries + 1}/${retry_options.max_retries}):`, error);
-      
-      // Only retry for network errors and server errors, not for client errors
-      if (error instanceof Error) {
-        const errorMessage = error.message.toLowerCase();
-        
-        // Don't retry for client errors like invalid API key, bad request, etc.
-        if (errorMessage.includes('api key') || 
-            errorMessage.includes('authentication') || 
-            errorMessage.includes('bad request') ||
-            errorMessage.includes('permission denied')) {
-          throw error;
-        }
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, delay));
+      // Retry on network errors
       retries++;
-      delay = Math.min(delay * retry_options.backoff_factor, retry_options.max_delay);
+      
+      if (retries <= retry_options.max_retries) {
+        delay = Math.min(delay * retry_options.backoff_factor, retry_options.max_delay);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      
+      return createFallbackResponse(error);
     }
   }
+  
+  // This should never be reached due to the return in the error case above
+  return createFallbackResponse(new Error("Failed to get response from OpenRouter API after maximum retries"));
 }
 
 /**
- * Process a streaming response from OpenRouter API with improved error handling
+ * Creates a ReadableStream that immediately returns an error message
+ * This is used as a fallback when the OpenRouter API streaming request fails
+ */
+function createErrorStream(errorMessage: string): ReadableStream {
+  // Create a readable stream that emits a properly formatted SSE error
+  return new ReadableStream({
+    start(controller) {
+      // Format as a proper server-sent event with error
+      const errorEvent = `data: ${JSON.stringify({
+        id: 'error',
+        choices: [{
+          delta: { content: `Error: ${errorMessage}` },
+          finish_reason: 'error',
+          index: 0
+        }]
+      })}\n\n`;
+      
+      // Send the error event
+      const encoder = new TextEncoder();
+      controller.enqueue(encoder.encode(errorEvent));
+      
+      // Send a [DONE] event and close the stream
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      controller.close();
+    }
+  });
+}
+
+/**
+ * Enhanced function to process documents in smaller chunks
  * 
- * @param stream The streaming response from OpenRouter API
- * @param onChunk Callback function for each chunk of data
- * @param onComplete Callback function when streaming is complete
- * @param onError Callback function for errors
+ * @param document The document to process in chunks
+ * @param chunkSize The maximum size of each chunk in characters
+ * @param chunkOverlap How much overlap between chunks (for context preservation)
+ * @returns An array of document chunks
+ */
+export function chunkDocumentEnhanced(
+  text: string, 
+  chunkSize: number = 4000, 
+  chunkOverlap: number = 200
+): string[] {
+  if (!text || text.length <= chunkSize) {
+    return [text];
+  }
+  
+  const chunks: string[] = [];
+  let startPos = 0;
+  
+  while (startPos < text.length) {
+    // Calculate end position with consideration for natural breaks
+    let endPos = startPos + chunkSize;
+    
+    // If we're not at the end of the text
+    if (endPos < text.length) {
+      // Look for a natural break point (paragraph, sentence, or word boundary)
+      // First try to find paragraph breaks
+      const paragraphBreak = text.lastIndexOf('\n\n', endPos);
+      if (paragraphBreak > startPos && paragraphBreak > endPos - 500) {
+        endPos = paragraphBreak;
+      } else {
+        // Then try sentence breaks
+        const sentenceBreak = text.lastIndexOf('. ', endPos);
+        if (sentenceBreak > startPos && sentenceBreak > endPos - 200) {
+          endPos = sentenceBreak + 1; // Include the period
+        } else {
+          // Finally, at least break on word boundaries
+          const spaceBreak = text.lastIndexOf(' ', endPos);
+          if (spaceBreak > startPos) {
+            endPos = spaceBreak;
+          }
+        }
+      }
+    } else {
+      endPos = text.length;
+    }
+    
+    // Extract the chunk
+    chunks.push(text.substring(startPos, endPos));
+    
+    // Calculate next starting position with overlap
+    startPos = endPos - chunkOverlap;
+    
+    // Ensure we're making forward progress
+    if (startPos <= 0 || startPos >= endPos) {
+      startPos = endPos;
+    }
+  }
+  
+  return chunks;
+}
+
+/**
+ * Process a streaming response with typed chunks
+ * 
+ * @param stream The ReadableStream from OpenRouter API
+ * @param onChunk Callback function to process each chunk
+ * @param onComplete Optional callback when stream is complete
+ * @param onError Optional callback for error handling
  */
 export async function processStreamingResponse(
   stream: ReadableStream,
-  onChunk: (chunk: ChatCompletionChunk) => void,
+  onChunk: (chunk: ChatCompletionChunk, text: string, isDone: boolean) => void,
   onComplete?: () => void,
   onError?: (error: Error) => void
 ): Promise<void> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  let isFirstChunk = true;
-  let lastActivityTime = Date.now();
-  const TIMEOUT_DURATION = 30000; // 30 seconds timeout
-  let chunkCount = 0;
-  
-  // Log stream start for debugging
-  console.log("Starting to process streaming response");
   
   try {
-    // Set up a timeout monitor
-    const timeoutId = setInterval(() => {
-      const inactiveTime = Date.now() - lastActivityTime;
-      console.log(`Stream activity check: ${inactiveTime}ms since last activity (${chunkCount} chunks received)`);
-      
-      if (inactiveTime > TIMEOUT_DURATION) {
-        console.warn(`Stream timeout after ${inactiveTime}ms of inactivity`);
-        clearInterval(timeoutId);
-        reader.cancel('Stream timeout due to inactivity').catch(console.error);
-        if (onError) onError(new Error('Stream timeout: No data received for 30 seconds'));
-      }
-    }, 5000); // Check every 5 seconds
-    
     while (true) {
-      let readResult;
-      try {
-        readResult = await reader.read();
-      } catch (readError) {
-        console.error("Error reading from stream:", readError);
-        if (onError) onError(new Error(`Stream read error: ${readError instanceof Error ? readError.message : String(readError)}`));
-        clearInterval(timeoutId);
-        break;
-      }
-      
-      const { done, value } = readResult;
+      const { value, done } = await reader.read();
       
       if (done) {
-        console.log(`Stream completed after ${chunkCount} chunks`);
-        clearInterval(timeoutId);
+        // Process any remaining data in the buffer
+        if (buffer.trim()) {
+          try {
+            const lines = buffer.split('\n').filter(line => line.trim() !== '');
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const jsonStr = line.slice(6).trim();
+                if (jsonStr === '[DONE]') continue;
+                
+                try {
+                  const chunk = JSON.parse(jsonStr) as ChatCompletionChunk;
+                  const text = chunk.choices[0]?.delta?.content || '';
+                  onChunk(chunk, text, true);
+                } catch (err) {
+                  console.warn('Error parsing final chunk JSON:', err);
+                }
+              }
+            }
+          } catch (parseError) {
+            console.warn('Error processing final buffer:', parseError);
+          }
+        }
+        
+        if (onComplete) onComplete();
         break;
       }
       
-      // Update activity timestamp
-      lastActivityTime = Date.now();
+      // Decode the chunk and add it to our buffer
+      const decodedChunk = decoder.decode(value, { stream: true });
+      buffer += decodedChunk;
       
-      // Decode the chunk
-      let textChunk;
-      try {
-        textChunk = decoder.decode(value, { stream: true });
-        chunkCount++;
-      } catch (decodeError) {
-        console.error("Error decoding chunk:", decodeError);
-        continue; // Try to continue with next chunk
-      }
+      // Split the buffer on newlines to find complete server-sent events
+      const lines = buffer.split('\n');
       
-      if (isFirstChunk) {
-        console.log("Received first chunk from stream");
-        isFirstChunk = false;
-      }
+      // Keep the last (potentially incomplete) line in the buffer
+      buffer = lines.pop() || '';
       
-      buffer += textChunk;
-      
-      // Split the buffer on double newlines which separate SSE events
-      const lines = buffer.split('\n\n');
-      
-      // Process all complete events
-      for (let i = 0; i < lines.length - 1; i++) {
-        const line = lines[i].trim();
-        
+      // Process all complete lines
+      for (const line of lines) {
         if (line.startsWith('data: ')) {
-          const data = line.substring(6);
-          
-          // Skip [DONE] event
-          if (data === '[DONE]') {
-            console.log("Received [DONE] event");
-            continue;
-          }
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === '[DONE]') continue;
           
           try {
-            const chunk: ChatCompletionChunk = JSON.parse(data);
-            
-            // Special handling for first chunk to validate the response format
-            if (chunkCount <= 2) {
-              console.log("Processing early chunk:", JSON.stringify(chunk).substring(0, 100) + "...");
-              
-              // Check if the first chunk indicates an error
-              if (chunk.choices?.[0]?.delta?.content?.includes('error') || 
-                  chunk.choices?.[0]?.delta?.content?.includes('I apologize')) {
-                console.warn('First chunk indicates a potential error response:', chunk);
-              }
-            }
-            
-            onChunk(chunk);
-          } catch (e) {
-            console.error('Error parsing SSE chunk:', e, 'Raw data:', line);
-            if (onError) onError(new Error(`Failed to parse streaming response: ${e}`));
-          }
-        } else if (line.includes('error') || line.includes('Error')) {
-          // Handle error messages that might come in a non-standard format
-          console.error('Stream contained error message:', line);
-          if (onError) onError(new Error(`Stream error: ${line}`));
-        }
-      }
-      
-      // Keep the last incomplete event in the buffer
-      buffer = lines[lines.length - 1];
-    }
-    
-    // Decode any remaining content
-    const remaining = decoder.decode();
-    if (remaining && remaining.trim()) {
-      console.log("Processing remaining content after stream end");
-      const remainingLines = remaining.trim().split('\n\n');
-      
-      for (const line of remainingLines) {
-        if (line.trim().startsWith('data: ')) {
-          const data = line.trim().substring(6);
-          if (data && data !== '[DONE]') {
-            try {
-              const chunk = JSON.parse(data);
-              onChunk(chunk);
-            } catch (e) {
-              console.error('Error parsing final SSE chunk:', e);
-            }
+            const chunk = JSON.parse(jsonStr) as ChatCompletionChunk;
+            const text = chunk.choices[0]?.delta?.content || '';
+            onChunk(chunk, text, false);
+          } catch (err) {
+            console.warn('Error parsing chunk JSON:', err);
           }
         }
       }
     }
-    
-    console.log("Stream processing complete, calling onComplete callback");
-    if (onComplete) onComplete();
   } catch (error) {
-    console.error('Error processing streaming response:', error);
-    if (onError) onError(error as Error);
+    console.error('Error processing stream:', error);
+    if (onError) onError(error instanceof Error ? error : new Error(String(error)));
   } finally {
-    // Ensure reader is released even if there was an error
+    // Always release the reader
     try {
       await reader.cancel();
-      console.log("Stream reader cancelled");
     } catch (e) {
-      console.error('Error cancelling reader:', e);
+      console.warn('Error cancelling reader:', e);
     }
   }
 }
@@ -647,4 +635,79 @@ export function enrichMessagesWithContext(
   
   // Create a new array with the system context at the beginning
   return [systemContext, ...messages];
+}
+
+/**
+ * Send a streaming chat completion request to OpenRouter API
+ * 
+ * @param request The chat completion request parameters
+ * @returns A readable stream for streaming responses
+ */
+export async function sendStreamingChatCompletion(
+  request: ChatCompletionRequest
+): Promise<ReadableStream> {
+  if (!hasApiKey) {
+    console.error("OpenRouter API key is not available")
+    throw new Error("OpenRouter API key is not available")
+  }
+  
+  // Create a streaming request with explicit timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+    console.warn('Aborting OpenRouter streaming request due to timeout (10s)');
+  }, 10000); // Shorter 10-second timeout for better UX
+  
+  try {
+    console.log(`Starting streaming OpenRouter request to model: ${request.model}`);
+    
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.NEXT_PUBLIC_OPENROUTER_API_KEY}`,
+        'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_BASE_URL || 'https://ai-dev-education.com'),
+        'X-Title': 'AI-Dev Education Platform',
+      },
+      body: JSON.stringify({
+        model: request.model || 'openai/gpt-3.5-turbo',
+        messages: request.messages,
+        temperature: request.temperature || 0.7,
+        max_tokens: request.max_tokens || 1000,
+        stream: true,
+        response_format: request.response_format,
+        safe_mode: request.safe_mode || 'standard'
+      }),
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`OpenRouter API streaming request failed: ${response.status} ${response.statusText}`, errorText);
+      
+      if (response.status === 402) {
+        throw new Error('Insufficient credits: Your OpenRouter account needs more credits');
+      } else if (response.status === 429) {
+        throw new Error('Rate limited: Too many requests in a short time period');
+      } else if (response.status === 408) {
+        throw new Error('Request timeout: The model took too long to respond');
+      } else if (response.status === 502 || response.status === 503) {
+        throw new Error('Service unavailable: The AI service is currently experiencing issues');
+      }
+      
+      throw new Error(`OpenRouter API request failed with status ${response.status}`);
+    }
+    
+    if (!response.body) {
+      throw new Error("OpenRouter API returned an empty stream");
+    }
+    
+    return response.body;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    console.error('Streaming request failed:', error);
+    throw error;
+  }
 } 
