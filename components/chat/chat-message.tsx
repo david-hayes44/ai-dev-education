@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -74,6 +74,7 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
   const [attachmentError, setAttachmentError] = useState<Record<string, boolean>>({});
   const [loadingAttachments, setLoadingAttachments] = useState<Record<string, boolean>>({});
   const [showRetryButton, setShowRetryButton] = useState(false);
+  const [forceUpdateKey, setForceUpdateKey] = useState(0);
   
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
@@ -324,6 +325,21 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
     return null;
   };
 
+  // Force a re-render every 500ms during streaming to ensure content updates are visible
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    
+    if (message.isStreaming) {
+      interval = setInterval(() => {
+        setForceUpdateKey(prev => prev + 1);
+      }, 500);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [message.isStreaming]);
+
   return (
     <div
       className={cn(
@@ -367,26 +383,29 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
                 <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '200ms' }}></div>
                 <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '400ms' }}></div>
               </div>
-            ) : isRechunking ? (
+            ) : isThinking ? (
               <div className="flex items-center space-x-2">
                 <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></div>
                 <span>Processing message history...</span>
               </div>
             ) : isStreaming ? (
-              <div className="transition-all duration-200 border-l-2 border-primary pl-2 min-h-[24px] relative">
-                {/* Debug info - remove in production */}
+              <div className="transition-all duration-200 border-l-2 border-primary pl-2 min-h-[24px] relative streaming-container">
+                {/* Debug info - helpful during troubleshooting */}
                 {process.env.NODE_ENV === 'development' && (
                   <div className="absolute -top-4 right-0 text-xs bg-yellow-100 text-yellow-800 px-1 rounded">
-                    Streaming: {message.content?.length || 0} chars
+                    Streaming: {message.content?.length || 0} chars | Key: {forceUpdateKey}
                   </div>
                 )}
-                {message.content && message.content.trim().length > 0 ? (
-                  <div className="streaming-content">
-                    <ReactMarkdown>{message.content}</ReactMarkdown>
-                  </div>
-                ) : (
-                  <span className="text-muted-foreground">Generating response...</span>
-                )}
+                {/* Always render the ReactMarkdown component during streaming */}
+                <div className="streaming-content animate-pulse-subtle" key={`streaming-${message.id}-${forceUpdateKey}`}>
+                  {message.content ? (
+                    <ReactMarkdown key={`md-${message.id}-${forceUpdateKey}`}>
+                      {message.content}
+                    </ReactMarkdown>
+                  ) : (
+                    <span className="text-muted-foreground">Generating response...</span>
+                  )}
+                </div>
               </div>
             ) : (
               <ReactMarkdown>{message.content || ""}</ReactMarkdown>
@@ -545,4 +564,4 @@ function FollowUpQuestions({ questions, onQuestionClick }: FollowUpQuestionProps
       </div>
     </div>
   );
-} // Adding a comment
+}

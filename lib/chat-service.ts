@@ -1101,37 +1101,83 @@ export class ChatService {
               // Append to the accumulated response
               responseContent += content;
               
-              // Update the streaming message
-              streamingMessage.content = responseContent;
+              // Create a new object reference for the streaming message to ensure React detects changes
+              const updatedMessage = {
+                ...streamingMessage,
+                id: streamingMessage.id,
+                content: responseContent,
+                timestamp: Date.now(), // Adding timestamp change to force React to detect changes
+                isStreaming: true,
+              };
               
-              // Notify the UI about the update
-              onChunk(streamingMessage);
+              // Update the reference
+              Object.assign(streamingMessage, updatedMessage);
               
-              // Also update the session message
-              session.messages[placeholderMessageIndex].content = responseContent;
+              // Notify the UI about the update with a new object reference
+              onChunk({...updatedMessage});
+              
+              // Create a new reference for the session message too
+              session.messages[placeholderMessageIndex] = {
+                ...session.messages[placeholderMessageIndex],
+                content: responseContent,
+                timestamp: Date.now(),
+              };
+              
               session.updatedAt = Date.now();
+              
+              // Attempt to directly update DOM for critical cases where React doesn't update
+              if (typeof window !== 'undefined' && updatedMessage.content) {
+                setTimeout(() => {
+                  try {
+                    const contentElements = document.querySelectorAll(`.streaming-content`);
+                    contentElements.forEach(el => {
+                      // Force content visibility in DOM
+                      if (el && !el.textContent?.trim()) {
+                        const span = document.createElement('span');
+                        span.className = 'force-content';
+                        span.textContent = updatedMessage.content;
+                        el.appendChild(span);
+                      }
+                    });
+                  } catch (e) {
+                    console.warn("DOM update fallback failed:", e);
+                  }
+                }, 100);
+              }
             },
             // On complete
             () => {
               console.log("DEBUG: Stream completed successfully");
               
-              // Mark streaming as complete
-              streamingMessage.isStreaming = false;
+              // Mark streaming as complete with a new object reference
+              const finalMessage = {
+                ...streamingMessage,
+                isStreaming: false,
+                timestamp: Date.now(),
+              };
               
-              // Important: Explicitly clear the loading state
-              if (streamingMessage.metadata?.type === "loading") {
-                streamingMessage.metadata = {}; // Clear metadata type
+              // Clear streaming state and metadata
+              if (finalMessage.metadata?.type === "loading") {
+                finalMessage.metadata = {}; // Clear metadata type
               }
               
-              session.messages[placeholderMessageIndex].isStreaming = false;
+              // Update the reference
+              Object.assign(streamingMessage, finalMessage);
+              
+              // Update session with a new object reference too
+              session.messages[placeholderMessageIndex] = {
+                ...session.messages[placeholderMessageIndex],
+                isStreaming: false,
+                timestamp: Date.now(),
+              };
               
               // Also clear loading state in the session message
               if (session.messages[placeholderMessageIndex].metadata?.type === "loading") {
                 session.messages[placeholderMessageIndex].metadata = {};
               }
               
-              // Notify the UI that streaming is complete with final message
-              onChunk({...streamingMessage});
+              // Notify the UI that streaming is complete with final message (new reference)
+              onChunk({...finalMessage});
               
               // Update session and save
               session.updatedAt = Date.now();

@@ -236,9 +236,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setIsTyping(true);
     
     // Create a timeout to reset the streaming state if it takes too long
+    // Increased from 30s to 2 minutes to match API timeout
     const streamTimeout: NodeJS.Timeout = setTimeout(() => {
       // If this executes, the streaming didn't complete properly
-      console.warn("Streaming request timed out after 30 seconds");
+      console.warn("Streaming request timed out after 2 minutes");
       setIsStreaming(false);
       setIsTyping(false);
       
@@ -248,240 +249,147 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           if (msg.isStreaming || (msg.metadata?.type === "loading")) {
             return {
               ...msg,
-              content: "I'm sorry, the response timed out. Please try again.",
               isStreaming: false,
+              content: msg.content || "The response timed out. Please try again.",
               metadata: { type: "error" as MessageMetadataType }
             };
           }
           return msg;
         });
-        
-        // Update local messages and current session
         setMessages(updatedMessages);
       }
-    }, 30000);
-    
-    // Add the user message to the chat
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content,
-      timestamp: Date.now(),
-    };
-    
-    // If there are file attachments, add them to the message
-    if (attachments && attachments.length > 0) {
-      userMessage.attachments = attachments;
-    }
-    
-    // Add user message to local state and set input value to empty
-    setMessages(prev => [...prev, userMessage]);
-    setInputValue("");
+    }, 120000); // 2 minutes timeout
     
     try {
-      // Reset any previous navigation suggestions
-      setNavigationSuggestions([]);
-      
-      // Search for relevant content if available
+      // Search for relevant content if configured
       let contentResults: ContentChunk[] = [];
-      if (!attachments || attachments.length === 0) {
-        // Only perform content search if we're not handling file attachments
+      
+      // Only search content if enabled and not using attachments
+      if (!attachments?.length) {
         setIsSearchingContent(true);
         try {
-          // Search for relevant content
-          await searchContent(content);
-          contentResults = results || [];
-        } catch (err) {
-          console.error("Error searching content:", err);
+          contentResults = await fetchRelevantContent(content);
+          setRelevantContent(contentResults);
+        } catch (error) {
+          console.error("Error fetching relevant content:", error);
         } finally {
           setIsSearchingContent(false);
         }
       }
       
-      // Process message with streaming updates on the client side
+      // Process navigation intents
+      await processNavigationIntents(content);
+      
+      // Create a copy of the user's message to add to the messages
+      const userMessage: Message = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content,
+        timestamp: Date.now(),
+        attachments,
+      };
+      
+      // Add the user message and create a placeholder for streaming
+      // Use functional updates to guarantee we're working with latest state
+      setMessages(prevMessages => [...prevMessages, userMessage]);
+      
+      // A references cache to track streaming updates
+      const streamingUpdates = new Map<string, Message>();
+      
       try {
-        console.log("Starting AI Tutor chat request...");
+        console.log("Preparing streaming message with relevant content:", contentResults.length);
         
-        // First, create a placeholder for the assistant's response
-        const placeholderMessage: Message = {
-          id: `msg_${Date.now().toString()}`,
-          role: "assistant",
-          content: "...",
-          timestamp: Date.now(),
-          isStreaming: true,
-          metadata: { type: "streaming" as MessageMetadataType }
-        };
-        
-        // Add placeholder to messages
-        setMessages(prev => [...prev, placeholderMessage]);
-        
-        // Create an EventSource to receive streaming updates from the server
-        console.log("Making fetch request to /api/chat...");
-        const response = await fetch('/api/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            message: content,
-            messages: [...messages.filter(m => m.role !== "system"), userMessage]
-              .map(({ role, content }) => ({ role, content })),
-            context: {
-              relevantContent: contentResults,
-              currentPage: navigation.currentPage,
-              pageTitle: navigation.pageTitle,
-              pageDescription: navigation.pageDescription
-            }
-          })
-        });
-        
-        // Ensure we got a response with the right content type
-        console.log("Response received:", response.status, response.headers.get('Content-Type'));
-        if (!response.ok || !response.body) {
-          throw new Error(`Server error: ${response.status}`);
-        }
-        
-        // Process the streaming response
-        console.log("Starting to process response stream...");
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        
-        while (true) {
-          const { value, done } = await reader.read();
-          
-          if (done) {
-            console.log("Stream complete");
+        const response = await chatService.sendStreamingMessage(
+          content,
+          contentResults,
+          (message) => {
+            // Important: Create a new reference by spreading the message
+            const updatedMessage = { ...message, timestamp: Date.now() };
             
-            // Get the latest message content from our state before finalizing
-            const finalContent = messages.find(m => m.id === placeholderMessage.id)?.content || '';
-            console.log("Final content length:", finalContent.length);
+            // Store in our cache with the message id as key
+            streamingUpdates.set(updatedMessage.id, updatedMessage);
             
-            // One final update to ensure the message is marked as not streaming
-            // but preserves all the accumulated content
-            setMessages(prev => {
-              const finalMessages = [...prev];
-              const msgIndex = finalMessages.findIndex(m => m.id === placeholderMessage.id);
+            // Force a state update using a function to ensure we're using the latest state
+            setMessages(prevMessages => {
+              // Check if this message already exists in the array
+              const index = prevMessages.findIndex(m => m.id === updatedMessage.id);
               
-              if (msgIndex !== -1) {
-                // Create a completely new object to force re-render
-                finalMessages[msgIndex] = {
-                  ...finalMessages[msgIndex],
-                  isStreaming: false,
-                  content: finalContent || finalMessages[msgIndex].content,
-                  timestamp: Date.now()
-                };
+              if (index >= 0) {
+                // Replace the existing message with the updated one
+                const newMessages = [...prevMessages];
+                newMessages[index] = updatedMessage;
+                return newMessages;
+              } else {
+                // Add the new message to the array
+                return [...prevMessages, updatedMessage];
               }
-              
-              return finalMessages;
             });
             
-            // Cleanup after streaming is complete
-            setIsStreaming(false);
-            setIsTyping(false);
-            
-            break;
-          }
-          
-          // Decode the chunk and handle data events
-          const chunk = decoder.decode(value, { stream: true });
-          console.log("Stream chunk received:", chunk);
-          
-          // Process line by line
-          const lines = chunk.split('\n\n');
-          
-          for (const line of lines) {
-            if (line.trim() === '' || !line.startsWith('data: ')) continue;
-            
-            const data = line.slice(6).trim();
-            
-            if (data === '[DONE]') {
-              console.log("Stream done marker received");
-              continue;
-            }
-            
-            try {
-              // Parse the JSON data from the stream
-              console.log("Parsing JSON from stream:", data);
-              const parsed = JSON.parse(data);
-              
-              // Create a properly typed message
-              const updatedMessage: Message = {
-                ...parsed,
-                // Force update by creating a new object reference
-                id: parsed.id,
-                isStreaming: true,
-                content: parsed.content || "",
-                timestamp: Date.now(), // Update timestamp to force re-render
-                metadata: {
-                  ...parsed.metadata,
-                  type: parsed.metadata?.type as MessageMetadataType
-                }
-              };
-              
-              console.log("Updating message content:", updatedMessage.content ? updatedMessage.content.substring(0, 50) + "..." : "(empty content)");
-              
-              // Update messages with the typed message - force React to see this as a new object
-              setMessages(prev => {
-                // Create a new array
-                const updatedMessages = [...prev];
-                // Find the index and replace the entire message object
-                const msgIndex = updatedMessages.findIndex(m => m.id === placeholderMessage.id);
-                if (msgIndex !== -1) {
-                  updatedMessages[msgIndex] = updatedMessage;
-                }
-                return updatedMessages;
+            // Force a re-render by updating session timestamp
+            if (currentSession) {
+              setCurrentSession({
+                ...currentSession,
+                updatedAt: Date.now(),
+                messages: currentSession.messages.map(m => 
+                  m.id === updatedMessage.id ? updatedMessage : m
+                )
               });
-              
-              // If we got navigation suggestions, update them
-              if (parsed.metadata?.navigationSuggestions?.length > 0) {
-                setNavigationSuggestions(parsed.metadata.navigationSuggestions);
-              }
-            } catch (error) {
-              console.warn("Error parsing streaming response:", error, "Raw data:", data);
             }
+          },
+          attachments
+        );
+        
+        // Once streaming is complete, update messages one final time from the cache
+        // to ensure we have the latest content
+        setMessages(prevMessages => {
+          // Create a new array with updated messages from our cache
+          return prevMessages.map(msg => {
+            const cachedUpdate = streamingUpdates.get(msg.id);
+            return cachedUpdate ? { ...cachedUpdate, timestamp: Date.now() } : msg;
+          });
+        });
+        
+        // Update navigation suggestions if there are any in the response metadata
+        if (response.metadata?.navigationSuggestions) {
+          const suggestions = response.metadata.navigationSuggestions;
+          if (Array.isArray(suggestions)) {
+            setNavigationSuggestions(suggestions as NavigationSuggestion[]);
           }
         }
         
-        // Complete stream handling
-        console.log("Streaming response completed");
-        
+        // Update sessions list to reflect new message
+        if (chatService) {
+          const updatedSessions = chatService.getSessions();
+          setSessions(updatedSessions);
+          setSessionsByCategory(chatService.getSessionsByCategory());
+          
+          // Update chunking information
+          setTotalChunks(chatService.getTotalChunks());
+          setCurrentChunkIndex(chatService.getCurrentChunkIndex());
+        }
       } catch (error) {
-        console.error("Streaming API error:", error);
+        console.error("Error streaming chat response:", error);
         
-        // Update the last message with an error
-        setMessages(prev => {
-          const newMessages = [...prev];
-          const lastMessage = newMessages[newMessages.length - 1];
-          
-          if (lastMessage.role === "assistant") {
-            newMessages[newMessages.length - 1] = {
-              ...lastMessage,
-              content: `I'm sorry, I encountered an error while processing your request. ${error instanceof Error ? error.message : "Please try again."}`,
-              isStreaming: false,
-              metadata: { type: "error" }
-            };
-          }
-          
-          return newMessages;
-        });
+        // Add error message
+        const errorMessage: Message = {
+          id: `error-${Date.now()}`,
+          role: "assistant",
+          content: "I'm sorry, I encountered an error while processing your request. Please try again later.",
+          timestamp: Date.now(),
+          metadata: { type: "error" },
+        };
+        
+        // Use functional update to ensure we're operating on latest state
+        setMessages(prevMessages => [...prevMessages, errorMessage]);
       }
-      
     } catch (error) {
-      console.error("Error in chat:", error);
-      
-      // Add an error message to the chat
-      setMessages(prev => [...prev, {
-        id: Date.now().toString(),
-        role: "assistant",
-        content: "I'm sorry, I encountered an error while processing your request. Please try again.",
-        timestamp: Date.now(),
-        metadata: { type: "error" },
-      }]);
+      console.error("Error in streaming chat process:", error);
     } finally {
-      // Always clear the streaming state and timeout
+      // Clear the timeout and reset states
+      clearTimeout(streamTimeout);
       setIsStreaming(false);
       setIsTyping(false);
-      if (streamTimeout) clearTimeout(streamTimeout);
+      setInputValue(""); // Clear input after sending
     }
   };
   
