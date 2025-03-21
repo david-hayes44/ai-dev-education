@@ -67,8 +67,10 @@ class FileSystemStorage implements ReportStorage {
   private dataDir: string;
   
   constructor() {
-    // Use .data directory in project root
-    this.dataDir = path.join(process.cwd(), '.data', 'reports');
+    // Use absolute path to .data directory in project root
+    // This ensures consistent paths across multiple Next.js instances
+    this.dataDir = path.resolve(process.cwd(), '.data', 'reports');
+    console.log(`FileSystemStorage initialized with data directory: ${this.dataDir}`);
     // Ensure directory exists
     this.ensureDataDir().catch(err => 
       console.error('Error creating data directory:', err)
@@ -78,23 +80,30 @@ class FileSystemStorage implements ReportStorage {
   private async ensureDataDir(): Promise<void> {
     try {
       await fs.mkdir(this.dataDir, { recursive: true });
+      console.log(`Ensured data directory exists: ${this.dataDir}`);
     } catch (err) {
       console.error('Error creating data directory:', err);
+      throw err; // Re-throw to ensure callers know there was a problem
     }
   }
   
   private getFilePath(reportId: string): string {
-    return path.join(this.dataDir, `report-${reportId}.json`);
+    const filePath = path.join(this.dataDir, `report-${reportId}.json`);
+    return filePath;
   }
   
   async get(reportId: string): Promise<ReportProcessingState | undefined> {
     try {
       const filePath = this.getFilePath(reportId);
+      console.log(`Attempting to read report from: ${filePath}`);
       const data = await fs.readFile(filePath, 'utf8');
+      console.log(`Successfully read report ${reportId} from file system`);
       return JSON.parse(data) as ReportProcessingState;
     } catch (err) {
       // File not found is expected for non-existent reports
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        console.error(`Report ${reportId} not found at path: ${this.getFilePath(reportId)}`);
+      } else {
         console.error(`Error reading report ${reportId}:`, err);
       }
       return undefined;
@@ -105,11 +114,21 @@ class FileSystemStorage implements ReportStorage {
     try {
       await this.ensureDataDir();
       const filePath = this.getFilePath(reportId);
+      console.log(`Writing report ${reportId} to: ${filePath}`);
       await fs.writeFile(
         filePath, 
         JSON.stringify(state, null, 2),
         'utf8'
       );
+      console.log(`Successfully wrote report ${reportId} to file system`);
+      
+      // Verify the file was written correctly
+      try {
+        await fs.access(filePath, fs.constants.R_OK);
+        console.log(`Verified file is readable: ${filePath}`);
+      } catch (accessErr) {
+        console.error(`File written but not accessible: ${filePath}`, accessErr);
+      }
     } catch (err) {
       console.error(`Error writing report ${reportId}:`, err);
       throw err;
@@ -163,6 +182,8 @@ class FileSystemStorage implements ReportStorage {
 const storage: ReportStorage = isDevelopment
   ? new FileSystemStorage()
   : new InMemoryStorage();
+
+console.log(`Using ${isDevelopment ? 'FileSystemStorage' : 'InMemoryStorage'} for report processing`);
 
 // Set up periodic cleanup
 const CLEANUP_INTERVAL = 15 * 60 * 1000; // 15 minutes
@@ -227,26 +248,41 @@ export async function getReportState(reportId: string): Promise<{
  * Trigger background processing of a report
  */
 export async function triggerBackgroundProcessing(reportId: string): Promise<void> {
-  const report = await storage.get(reportId);
+  console.log(`[report-processor] Triggering background processing for report: ${reportId}`);
   
-  if (!report) {
-    console.error(`Report ${reportId} not found for processing`);
-    return;
-  }
-  
-  // Update status to processing
-  report.status = 'processing';
-  report.updatedAt = Date.now();
-  await storage.set(reportId, report);
-  
-  // Process in the background
-  processReportAsync(reportId).catch(err => {
-    console.error(`Error processing report ${reportId}:`, err);
+  try {
+    const report = await storage.get(reportId);
     
-    // Update with error status
-    updateReportError(reportId, err instanceof Error ? err.message : String(err))
-      .catch(updateErr => console.error(`Error updating report error status: ${updateErr}`));
-  });
+    if (!report) {
+      console.error(`[report-processor] Report ${reportId} not found for processing`);
+      return;
+    }
+    
+    // Log report details
+    console.log(`[report-processor] Report found with ${report.documents.length} documents and status: ${report.status}`);
+    
+    // Update status to processing
+    report.status = 'processing';
+    report.updatedAt = Date.now();
+    await storage.set(reportId, report);
+    
+    // Process in the background
+    console.log(`[report-processor] Starting async processing of report ${reportId}`);
+    
+    // Handle unhandled promise rejection
+    processReportAsync(reportId).catch(err => {
+      console.error(`[report-processor] Error processing report ${reportId}:`, err);
+      
+      // Update with error status
+      updateReportError(reportId, err instanceof Error ? err.message : String(err))
+        .catch(updateErr => console.error(`[report-processor] Error updating report error status: ${updateErr}`));
+    });
+    
+    console.log(`[report-processor] Background processing triggered for report ${reportId}`);
+  } catch (error) {
+    console.error(`[report-processor] Error triggering background processing:`, error);
+    throw error;
+  }
 }
 
 /**
@@ -263,27 +299,33 @@ async function updateReportError(reportId: string, errorMessage: string): Promis
 }
 
 /**
- * Process a report asynchronously
- * This runs in the background and updates the report state when complete
+ * Process a report asynchronously in the background
  */
 async function processReportAsync(reportId: string): Promise<void> {
-  const report = await storage.get(reportId);
-  
-  if (!report) {
-    throw new Error(`Report ${reportId} not found`);
-  }
-  
   try {
-    console.log(`Starting background processing for report ${reportId}`);
+    console.log(`[report-processor] Starting async processing for report: ${reportId}`);
+    
+    // Get the report state
+    const report = await storage.get(reportId);
+    
+    if (!report) {
+      console.error(`[report-processor] Report ${reportId} not found for async processing`);
+      throw new Error(`Report ${reportId} not found`);
+    }
+    
+    // Extract documents from the report
+    const { documents, projectContext } = report;
+    
+    // Process all documents
+    console.log(`[report-processor] Processing ${documents.length} documents for report ${reportId}`);
     
     // Process documents sequentially
-    const documents = report.documents;
     const summaries = await processDocumentsSequentially(documents);
     
     // Generate report from summaries
     const reportState = await generateReportFromSummaries(
       summaries, 
-      report.projectContext || ""
+      projectContext || ""
     );
     
     // Update store with completed report
