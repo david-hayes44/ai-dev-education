@@ -541,91 +541,33 @@ export default function ReportBuilderPage() {
 
   // Only render the components when mounted to prevent hydration issues
   return (
-    <div className="container mx-auto px-4 py-6">
+    <div className="container mx-auto px-4 py-12 mb-24 pb-16">
       <PageHeader
         title="4-Box Report Builder"
-        description="Generate concise, professional status reports from your documents and communications."
+        description="Generate professional 4-box status reports from your documents, emails, and project materials."
       />
-      
-      <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-240px)] min-h-[600px]">
-        {/* Chat Interface (Left Side) */}
-        {mounted && (
-          <ChatInterface
-            onSendMessage={handleSendMessage}
-            messages={messages}
-            isProcessing={isProcessing}
-            onDocumentUploaded={handleDocumentUploaded}
-            onDocumentRemoved={handleDocumentRemoved}
-            uploadedDocuments={uploadedDocuments}
-          />
-        )}
+
+      <p className="mb-8 text-muted-foreground max-w-3xl">
+        Upload documents, chat with the AI, and create polished status reports in minutes. Perfect for weekly updates, project summaries, and team communications.
+      </p>
+
+      <div className="grid lg:grid-cols-2 gap-6 min-h-[700px]">
+        <ChatInterface 
+          messages={messages}
+          isProcessing={isProcessing}
+          onSendMessage={handleSendMessage}
+          uploadedDocuments={uploadedDocuments}
+          onDocumentUploaded={handleDocumentUploaded}
+          onDocumentRemoved={handleDocumentRemoved}
+          initialLoad={initialLoad}
+          regenerating={regenerating}
+          onRegenerateClick={forceRegenerateReport}
+        />
         
-        {/* Report Editor (Right Side) */}
-        {mounted && (
-          <div className="flex flex-col h-full">
-            <ReportEditor
-              reportState={reportState}
-              onReportChange={handleReportChange}
-            />
-            
-            {(isReportEmpty || reportState.sections.accomplishments.includes("Error generating report")) && uploadedDocuments.length > 0 && (
-              <div className="mt-2 text-center">
-                <p className="text-sm text-slate-500 mb-2">
-                  {reportState.sections.accomplishments.includes("Error generating report") 
-                    ? "Report generation timed out. You can regenerate with fewer documents or build your report using the chat."
-                    : "Report appears to be empty. Would you like to regenerate it?"}
-                </p>
-                <div className="flex justify-center gap-3">
-                  <button
-                    onClick={forceRegenerateReport}
-                    disabled={regenerating}
-                    className={`px-3 py-1.5 rounded-md text-sm ${
-                      regenerating 
-                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed' 
-                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                    }`}
-                  >
-                    {regenerating ? 'Regenerating...' : 'Regenerate Report'}
-                  </button>
-                  
-                  {reportState.sections.accomplishments.includes("Error generating report") && (
-                    <button
-                      onClick={() => handleSendMessage("Can you help me build this report step by step?")}
-                      className="px-3 py-1.5 rounded-md text-sm bg-slate-100 text-slate-700 hover:bg-slate-200"
-                    >
-                      Build with Chat
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        
-        {/* Show placeholders while not mounted */}
-        {!mounted && (
-          <>
-            <div className="flex flex-col border rounded-lg overflow-hidden bg-white shadow-sm">
-              <div className="p-4 border-b bg-slate-50">
-                <h2 className="text-lg font-medium">Chat &amp; Document Upload</h2>
-                <p className="text-sm text-slate-500">Loading...</p>
-              </div>
-              <div className="flex-1 p-4 flex items-center justify-center">
-                <div className="animate-pulse text-slate-400">Loading chat interface...</div>
-              </div>
-            </div>
-            
-            <div className="flex flex-col border rounded-lg overflow-hidden bg-white shadow-sm">
-              <div className="p-4 border-b bg-slate-50">
-                <h2 className="text-lg font-medium">4-Box Report</h2>
-                <p className="text-sm text-slate-500">Loading...</p>
-              </div>
-              <div className="flex-1 p-4 flex items-center justify-center">
-                <div className="animate-pulse text-slate-400">Loading report editor...</div>
-              </div>
-            </div>
-          </>
-        )}
+        <ReportEditor 
+          reportState={reportState}
+          onReportChange={handleReportChange}
+        />
       </div>
     </div>
   );

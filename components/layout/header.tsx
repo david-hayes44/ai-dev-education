@@ -49,6 +49,29 @@ const navItems = [
     ]
   },
   {
+    path: "/staff-hub",
+    label: "AIssistant Hub",
+    icon: <Database className="w-4 h-4 mr-2" />,
+    dropdown: [
+      { label: "Overview", path: "/staff-hub" },
+      { label: "Department Tools", path: "/staff-hub/department-tools" },
+      { label: "Custom Assistants", path: "/staff-hub/assistants" },
+      { label: "Workflows", path: "/staff-hub/workflows" },
+    ]
+  },
+  {
+    path: "/tools",
+    label: "AI Tools",
+    icon: <Wrench className="w-4 h-4 mr-2" />,
+    dropdown: [
+      { label: "Overview", path: "/tools" },
+      { label: "Cursor", path: "/tools/cursor" },
+      { label: "Windsurf", path: "/tools/windsurf" },
+      { label: "Claude", path: "/tools/claude" },
+      { label: "OpenAI", path: "/tools/openai" },
+    ]
+  },
+  {
     path: "/mcp",
     label: "MCP Framework",
     icon: <Code className="w-4 h-4 mr-2" />,
@@ -79,29 +102,6 @@ const navItems = [
       { label: "Practical LLM Usage", path: "/best-practices/practical-llm-usage" },
       { label: "Project Customization", path: "/best-practices/project-customization" },
       { label: "Coding Standards", path: "/best-practices/coding-standards" },
-    ]
-  },
-  {
-    path: "/tools",
-    label: "AI Tools",
-    icon: <Wrench className="w-4 h-4 mr-2" />,
-    dropdown: [
-      { label: "Overview", path: "/tools" },
-      { label: "Cursor", path: "/tools/cursor" },
-      { label: "Windsurf", path: "/tools/windsurf" },
-      { label: "Claude", path: "/tools/claude" },
-      { label: "OpenAI", path: "/tools/openai" },
-    ]
-  },
-  {
-    path: "/staff-hub",
-    label: "AIssistant Hub",
-    icon: <Database className="w-4 h-4 mr-2" />,
-    dropdown: [
-      { label: "Overview", path: "/staff-hub" },
-      { label: "Department Tools", path: "/staff-hub/department-tools" },
-      { label: "Custom Assistants", path: "/staff-hub/assistants" },
-      { label: "Workflows", path: "/staff-hub/workflows" },
     ]
   },
   /* Hidden for now

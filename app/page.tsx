@@ -197,6 +197,108 @@ const MCP = {
         </div>
       </section>
 
+      {/* New & Noteworthy Section */}
+      <section className="py-16 sm:py-20 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/90 via-purple-900/90 to-pink-800/90"></div>
+        <div className="absolute inset-0 opacity-10">
+          <div className="h-full w-full" style={{ backgroundImage: 'url("/grid-pattern.svg")', backgroundSize: '30px 30px' }}></div>
+        </div>
+        
+        <div className="container mx-auto px-4 relative z-10">
+          <div className="text-center mb-10">
+            <h2 className="mb-4 text-3xl font-bold text-white sm:text-4xl">
+              New &amp; Noteworthy
+            </h2>
+            <p className="mx-auto max-w-3xl text-lg text-indigo-100">
+              Check out our latest features and tools designed to enhance your AI development experience.
+            </p>
+          </div>
+          
+          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl overflow-hidden shadow-2xl">
+            <div className="md:flex">
+              <div className="md:w-1/2 p-8 md:p-10">
+                <div className="inline-block bg-indigo-600/20 text-indigo-200 px-3 py-1 rounded-full text-sm font-medium mb-4">
+                  New Feature
+                </div>
+                <h3 className="text-2xl font-bold text-white mb-4">4-Box Report Builder</h3>
+                <p className="text-indigo-100 mb-6">
+                  Generate professional status reports in minutes with our new AI-powered 4-Box Report Builder. 
+                  Perfect for project updates, weekly summaries, and team communications.
+                </p>
+                
+                <ul className="space-y-3 mb-8">
+                  <li className="flex items-start">
+                    <svg className="h-5 w-5 text-indigo-300 mr-2 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-indigo-100">Upload project documents for automatic analysis</span>
+                  </li>
+                  <li className="flex items-start">
+                    <svg className="h-5 w-5 text-indigo-300 mr-2 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-indigo-100">Generate structured reports with accomplishments, insights, decisions, and next steps</span>
+                  </li>
+                  <li className="flex items-start">
+                    <svg className="h-5 w-5 text-indigo-300 mr-2 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-indigo-100">Refine your report through chat and direct editing</span>
+                  </li>
+                </ul>
+                
+                <Link 
+                  href="/staff-hub/assistants/report-builder" 
+                  className="inline-flex items-center px-6 py-3 rounded-lg bg-white text-indigo-900 hover:bg-indigo-100 font-medium transition-colors"
+                >
+                  Try the Report Builder
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Link>
+              </div>
+              
+              <div className="md:w-1/2 bg-gradient-to-br from-indigo-800 to-purple-900 flex items-center justify-center p-8">
+                <div className="w-full max-w-md aspect-video rounded-lg overflow-hidden shadow-lg border border-indigo-700/50 bg-indigo-950/50 p-4">
+                  <div className="h-full w-full flex flex-col">
+                    <div className="bg-indigo-800/40 h-10 rounded-t-md flex items-center px-4 border-b border-indigo-700/30">
+                      <div className="w-3 h-3 rounded-full bg-red-400 mr-2"></div>
+                      <div className="w-3 h-3 rounded-full bg-yellow-400 mr-2"></div>
+                      <div className="w-3 h-3 rounded-full bg-green-400 mr-2"></div>
+                      <div className="text-indigo-200 text-sm ml-2">4-Box Report Builder</div>
+                    </div>
+                    <div className="flex-1 grid grid-cols-2 gap-2 p-2">
+                      <div className="bg-indigo-700/30 rounded p-2 border border-indigo-600/30">
+                        <div className="text-xs text-indigo-300">Accomplishments</div>
+                        <div className="mt-1 h-2 bg-indigo-600/20 rounded"></div>
+                        <div className="mt-1 h-2 bg-indigo-600/20 rounded w-3/4"></div>
+                        <div className="mt-1 h-2 bg-indigo-600/20 rounded w-1/2"></div>
+                      </div>
+                      <div className="bg-indigo-700/30 rounded p-2 border border-indigo-600/30">
+                        <div className="text-xs text-indigo-300">Insights</div>
+                        <div className="mt-1 h-2 bg-indigo-600/20 rounded"></div>
+                        <div className="mt-1 h-2 bg-indigo-600/20 rounded w-2/3"></div>
+                        <div className="mt-1 h-2 bg-indigo-600/20 rounded w-1/2"></div>
+                      </div>
+                      <div className="bg-indigo-700/30 rounded p-2 border border-indigo-600/30">
+                        <div className="text-xs text-indigo-300">Decisions</div>
+                        <div className="mt-1 h-2 bg-indigo-600/20 rounded"></div>
+                        <div className="mt-1 h-2 bg-indigo-600/20 rounded w-4/5"></div>
+                        <div className="mt-1 h-2 bg-indigo-600/20 rounded w-2/3"></div>
+                      </div>
+                      <div className="bg-indigo-700/30 rounded p-2 border border-indigo-600/30">
+                        <div className="text-xs text-indigo-300">Next Steps</div>
+                        <div className="mt-1 h-2 bg-indigo-600/20 rounded"></div>
+                        <div className="mt-1 h-2 bg-indigo-600/20 rounded w-3/5"></div>
+                        <div className="mt-1 h-2 bg-indigo-600/20 rounded w-2/5"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="gradient-bg relative py-16 sm:py-20">
         <div className="container mx-auto px-4">

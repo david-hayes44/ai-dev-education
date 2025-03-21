@@ -46,103 +46,58 @@ export default function AssistantsPage() {
 
         <div className="rounded-lg border bg-card p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold">Research Assistant</h3>
-            <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs px-2 py-1 rounded-full">
-              Available
+            <h3 className="text-xl font-semibold">Marketing Research Assistant</h3>
+            <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 text-xs px-2 py-1 rounded-full">
+              Coming Soon
             </span>
           </div>
           <p className="text-muted-foreground mb-4">
             Find, summarize, and extract insights from research papers, articles, and reports.
           </p>
-          <button className="bg-primary text-primary-foreground hover:bg-primary/90 w-full px-4 py-2 rounded-md font-medium">
-            Launch Assistant
+          <button className="bg-muted text-muted-foreground w-full px-4 py-2 rounded-md font-medium" disabled>
+            Join Waitlist
           </button>
         </div>
 
         <div className="rounded-lg border bg-card p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xl font-semibold">Data Analyst</h3>
-            <span className="bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 text-xs px-2 py-1 rounded-full">
-              Beta
+            <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 text-xs px-2 py-1 rounded-full">
+              Coming Soon
             </span>
           </div>
           <p className="text-muted-foreground mb-4">
             Analyze data sets, generate visualizations, and extract key metrics for business intelligence.
           </p>
-          <button className="bg-primary text-primary-foreground hover:bg-primary/90 w-full px-4 py-2 rounded-md font-medium">
-            Try Beta Version
+          <button className="bg-muted text-muted-foreground w-full px-4 py-2 rounded-md font-medium" disabled>
+            Join Waitlist
           </button>
         </div>
 
         <div className="rounded-lg border bg-card p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xl font-semibold">Documentation Helper</h3>
-            <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs px-2 py-1 rounded-full">
-              Available
+            <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 text-xs px-2 py-1 rounded-full">
+              Coming Soon
             </span>
           </div>
           <p className="text-muted-foreground mb-4">
             Create, update, and maintain documentation for products, processes, and internal systems.
           </p>
-          <button className="bg-primary text-primary-foreground hover:bg-primary/90 w-full px-4 py-2 rounded-md font-medium">
-            Launch Assistant
+          <button className="bg-muted text-muted-foreground w-full px-4 py-2 rounded-md font-medium" disabled>
+            Join Waitlist
           </button>
         </div>
 
         <div className="rounded-lg border bg-card p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xl font-semibold">Tool Builder</h3>
-            <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs px-2 py-1 rounded-full">
-              New
+            <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 text-xs px-2 py-1 rounded-full">
+              Coming Soon
             </span>
           </div>
           <p className="text-muted-foreground mb-4">
             Create custom tools through a guided conversation without writing any code. Start with data processing templates.
-          </p>
-          <Link href="/staff-hub/assistants/builder" className="bg-primary text-primary-foreground hover:bg-primary/90 w-full px-4 py-2 rounded-md font-medium block text-center">
-            Open Builder
-          </Link>
-        </div>
-
-        <div className="rounded-lg border bg-card p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold">Meeting Assistant</h3>
-            <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 text-xs px-2 py-1 rounded-full">
-              Coming Soon
-            </span>
-          </div>
-          <p className="text-muted-foreground mb-4">
-            Record, transcribe, and summarize meetings with action items and key decisions highlighted.
-          </p>
-          <button className="bg-muted text-muted-foreground w-full px-4 py-2 rounded-md font-medium" disabled>
-            Join Waitlist
-          </button>
-        </div>
-
-        <div className="rounded-lg border bg-card p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold">Project Manager</h3>
-            <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 text-xs px-2 py-1 rounded-full">
-              Coming Soon
-            </span>
-          </div>
-          <p className="text-muted-foreground mb-4">
-            Track tasks, generate reports, and provide insights on project status and resource allocation.
-          </p>
-          <button className="bg-muted text-muted-foreground w-full px-4 py-2 rounded-md font-medium" disabled>
-            Join Waitlist
-          </button>
-        </div>
-
-        <div className="rounded-lg border bg-card p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold">Customer Support</h3>
-            <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 text-xs px-2 py-1 rounded-full">
-              Coming Soon
-            </span>
-          </div>
-          <p className="text-muted-foreground mb-4">
-            Answer customer questions, troubleshoot common issues, and escalate complex problems to human agents.
           </p>
           <button className="bg-muted text-muted-foreground w-full px-4 py-2 rounded-md font-medium" disabled>
             Join Waitlist
