@@ -279,10 +279,12 @@ export default function ReportBuilder() {
       timestamp: Date.now()
     }]);
     
+    // Create a streaming message that will be updated
+    const streamingMessageId = uuidv4();
     setMessages(prev => [...prev, {
-      id: uuidv4(),
+      id: streamingMessageId,
       role: 'assistant',
-      content: '🔄 Generating your 4-box report... This process uses streaming responses, so you\'ll see partial results as they become available.',
+      content: '🔄 Generating your 4-box report... This process uses streaming responses, so you\'ll see results as they become available.',
       timestamp: Date.now(),
       isStreaming: true
     }]);
@@ -292,15 +294,15 @@ export default function ReportBuilder() {
       const newReportId = reportId || uuidv4();
       setReportId(newReportId);
       
-      // Request report generation
-      const response = await fetch('/api/report-builder/generate-report', {
+      // Request report generation using the streaming endpoint
+      const response = await fetch('/api/report-builder/generate-report-stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           documents: uploadedDocuments,
-          reportId: newReportId
+          projectContext: "" // Add project context if available
         }),
       });
       
@@ -308,11 +310,147 @@ export default function ReportBuilder() {
         throw new Error(`Error ${response.status}: ${await response.text()}`);
       }
       
-      const data = await response.json();
+      // Handle the streaming response
+      if (!response.body) {
+        throw new Error('Response body is null');
+      }
       
-      // Start polling for updates
-      pollReportStatus(data.reportId);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedResponse = '';
+      let hasEncounteredError = false;
       
+      // Initialize report sections
+      const newReport = { ...reportState };
+      
+      // Process the stream
+      while (true) {
+        const { value, done } = await reader.read();
+        
+        if (done) {
+          console.log('Stream complete');
+          break;
+        }
+        
+        // Decode and process the chunk
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n\n');
+        
+        for (const line of lines) {
+          if (line.trim() === '' || !line.startsWith('data: ')) continue;
+          
+          const data = line.slice(6).trim();
+          
+          if (data === '[DONE]') {
+            console.log('Stream done marker received');
+            continue;
+          }
+          
+          try {
+            // Parse the JSON data
+            const parsed = JSON.parse(data);
+            
+            // Check for errors
+            if (parsed.id === 'error' || parsed.report_metadata?.error) {
+              const errorMessage = parsed.report_metadata?.error || 
+                parsed.choices?.[0]?.delta?.content || 
+                'Unknown error occurred';
+              
+              console.error('Streaming error:', errorMessage);
+              hasEncounteredError = true;
+              
+              // Update the streaming message with the error
+              setMessages(prev => prev.map(msg => 
+                msg.id === streamingMessageId
+                  ? {
+                      ...msg,
+                      content: `❌ Error generating report: ${errorMessage}`,
+                      isStreaming: false,
+                      metadata: { type: 'error' },
+                      timestamp: Date.now()
+                    }
+                  : msg
+              ));
+              
+              break;
+            }
+            
+            // Get the content and section information
+            const content = parsed.choices?.[0]?.delta?.content || '';
+            const reportMetadata = parsed.report_metadata;
+            
+            if (content) {
+              // Accumulate the response
+              accumulatedResponse += content;
+              
+              // Update the streaming message with progress
+              setMessages(prev => prev.map(msg => 
+                msg.id === streamingMessageId
+                  ? {
+                      ...msg,
+                      content: `🔄 Generating your 4-box report (${accumulatedResponse.length} chars so far)...`,
+                      timestamp: Date.now()
+                    }
+                  : msg
+              ));
+              
+              // If we have section information, update the report sections
+              if (reportMetadata?.section_content) {
+                // Update the report with streaming content
+                for (const [sectionKey, sectionContent] of Object.entries(reportMetadata.section_content)) {
+                  if (sectionContent && sectionKey in newReport.sections) {
+                    // Use type assertion to safely access newReport.sections
+                    (newReport.sections as Record<string, string>)[sectionKey] = sectionContent as string;
+                  }
+                }
+                
+                // Update the UI with progress
+                setReportState(newReport);
+                setShowProgressIndicator(true);
+              }
+            }
+          } catch (error) {
+            console.warn('Error parsing streaming response:', error, 'Raw data:', data);
+          }
+        }
+        
+        // If we encountered an error, stop processing
+        if (hasEncounteredError) {
+          break;
+        }
+      }
+      
+      // Clean up
+      try {
+        await reader.cancel();
+      } catch (e) {
+        console.warn('Error cancelling reader:', e);
+      }
+      
+      // If we didn't encounter an error, finalize the report
+      if (!hasEncounteredError) {
+        // Update the message to show completion
+        setMessages(prev => prev.map(msg => 
+          msg.id === streamingMessageId
+            ? {
+                ...msg,
+                content: '✅ Your 4-box report has been generated! You can now review and edit it.',
+                isStreaming: false,
+                timestamp: Date.now()
+              }
+            : msg
+        ));
+        
+        // Update UI state
+        setIsProcessing(false);
+        setIsGeneratingReport(false);
+        setShowProgressIndicator(false);
+      } else {
+        // Reset processing state on error
+        setIsProcessing(false);
+        setIsGeneratingReport(false);
+        setShowProgressIndicator(false);
+      }
     } catch (error) {
       console.error('Error generating report:', error);
       setIsProcessing(false);
@@ -331,7 +469,7 @@ export default function ReportBuilder() {
           : msg
       ));
     }
-  }, [uploadedDocuments, reportId, pollReportStatus]);
+  }, [uploadedDocuments, reportId, reportState]);
   
   /**
    * Handle sending a chat message
