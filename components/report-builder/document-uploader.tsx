@@ -8,6 +8,21 @@ interface DocumentUploaderProps {
   uploadedDocuments: UploadedDocument[];
 }
 
+// Browser-compatible UUID generation function
+function generateUUID() {
+  // Use crypto.randomUUID() if available in the browser
+  if (typeof window !== 'undefined' && window.crypto && typeof window.crypto.randomUUID === 'function') {
+    return window.crypto.randomUUID();
+  }
+  
+  // Fallback implementation
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 export default function DocumentUploader({ 
   onDocumentUploaded, 
   onDocumentRemoved,
@@ -106,18 +121,32 @@ export default function DocumentUploader({
         let textContent = '';
         
         if (file.type.startsWith('image/')) {
-          // For images, we'd normally use OCR on the server-side
-          // Here we'll just make a placeholder
-          textContent = `[Image content from ${file.name}]`;
+          // For images, use a placeholder text that contains useful information
+          textContent = `Image document: ${file.name}\n\nType: ${file.type}\nSize: ${formatFileSize(file.size)}\n\nThis is an image file that would normally be processed with OCR, but for this demo we're including this placeholder text to ensure report generation works properly.`;
         } else if (file.type === 'application/pdf') {
-          // In a real app, we'd use a PDF parser on the server
-          textContent = `[PDF content from ${file.name}]`;
+          // For PDFs, use a placeholder with document metadata
+          textContent = `PDF document: ${file.name}\n\nType: ${file.type}\nSize: ${formatFileSize(file.size)}\n\nThis is a PDF file that would normally be parsed on the server, but for this demo we're including this placeholder text to ensure report generation works properly.`;
         } else if (file.type.includes('word')) {
-          // In a real app, we'd use a DOCX parser on the server
-          textContent = `[Document content from ${file.name}]`;
+          // For Word docs, use a placeholder with document metadata
+          textContent = `Word document: ${file.name}\n\nType: ${file.type}\nSize: ${formatFileSize(file.size)}\n\nThis is a Word document that would normally be parsed on the server, but for this demo we're including this placeholder text to ensure report generation works properly.`;
         } else {
           // For text-based files, we can read them directly
-          textContent = await file.text();
+          try {
+            textContent = await file.text();
+            
+            // Ensure we got some text content
+            if (!textContent || textContent.trim() === '') {
+              textContent = `Text document: ${file.name}\n\nType: ${file.type}\nSize: ${formatFileSize(file.size)}\n\nThis file appears to be empty or could not be read properly. Using this placeholder text instead.`;
+            }
+          } catch (err) {
+            console.error(`Error reading text from file ${file.name}:`, err);
+            textContent = `Document: ${file.name}\n\nType: ${file.type}\nSize: ${formatFileSize(file.size)}\n\nThis file could not be read properly. Using this placeholder text instead.`;
+          }
+        }
+        
+        // Ensure content is never empty
+        if (!textContent || textContent.trim() === '') {
+          textContent = `Document: ${file.name}\n\nType: ${file.type}\nSize: ${formatFileSize(file.size)}\n\nPlaceholder content for document processing.`;
         }
         
         // Create a summary (in a real app, this would be done with AI)
@@ -132,8 +161,8 @@ export default function DocumentUploader({
         // Create a URL for the file (in a real app this would be a server URL or blob URL)
         const url = URL.createObjectURL(file);
         
-        // Create a document ID
-        const documentId = `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        // Create a document ID - using proper UUID format for Supabase
+        const documentId = generateUUID();
         
         // Create the document object
         const document: UploadedDocument = {
@@ -146,6 +175,15 @@ export default function DocumentUploader({
           url,
           timestamp: Date.now()
         };
+        
+        // Double-check content is present (defensive programming)
+        if (!document.textContent || document.textContent.trim() === '') {
+          console.warn(`Warning: Document ${document.name} has no text content, adding placeholder.`);
+          document.textContent = `Document: ${file.name}\n\nType: ${file.type}\nSize: ${formatFileSize(file.size)}\n\nPlaceholder content for document processing.`;
+          document.summary = `Placeholder for ${file.name} (${formatFileSize(file.size)})`;
+        }
+        
+        console.log(`Processed document: ${document.name}, size: ${formatFileSize(document.size)}, content length: ${document.textContent.length} chars`);
         
         // Send it to the parent component
         onDocumentUploaded(document);

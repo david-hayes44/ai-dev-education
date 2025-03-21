@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getReportState } from "@/lib/report-processor";
-import path from 'path';
-import fs from 'fs/promises';
 
 /**
  * API endpoint to check the status of a report being processed in the background
+ * Retrieves report data from Supabase storage
  */
 export async function GET(request: NextRequest) {
   try {
@@ -22,9 +21,16 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // Get current report state
+    // Get current report state from Supabase via the report processor
     console.log(`[check-report API] Fetching state for report: ${reportId}`);
     const report = await getReportState(reportId);
+    
+    console.log(`[check-report API] Report state retrieved:`, {
+      status: report.status,
+      isComplete: report.isComplete,
+      hasReportState: !!report.reportState,
+      error: report.error || 'none'
+    });
     
     // If report not found, provide a useful fallback instead of an error
     if (report.status === 'error' && report.error === 'Report not found') {
@@ -35,8 +41,8 @@ export async function GET(request: NextRequest) {
         title: "Processing Report",
         date: new Date().toLocaleDateString(),
         sections: {
-          accomplishments: "* Your report is being processed\n* This sometimes takes longer in serverless environments",
-          insights: "* The report processing system is distributed across multiple servers\n* You can continue to use the chat while waiting",
+          accomplishments: "* Your report is being processed\n* This might take a moment to complete",
+          insights: "* The report processing system uses Supabase for reliable storage\n* You can continue to use the chat while waiting",
           decisions: "* If this message persists, you can try regenerating the report\n* Or try using the chat interface to analyze your documents",
           nextSteps: "* Wait a few more moments for processing to complete\n* If needed, click 'Regenerate Report' below\n* You can also ask specific questions in the chat"
         },
@@ -57,11 +63,12 @@ export async function GET(request: NextRequest) {
     
     console.log(`[check-report API] Returning report status: ${report.status}`);
     
+    // Make sure we always return a valid response with all expected fields
     return NextResponse.json({
-      isComplete: report.isComplete,
-      reportState: report.reportState,
-      status: report.status,
-      error: report.error
+      isComplete: report.isComplete || false,
+      reportState: report.reportState || null,
+      status: report.status || 'error',
+      error: report.error || undefined
     });
   } catch (error) {
     console.error('[check-report API] Error checking report status:', error);

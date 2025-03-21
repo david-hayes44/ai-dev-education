@@ -1,7 +1,6 @@
 import { UploadedDocument, ReportState } from "@/components/report-builder/types";
 import { sendChatCompletion, ChatMessage } from "@/lib/openrouter";
-import fs from 'fs/promises';
-import path from 'path';
+import { supabaseReportStorage } from "@/lib/supabase-report-storage";
 
 // Type definitions
 type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'error';
@@ -30,134 +29,11 @@ interface ReportStorage {
   cleanup(): Promise<void>;
 }
 
-/**
- * File system storage implementation for development
- */
-class FileSystemStorage implements ReportStorage {
-  private dataDir: string;
-  
-  constructor() {
-    // Use /tmp directory in serverless environments like Vercel
-    const basePath = process.env.VERCEL ? '/tmp' : process.cwd();
-    this.dataDir = path.resolve(basePath, '.data', 'reports');
-    console.log(`FileSystemStorage initialized with data directory: ${this.dataDir}`);
-    // Ensure directory exists
-    this.ensureDataDir().catch(err => 
-      console.error('Error creating data directory:', err)
-    );
-  }
-  
-  private async ensureDataDir(): Promise<void> {
-    try {
-      await fs.mkdir(this.dataDir, { recursive: true });
-      console.log(`Ensured data directory exists: ${this.dataDir}`);
-      
-      // Check if directory is actually writable
-      const testFile = path.join(this.dataDir, '.write-test');
-      await fs.writeFile(testFile, 'test', 'utf8');
-      await fs.unlink(testFile);
-      console.log(`Confirmed directory is writable: ${this.dataDir}`);
-    } catch (err) {
-      console.error('Error creating or testing data directory:', err);
-      throw err; // Re-throw to ensure callers know there was a problem
-    }
-  }
-  
-  private getFilePath(reportId: string): string {
-    const filePath = path.join(this.dataDir, `report-${reportId}.json`);
-    return filePath;
-  }
-  
-  async get(reportId: string): Promise<ReportProcessingState | undefined> {
-    try {
-      const filePath = this.getFilePath(reportId);
-      console.log(`Attempting to read report from: ${filePath}`);
-      const data = await fs.readFile(filePath, 'utf8');
-      console.log(`Successfully read report ${reportId} from file system`);
-      return JSON.parse(data) as ReportProcessingState;
-    } catch (err) {
-      // File not found is expected for non-existent reports
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-        console.error(`Report ${reportId} not found at path: ${this.getFilePath(reportId)}`);
-      } else {
-        console.error(`Error reading report ${reportId}:`, err);
-      }
-      return undefined;
-    }
-  }
-  
-  async set(reportId: string, state: ReportProcessingState): Promise<void> {
-    try {
-      await this.ensureDataDir();
-      const filePath = this.getFilePath(reportId);
-      console.log(`Writing report ${reportId} to: ${filePath}`);
-      await fs.writeFile(
-        filePath, 
-        JSON.stringify(state, null, 2),
-        'utf8'
-      );
-      console.log(`Successfully wrote report ${reportId} to file system`);
-      
-      // Verify the file was written correctly
-      try {
-        await fs.access(filePath, fs.constants.R_OK);
-        console.log(`Verified file is readable: ${filePath}`);
-      } catch (accessErr) {
-        console.error(`File written but not accessible: ${filePath}`, accessErr);
-      }
-    } catch (err) {
-      console.error(`Error writing report ${reportId}:`, err);
-      throw err;
-    }
-  }
-  
-  async delete(reportId: string): Promise<void> {
-    try {
-      const filePath = this.getFilePath(reportId);
-      await fs.unlink(filePath);
-    } catch (err) {
-      // Ignore file not found errors
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error(`Error deleting report ${reportId}:`, err);
-      }
-    }
-  }
-  
-  async cleanup(): Promise<void> {
-    try {
-      const files = await fs.readdir(this.dataDir);
-      const now = Date.now();
-      const REPORT_TTL = 3600 * 1000; // 1 hour
-      
-      for (const file of files) {
-        if (!file.startsWith('report-') || !file.endsWith('.json')) continue;
-        
-        try {
-          const filePath = path.join(this.dataDir, file);
-          const stats = await fs.stat(filePath);
-          
-          // Delete files older than TTL
-          if (now - stats.mtimeMs > REPORT_TTL) {
-            await fs.unlink(filePath);
-          }
-        } catch (err) {
-          console.error(`Error processing file ${file} during cleanup:`, err);
-        }
-      }
-    } catch (err) {
-      // Directory might not exist yet
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error('Error during storage cleanup:', err);
-      }
-    }
-  }
-}
+// Use Supabase storage for both development and production
+// This addresses the Vercel serverless state issue
+const storage: ReportStorage = supabaseReportStorage;
 
-// Initialize the appropriate storage based on environment
-// Use FileSystemStorage for both dev and production, but use /tmp in serverless environments
-const storage: ReportStorage = new FileSystemStorage();
-
-console.log(`Using FileSystemStorage for report processing with NODE_ENV=${process.env.NODE_ENV}, VERCEL=${process.env.VERCEL}`);
+console.log(`Using Supabase storage for report processing with NODE_ENV=${process.env.NODE_ENV}, VERCEL=${process.env.VERCEL}`);
 
 // Set up periodic cleanup
 const CLEANUP_INTERVAL = 15 * 60 * 1000; // 15 minutes
@@ -175,7 +51,7 @@ export async function storeReportForProcessing(
   documents: UploadedDocument[],
   projectContext?: string
 ): Promise<string> {
-  console.log(`Storing report ${reportId} for processing (using ${isDevelopment ? 'file system' : 'in-memory'} storage)`);
+  console.log(`Storing report ${reportId} for processing (using Supabase storage)`);
   
   const reportState: ReportProcessingState = {
     reportId,
@@ -202,7 +78,7 @@ export async function getReportState(reportId: string): Promise<{
   const report = await storage.get(reportId);
   
   if (!report) {
-    console.warn(`Report ${reportId} not found in ${isDevelopment ? 'file system' : 'in-memory'} storage`);
+    console.warn(`Report ${reportId} not found in Supabase storage`);
     return { 
       isComplete: false, 
       status: 'error', 
@@ -229,6 +105,17 @@ export async function triggerBackgroundProcessing(reportId: string): Promise<voi
     
     if (!report) {
       console.error(`[report-processor] Report ${reportId} not found for processing`);
+      // Create a minimal report if it doesn't exist yet
+      const newReport: ReportProcessingState = {
+        reportId,
+        status: 'pending',
+        documents: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      
+      console.log(`[report-processor] Creating a new report entry for ${reportId}`);
+      await storage.set(reportId, newReport);
       return;
     }
     
@@ -263,12 +150,32 @@ export async function triggerBackgroundProcessing(reportId: string): Promise<voi
  * Update a report with error status
  */
 async function updateReportError(reportId: string, errorMessage: string): Promise<void> {
-  const report = await storage.get(reportId);
-  if (report) {
-    report.status = 'error';
-    report.error = errorMessage;
-    report.updatedAt = Date.now();
-    await storage.set(reportId, report);
+  try {
+    const report = await storage.get(reportId);
+    if (report) {
+      report.status = 'error';
+      report.error = errorMessage;
+      report.updatedAt = Date.now();
+      await storage.set(reportId, report);
+      console.log(`[report-processor] Updated report ${reportId} with error status: ${errorMessage}`);
+    } else {
+      console.error(`[report-processor] Could not update error: Report ${reportId} not found`);
+      
+      // Create a minimal error report
+      const errorReport: ReportProcessingState = {
+        reportId,
+        status: 'error',
+        documents: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        error: errorMessage
+      };
+      
+      await storage.set(reportId, errorReport);
+      console.log(`[report-processor] Created new error report for ${reportId}`);
+    }
+  } catch (err) {
+    console.error(`[report-processor] Failed to update error status:`, err);
   }
 }
 
@@ -276,51 +183,100 @@ async function updateReportError(reportId: string, errorMessage: string): Promis
  * Process a report asynchronously in the background
  */
 async function processReportAsync(reportId: string): Promise<void> {
+  console.log(`[report-processor] Starting async processing of report ${reportId}`);
+  
   try {
-    console.log(`[report-processor] Starting async processing for report: ${reportId}`);
+    // Get the report from storage with retries to ensure documents are available
+    let report;
+    let retryCount = 0;
+    const maxRetries = 3;
     
-    // Get the report state
-    const report = await storage.get(reportId);
-    
-    if (!report) {
-      console.error(`[report-processor] Report ${reportId} not found for async processing`);
-      throw new Error(`Report ${reportId} not found`);
+    while (retryCount < maxRetries) {
+      // Get the report from storage
+      report = await storage.get(reportId);
+      
+      if (!report) {
+        throw new Error(`Report ${reportId} not found in storage, cannot process`);
+      }
+      
+      // Validate documents array
+      if (!report.documents || !Array.isArray(report.documents)) {
+        throw new Error(`Report ${reportId} has invalid document structure`);
+      }
+      
+      // If we have documents, break the retry loop
+      if (report.documents.length > 0) {
+        console.log(`[report-processor] Successfully retrieved report with ${report.documents.length} documents after ${retryCount} retries`);
+        break;
+      }
+      
+      // Otherwise, retry after a delay
+      retryCount++;
+      console.log(`[report-processor] Report ${reportId} has no documents yet, retrying (${retryCount}/${maxRetries})...`);
+      
+      // Exponential backoff - wait longer with each retry
+      const delayMs = 500 * Math.pow(2, retryCount);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
     }
     
-    // Extract documents from the report
-    const { documents, projectContext } = report;
+    // Final check after retries
+    if (!report || report.documents.length === 0) {
+      throw new Error(`Report ${reportId} has no documents to process after ${maxRetries} retries`);
+    }
     
-    // Process all documents
-    console.log(`[report-processor] Processing ${documents.length} documents for report ${reportId}`);
+    // Log documents for debugging
+    console.log(`[report-processor] Processing report ${reportId} with ${report.documents.length} documents:`);
+    report.documents.forEach((doc, index) => {
+      console.log(`[report-processor] Document ${index + 1}: ${doc.name} (ID: ${doc.id}, Size: ${doc.size} bytes, Content Length: ${doc.textContent?.length || 0})`);
+    });
     
-    // Process documents sequentially
-    const summaries = await processDocumentsSequentially(documents);
+    // Validate document content
+    const invalidDocs = report.documents.filter(doc => !doc.textContent || doc.textContent.trim() === '');
+    if (invalidDocs.length > 0) {
+      console.warn(`[report-processor] Warning: ${invalidDocs.length} documents have no content:`, 
+        invalidDocs.map(d => `${d.name} (${d.id})`).join(', '));
+    }
     
-    // Generate report from summaries
+    // If all documents are invalid (no content), throw an error
+    if (invalidDocs.length === report.documents.length) {
+      throw new Error(`Report ${reportId} has documents but none contain processable text content`);
+    }
+    
+    // Filter to only include documents with content
+    const validDocuments = report.documents.filter(doc => doc.textContent && doc.textContent.trim() !== '');
+    console.log(`[report-processor] Processing ${validDocuments.length} valid documents with text content`);
+    
+    // Process the documents to get summaries
+    const summaries = await processDocumentsSequentially(validDocuments);
+    
+    if (summaries.length === 0) {
+      throw new Error(`Failed to generate summaries for report ${reportId}`);
+    }
+    
+    console.log(`[report-processor] Generated ${summaries.length} summaries, generating report`);
+    
+    // Generate the report from summaries
     const reportState = await generateReportFromSummaries(
       summaries, 
-      projectContext || ""
+      report.projectContext || ""
     );
     
-    // Update store with completed report
+    // Save the completed report
     report.status = 'completed';
     report.result = reportState;
     report.updatedAt = Date.now();
     await storage.set(reportId, report);
     
-    console.log(`Completed processing report ${reportId}`);
+    console.log(`[report-processor] Successfully completed processing report ${reportId}`);
   } catch (error) {
-    console.error(`Error processing report ${reportId}:`, error);
+    console.error(`[report-processor] Error processing report ${reportId}:`, error);
     
-    // Fetch the report again to update its status
-    const report = await storage.get(reportId);
-    if (report) {
-      report.status = 'error';
-      report.error = error instanceof Error ? error.message : String(error);
-      report.updatedAt = Date.now();
-      await storage.set(reportId, report);
-    } else {
-      console.error(`[report-processor] Could not update error status: Report ${reportId} not found`);
+    // Update the report with error status
+    try {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await updateReportError(reportId, errorMessage);
+    } catch (updateError) {
+      console.error(`[report-processor] Failed to update report error status:`, updateError);
     }
   }
 }
@@ -328,6 +284,11 @@ async function processReportAsync(reportId: string): Promise<void> {
 // Process documents one at a time to avoid timeouts
 async function processDocumentsSequentially(documents: UploadedDocument[]): Promise<string[]> {
   const summaries: string[] = [];
+  
+  if (!documents || !Array.isArray(documents) || documents.length === 0) {
+    console.warn('[report-processor] No documents provided for processing');
+    return ['No documents provided for processing'];
+  }
   
   // Process each document in sequence
   for (const doc of documents) {
@@ -340,8 +301,14 @@ async function processDocumentsSequentially(documents: UploadedDocument[]): Prom
         continue;
       }
       
-      // Chunk the document if it's large
-      const chunks = chunkDocument(doc.textContent, 2000); // 2000 char chunks
+      // Add safeguard for excessively long documents
+      const maxContentLength = 50000; // Limit to 50k chars to avoid timeouts
+      const trimmedContent = doc.textContent.length > maxContentLength
+        ? doc.textContent.substring(0, maxContentLength) + '... [content truncated for processing]'
+        : doc.textContent;
+      
+      // Chunk the document if it's large 
+      const chunks = chunkDocument(trimmedContent, 2000); // 2000 char chunks
       console.log(`Split document into ${chunks.length} chunks`);
       
       // Process each chunk to get summaries
@@ -456,11 +423,11 @@ ${chunk}
 Provide a concise summary that captures the essential information.`;
   
   try {
-    console.log(`Sending summarization request for ${docName} chunk ${chunkIndex+1}/${totalChunks} using model google/gemini-2.0-flash-thinking-exp:free`);
+    console.log(`Sending summarization request for ${docName} chunk ${chunkIndex+1}/${totalChunks} using model google/gemini-2.0-flash-001`);
     
     // Use a faster, smaller model with lower token count
     const response = await sendChatCompletion({
-      model: "google/gemini-2.0-flash-thinking-exp:free",
+      model: "google/gemini-2.0-flash-001",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.5,
       max_tokens: 2000, // Increased from 500
@@ -536,7 +503,7 @@ Use bullet points for each item. Focus on key information that would be most rel
     
     // Send the request with a reasonable timeout
     const response = await sendChatCompletion({
-      model: "google/gemini-2.0-flash-thinking-exp:free",
+      model: "google/gemini-2.0-flash-001",
       messages: [{ role: "system", content: prompt }],
       temperature: 0.7,
       max_tokens: 4000, // Increased from 1500

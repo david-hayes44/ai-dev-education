@@ -5,13 +5,23 @@ import type { FileObject } from '@supabase/storage-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseKey) {
-  console.error('Missing Supabase environment variables. Check your .env.local file.');
+// Add better error handling and diagnostics
+if (!supabaseUrl) {
+  console.error('ERROR: Missing NEXT_PUBLIC_SUPABASE_URL environment variable. Check your .env.local file.');
+  throw new Error('Missing Supabase URL. Please set NEXT_PUBLIC_SUPABASE_URL in .env.local');
 }
 
+if (!supabaseKey) {
+  console.error('ERROR: Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable. Check your .env.local file.');
+  throw new Error('Missing Supabase key. Please set NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local');
+}
+
+// Log the initialization - not the full keys for security
+console.log(`Initializing Supabase client with URL: ${supabaseUrl.substring(0, 15)}... and key: ${supabaseKey.substring(0, 5)}...`);
+
 export const supabase = createClient(
-  supabaseUrl || '',
-  supabaseKey || '',
+  supabaseUrl,
+  supabaseKey,
   {
     auth: {
       persistSession: true,
@@ -22,6 +32,25 @@ export const supabase = createClient(
     },
   }
 );
+
+// Test connection on initialization
+(async function testConnection() {
+  try {
+    // Simple query to test connection
+    const { data, error } = await supabase.from('reports').select('count');
+    
+    if (error) {
+      console.error('ERROR: Failed to connect to Supabase:', error.message);
+      console.error('This might be causing the application to crash or refresh.');
+      console.error('Check your Supabase URL, key, and ensure the reports table exists.');
+    } else {
+      console.log('Supabase connection test successful:', data);
+    }
+  } catch (err) {
+    console.error('ERROR: Exception during Supabase connection test:', err);
+    console.error('This might be causing the application to crash or refresh.');
+  }
+})();
 
 // Storage configuration
 export const STORAGE_BUCKET = 'attachments';

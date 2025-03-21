@@ -230,7 +230,7 @@ const processResponseForReportGeneration = (response: string): Partial<ReportSta
 
 /**
  * API endpoint to generate a 4-box report from uploaded documents
- * Now uses a two-stage approach with background processing to prevent timeouts
+ * Now uses a two-stage approach with background processing using Supabase for persistence
  */
 export async function POST(request: NextRequest) {
   try {
@@ -246,81 +246,81 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // Only use the first document for processing to simplify and improve stability
+    // This avoids issues with multiple document handling
+    const firstDocument = documents[0];
+    const simplifiedDocuments = [firstDocument];
+    
+    // Validate document content is present
+    if (!firstDocument.textContent || firstDocument.textContent.trim() === '') {
+      return NextResponse.json(
+        { error: "Document contains no text content to process" },
+        { status: 400 }
+      );
+    }
+    
+    console.log(`[generate-report API] Processing document: ${firstDocument.name} (ID: ${firstDocument.id || 'no-id'}, Size: ${firstDocument.size} bytes, Content: ${firstDocument.textContent ? `${firstDocument.textContent.length} chars` : 'none'})`);
+    
     // Generate a unique ID for this report processing job
     const reportId = crypto.randomUUID();
-    console.log(`Starting report generation job: ${reportId} with ${documents.length} documents`);
     
-    // Create a minimal report without any AI processing
+    console.log(`[generate-report API] Creating report ${reportId} with 1 document`);
+    
+    // Create an initial report state for the client
     const initialReport = createEmptyReport();
-    initialReport.title = documents.length === 1 
-      ? `Report: ${documents[0].name}` 
-      : `Report: ${documents.length} Documents`;
+    initialReport.title = `Report: ${firstDocument.name}`;
     
-    // Instead of trying to analyze all documents, just acknowledge their receipt
-    initialReport.sections.accomplishments = documents.map(doc => 
-      `* Document "${doc.name}" received (${Math.round(doc.size / 1024)} KB)`
-    ).join('\n');
+    // Add placeholder content to show processing status
+    initialReport.sections.accomplishments = `* Document "${firstDocument.name}" received (${Math.round(firstDocument.size / 1024)} KB)`;
     
-    // Add instructions for using chat with clearer guidance
-    initialReport.sections.insights = "* Processing your documents...";
+    initialReport.sections.insights = "* Processing your document...";
     initialReport.sections.insights += "\n* Your report will update automatically when ready";
-    initialReport.sections.insights += "\n* You can ask in chat: 'What are the key insights from my documents?'";
+    initialReport.sections.insights += "\n* You can ask in chat: 'What are the key insights from my document?'";
     
     initialReport.sections.decisions = "* AI analysis is running in the background";
     initialReport.sections.decisions += "\n* This may take up to 30 seconds for large documents";
     initialReport.sections.decisions += "\n* You can continue using the chat while waiting";
     
     initialReport.sections.nextSteps = "* When analysis completes, this section will update";
-    initialReport.sections.nextSteps += "\n* You can also try: 'What are the next steps in my documents?'";
+    initialReport.sections.nextSteps += "\n* You can also try: 'What are the next steps in my document?'";
     
-    // Ensure the report structure is valid and complete
-    const reportToReturn: ReportState = {
-      title: initialReport.title,
-      date: initialReport.date,
-      sections: {
-        accomplishments: initialReport.sections.accomplishments,
-        insights: initialReport.sections.insights,
-        decisions: initialReport.sections.decisions,
-        nextSteps: initialReport.sections.nextSteps
-      },
-      metadata: {
-        lastUpdated: Date.now(),
-        relatedDocuments: documents.map(doc => doc.id)
-      }
-    };
+    // Store metadata about the documents
+    initialReport.metadata.relatedDocuments = [firstDocument.id];
     
-    // Store the documents for background processing
-    await storeReportForProcessing(reportId, documents, projectContext);
+    // Store the report data for processing
+    // This now uses Supabase for persistent storage between function calls
+    console.log(`[generate-report API] Storing report ${reportId} for background processing`);
+    await storeReportForProcessing(reportId, simplifiedDocuments, projectContext);
     
-    // Trigger background processing without waiting for completion
-    triggerBackgroundProcessing(reportId);
+    // Short delay to ensure storage operations complete before processing begins
+    console.log(`[generate-report API] Waiting for storage operations to complete before processing`);
+    await new Promise(resolve => setTimeout(resolve, 500));
     
-    console.log("Started background processing for report:", reportId);
+    // Now trigger background processing
+    console.log(`[generate-report API] Triggering background processing for report ${reportId}`);
+    await triggerBackgroundProcessing(reportId);
     
-    // Return the minimal report immediately along with the reportId for polling
+    // Return both the reportId and the initial report state
     return NextResponse.json({
-      reportState: reportToReturn,
-      reportId: reportId,
-      message: "Report generation started. Check status using the reportId."
+      reportId,
+      reportState: initialReport,
+      message: "Report generation started, check status using the reportId"
     });
-    
   } catch (error) {
-    console.error('Error generating report:', error);
+    console.error('[generate-report API] Error:', error);
     
-    // Create a proper error report with helpful troubleshooting information
+    // Return an error report the client can display
     const errorReport = createEmptyReport();
     errorReport.title = "Error Report";
-    errorReport.sections.accomplishments = "* Error generating report - please check console for details";
-    errorReport.sections.insights = "* This may be due to rate limits or insufficient credits";
-    errorReport.sections.insights += "\n* See: https://openrouter.ai/docs/api-reference/limits";
+    errorReport.sections.accomplishments = "* Error generating report - please try again";
+    errorReport.sections.insights = "* This may be due to a temporary issue with the service";
     errorReport.sections.decisions = "* Try using the chat interface instead";
-    errorReport.sections.decisions += "\n* Or try uploading a smaller document";
     errorReport.sections.nextSteps = "* Use the 'Regenerate Report' button below";
-    errorReport.sections.nextSteps += "\n* Or try asking specific questions in the chat";
     
     return NextResponse.json(
       { 
-        error: "Failed to generate report",
+        error: "Failed to process report generation request",
+        message: error instanceof Error ? error.message : "Unknown error",
         reportState: errorReport
       },
       { status: 500 }
