@@ -59,6 +59,12 @@ export interface AIModel {
 
 export const AVAILABLE_MODELS: AIModel[] = [
   {
+    id: 'google/gemini-2.0-flash-001',
+    name: 'Gemini 2.0 Flash',
+    provider: 'Google',
+    description: 'Google\'s optimized model for fast, efficient responses. Great for most common tasks.'
+  },
+  {
     id: 'anthropic/claude-3.7-sonnet:beta',
     name: 'Claude 3.7 Sonnet',
     provider: 'Anthropic',
@@ -162,7 +168,7 @@ export class ChatService {
   private currentSessionId: string | null = null;
   private sessions: Record<string, ChatSession> = {};
   private currentPage: string = ""; // Track the current page the user is viewing
-  private selectedModel: string = 'google/gemini-2.0-flash-thinking-exp:free'; // Default model
+  private selectedModel: string = 'google/gemini-2.0-flash-001'; // Default model
   private messages: Message[] = [];
   private openai: OpenAI;
   private config: OpenRouterConfig;
@@ -179,7 +185,7 @@ export class ChatService {
     this.config = {
       apiKey: process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || "",
       baseURL: "https://openrouter.ai/api/v1",
-      model: "anthropic/claude-3-opus:1:0",
+      model: "google/gemini-2.0-flash-001",
     };
 
     // Initialize OpenAI client for use with OpenRouter
