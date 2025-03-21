@@ -291,97 +291,24 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
               >
                 Cancel
               </Button>
-              <Button 
-                variant="ghost" 
-                className="h-6 text-xs px-2 py-0 text-destructive"
-                onClick={() => {
-                  // Force immediate error state
-                  console.error("DEBUG: Force error triggered by user");
-                  // Log debug info
-                  console.log("DEBUG INFO:", {
-                    messageId: message.id,
-                    isStreaming,
-                    isLoading,
-                    hasOpenRouterKey: !!process.env.NEXT_PUBLIC_OPENROUTER_API_KEY?.substring(0, 3),
-                    metadataType: message.metadata?.type,
-                    browserInfo: navigator.userAgent
-                  });
-                  if (chatService) {
-                    chatService.updateAssistantMessageWithError(new Error("User forced error"));
-                  }
-                }}
-              >
-                Force Error
-              </Button>
-            </div>
-          )}
-        </div>
-      );
-    } 
-    
-    if (isLoading) {
-      return (
-        <div className="flex items-center">
-          <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary animate-pulse">
-            Loading...
-          </span>
-          {showRetryButton && (
-            <div className="flex gap-1">
-              <Button 
-                variant="ghost" 
-                className="h-6 ml-2 text-xs px-2 py-0 text-muted-foreground hover:text-destructive"
-                onClick={handleRetry}
-              >
-                Cancel
-              </Button>
-              <Button 
-                variant="ghost" 
-                className="h-6 text-xs px-2 py-0 text-destructive"
-                onClick={() => {
-                  // Force immediate error state
-                  console.error("DEBUG: Force error triggered by user");
-                  // Log debug info
-                  console.log("DEBUG INFO:", {
-                    messageId: message.id,
-                    isStreaming,
-                    isLoading,
-                    hasOpenRouterKey: !!process.env.NEXT_PUBLIC_OPENROUTER_API_KEY?.substring(0, 3),
-                    metadataType: message.metadata?.type,
-                    browserInfo: navigator.userAgent
-                  });
-                  if (chatService) {
-                    chatService.updateAssistantMessageWithError(new Error("User forced error"));
-                  }
-                }}
-              >
-                Force Error
-              </Button>
             </div>
           )}
         </div>
       );
     }
     
-    if (isThinking) {
+    if (isLoading) {
       return (
-        <span className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground animate-pulse">
-          Thinking...
+        <span className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+          Loading...
         </span>
       );
     }
     
     if (isRechunking) {
       return (
-        <span className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground animate-pulse">
+        <span className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
           Processing...
-        </span>
-      );
-    }
-    
-    if (message.metadata?.type === "fallback") {
-      return (
-        <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-800 dark:text-amber-100">
-          Fallback Mode
         </span>
       );
     }
@@ -446,7 +373,7 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
               </div>
             ) : isStreaming ? (
               <div className={cn("transition-all duration-200", isStreaming ? "border-l-2 border-primary pl-2" : "")}>
-                {message.content ? (
+                {message.content && message.content.length > 0 ? (
                   <ReactMarkdown>{message.content}</ReactMarkdown>
                 ) : (
                   <span className="text-muted-foreground">Generating response...</span>

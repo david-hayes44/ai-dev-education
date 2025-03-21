@@ -351,6 +351,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           
           if (done) {
             console.log("Stream complete");
+            
+            // One final update to ensure the message is marked as not streaming
+            setMessages(prev => prev.map(m => 
+              m.id === placeholderMessage.id 
+                ? { ...m, isStreaming: false } 
+                : m
+            ));
+            
+            // Cleanup after streaming is complete
+            setIsStreaming(false);
+            setIsTyping(false);
+            
             break;
           }
           
@@ -379,14 +391,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               // Create a properly typed message
               const updatedMessage: Message = {
                 ...parsed,
-                isStreaming: !!parsed.isStreaming,
+                isStreaming: true,
+                content: parsed.content || "",
                 metadata: {
                   ...parsed.metadata,
                   type: parsed.metadata?.type as MessageMetadataType
                 }
               };
               
-              console.log("Updating message with:", updatedMessage.content ? updatedMessage.content.substring(0, 50) + "..." : "(empty content)");
+              console.log("Updating message content:", updatedMessage.content ? updatedMessage.content.substring(0, 50) + "..." : "(empty content)");
               
               // Update messages with the typed message
               setMessages(prev => prev.map(m => 
