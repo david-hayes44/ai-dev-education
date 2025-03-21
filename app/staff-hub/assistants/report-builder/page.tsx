@@ -299,6 +299,28 @@ export default function ReportBuilderPage() {
     
     setMessages(prev => [...prev, systemMessage]);
     
+    // Define formatDate function here
+    const formatDate = () => {
+      const now = new Date();
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      
+      const month = monthNames[now.getMonth()];
+      const day = now.getDate();
+      const year = now.getFullYear();
+      
+      const getOrdinalSuffix = (d: number) => {
+        if (d > 3 && d < 21) return 'th';
+        switch (d % 10) {
+          case 1: return "st";
+          case 2: return "nd";
+          case 3: return "rd";
+          default: return "th";
+        }
+      };
+      
+      return `${month} ${day}${getOrdinalSuffix(day)} ${year}`;
+    };
+    
     let attempts = 0;
     const maxAttempts = 2;
     
@@ -331,9 +353,10 @@ export default function ReportBuilderPage() {
         
         const data = await response.json();
         
-        // Debug logging
-        console.log('Report generation response:', data);
-        console.log('Report state from response:', data.reportState);
+        // Enhanced debug logging
+        console.log('Report generation response received:', data);
+        console.log('Report state from response:', JSON.stringify(data.reportState, null, 2));
+        
         if (data.reportState?.sections) {
           console.log('Sections in response:', {
             accomplishments: data.reportState.sections.accomplishments?.length || 0,
@@ -341,14 +364,33 @@ export default function ReportBuilderPage() {
             decisions: data.reportState.sections.decisions?.length || 0,
             nextSteps: data.reportState.sections.nextSteps?.length || 0
           });
+        } else {
+          console.error('No sections found in report state from API response');
         }
         
-        // Update report state
+        // Update report state with verified content
         if (data.reportState) {
-          setReportState(data.reportState);
+          // Verify that all required fields are present
+          const validatedReportState: ReportState = {
+            title: data.reportState.title || "Status Report",
+            date: data.reportState.date || formatDate(),
+            sections: {
+              accomplishments: data.reportState.sections?.accomplishments || "",
+              insights: data.reportState.sections?.insights || "",
+              decisions: data.reportState.sections?.decisions || "",
+              nextSteps: data.reportState.sections?.nextSteps || ""
+            },
+            metadata: {
+              lastUpdated: Date.now(),
+              relatedDocuments: data.reportState.metadata?.relatedDocuments || [],
+              fullReport: data.reportState.metadata?.fullReport || ""
+            }
+          };
           
-          // Debug log of what we're setting
-          console.log('Setting report state to:', JSON.stringify(data.reportState, null, 2));
+          console.log('Setting validated report state:', JSON.stringify(validatedReportState, null, 2));
+          
+          // Update state with the validated report data
+          setReportState(validatedReportState);
           
           // Check if we got a partial (error) report
           const hasError = data.error && data.reportState.title === "Partial Report";
@@ -371,7 +413,7 @@ export default function ReportBuilderPage() {
           // Break out of retry loop on success
           break;
         } else {
-          console.warn('No reportState in API response');
+          console.error('No reportState in API response');
           throw new Error('Missing report state in response');
         }
         

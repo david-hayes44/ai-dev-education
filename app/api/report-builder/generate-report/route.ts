@@ -258,17 +258,44 @@ export async function POST(request: NextRequest) {
     emptyReport.sections.nextSteps = "* Use the chat to extract next steps";
     emptyReport.sections.nextSteps += "\n* Try asking: 'What are the upcoming tasks mentioned in my documents?'";
     
-    // Return the minimal report immediately
+    // Ensure the report structure is valid and complete
+    const reportToReturn: ReportState = {
+      title: emptyReport.title,
+      date: emptyReport.date,
+      sections: {
+        accomplishments: emptyReport.sections.accomplishments,
+        insights: emptyReport.sections.insights,
+        decisions: emptyReport.sections.decisions,
+        nextSteps: emptyReport.sections.nextSteps
+      },
+      metadata: {
+        lastUpdated: Date.now(),
+        relatedDocuments: documents.map(doc => doc.id)
+      }
+    };
+    
+    console.log("Sending report state to client:", JSON.stringify(reportToReturn, null, 2));
+    
+    // Return the minimal report immediately with proper structure
     return NextResponse.json({
-      reportState: emptyReport
+      reportState: reportToReturn
     });
     
   } catch (error) {
     console.error('Error generating report:', error);
+    
+    // Create a proper error report
+    const errorReport = createEmptyReport();
+    errorReport.title = "Error Report";
+    errorReport.sections.accomplishments = "* Error generating report - server error occurred";
+    errorReport.sections.insights = "* You can still add content using the chat interface";
+    errorReport.sections.decisions = "* Try asking specific questions about your documents";
+    errorReport.sections.nextSteps = "* Try uploading smaller documents if you're seeing timeout errors";
+    
     return NextResponse.json(
       { 
         error: "Failed to generate report",
-        reportState: createEmptyReport()
+        reportState: errorReport
       },
       { status: 500 }
     );
@@ -547,6 +574,7 @@ function createEmptyReport(): ReportState {
     }
   };
   
+  // Ensure all required fields are present
   return {
     title: "Status Report",
     date: `${month} ${day}${getOrdinalSuffix(day)} ${year}`,
