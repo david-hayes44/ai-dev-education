@@ -358,6 +358,7 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
             isThinking && "text-muted-foreground italic",
             isRechunking && "text-muted-foreground",
             isError && "text-destructive",
+            isStreaming && "chat-streaming-active",
             message.metadata?.type === "fallback" && "text-amber-800 dark:text-amber-300"
           )}>
             {isLoading ? (
@@ -372,9 +373,17 @@ export default function ChatMessage({ message, className }: ChatMessageProps) {
                 <span>Processing message history...</span>
               </div>
             ) : isStreaming ? (
-              <div className={cn("transition-all duration-200", isStreaming ? "border-l-2 border-primary pl-2" : "")}>
-                {message.content && message.content.length > 0 ? (
-                  <ReactMarkdown>{message.content}</ReactMarkdown>
+              <div className="transition-all duration-200 border-l-2 border-primary pl-2 min-h-[24px] relative">
+                {/* Debug info - remove in production */}
+                {process.env.NODE_ENV === 'development' && (
+                  <div className="absolute -top-4 right-0 text-xs bg-yellow-100 text-yellow-800 px-1 rounded">
+                    Streaming: {message.content?.length || 0} chars
+                  </div>
+                )}
+                {message.content && message.content.trim().length > 0 ? (
+                  <div className="streaming-content">
+                    <ReactMarkdown>{message.content}</ReactMarkdown>
+                  </div>
                 ) : (
                   <span className="text-muted-foreground">Generating response...</span>
                 )}

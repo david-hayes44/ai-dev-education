@@ -352,12 +352,28 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           if (done) {
             console.log("Stream complete");
             
+            // Get the latest message content from our state before finalizing
+            const finalContent = messages.find(m => m.id === placeholderMessage.id)?.content || '';
+            console.log("Final content length:", finalContent.length);
+            
             // One final update to ensure the message is marked as not streaming
-            setMessages(prev => prev.map(m => 
-              m.id === placeholderMessage.id 
-                ? { ...m, isStreaming: false } 
-                : m
-            ));
+            // but preserves all the accumulated content
+            setMessages(prev => {
+              const finalMessages = [...prev];
+              const msgIndex = finalMessages.findIndex(m => m.id === placeholderMessage.id);
+              
+              if (msgIndex !== -1) {
+                // Create a completely new object to force re-render
+                finalMessages[msgIndex] = {
+                  ...finalMessages[msgIndex],
+                  isStreaming: false,
+                  content: finalContent || finalMessages[msgIndex].content,
+                  timestamp: Date.now()
+                };
+              }
+              
+              return finalMessages;
+            });
             
             // Cleanup after streaming is complete
             setIsStreaming(false);
@@ -391,8 +407,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               // Create a properly typed message
               const updatedMessage: Message = {
                 ...parsed,
+                // Force update by creating a new object reference
+                id: parsed.id,
                 isStreaming: true,
                 content: parsed.content || "",
+                timestamp: Date.now(), // Update timestamp to force re-render
                 metadata: {
                   ...parsed.metadata,
                   type: parsed.metadata?.type as MessageMetadataType
@@ -401,10 +420,17 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               
               console.log("Updating message content:", updatedMessage.content ? updatedMessage.content.substring(0, 50) + "..." : "(empty content)");
               
-              // Update messages with the typed message
-              setMessages(prev => prev.map(m => 
-                m.id === placeholderMessage.id ? updatedMessage : m
-              ));
+              // Update messages with the typed message - force React to see this as a new object
+              setMessages(prev => {
+                // Create a new array
+                const updatedMessages = [...prev];
+                // Find the index and replace the entire message object
+                const msgIndex = updatedMessages.findIndex(m => m.id === placeholderMessage.id);
+                if (msgIndex !== -1) {
+                  updatedMessages[msgIndex] = updatedMessage;
+                }
+                return updatedMessages;
+              });
               
               // If we got navigation suggestions, update them
               if (parsed.metadata?.navigationSuggestions?.length > 0) {
