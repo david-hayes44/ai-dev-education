@@ -3,7 +3,7 @@ import { sendChatCompletion, ChatMessage, chunkDocumentEnhanced, processStreamin
 import { supabaseReportStorage } from "@/lib/supabase-report-storage";
 
 // Type definitions
-type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'error';
+export type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'error';
 
 interface ReportProcessingState {
   reportId: string;

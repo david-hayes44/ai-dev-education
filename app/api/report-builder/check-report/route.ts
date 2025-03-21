@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getReportState } from "@/lib/report-processor";
+import { getReportState, ProcessingStatus } from "@/lib/report-processor";
 import { ReportState } from "@/components/report-builder/types";
 
 // Define the interface for the report status response
@@ -9,6 +9,14 @@ interface ReportStatusResponse {
   error?: string;
   reportState?: ReportState;
   hasPartialResults?: boolean;
+}
+
+// Define interface for the report state result
+interface ReportStateResult {
+  isComplete: boolean;
+  reportState?: ReportState;
+  status: ProcessingStatus;
+  error?: string;
 }
 
 /**
@@ -55,7 +63,7 @@ export async function GET(request: NextRequest) {
     }
     
     // We know this is a fetch result if we get here
-    const { isComplete, reportState, status, error } = (result as {timeout: false, result: any}).result;
+    const { isComplete, reportState, status, error } = (result as {timeout: false, result: ReportStateResult}).result;
     
     console.log(`[check-report API] Report state retrieved:`, {
       status,
