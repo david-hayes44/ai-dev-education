@@ -3,7 +3,23 @@ import { v4 as uuidv4 } from 'uuid';
 import { UploadedDocument, ReportState, Message, ChatResponse, ReportSectionKey } from './types';
 import ChatInterface from './chat-interface';
 import ReportEditor from './report-editor';
-import LoadingSpinner from '../ui/loading-spinner';
+
+// Create a simple inline LoadingSpinner component since we can't find the import
+function LoadingSpinner({ size = 'lg' }: { size?: 'sm' | 'md' | 'lg' }) {
+  const sizeClass = size === 'lg' ? 'h-12 w-12 border-4' : 
+                    size === 'md' ? 'h-8 w-8 border-3' : 
+                    'h-4 w-4 border-2';
+  
+  return (
+    <div className="relative">
+      <div
+        className={`animate-spin rounded-full border-solid border-blue-600 border-t-transparent ${sizeClass}`}
+        role="status"
+        aria-label="Loading"
+      />
+    </div>
+  );
+}
 
 // Wait time between polling attempts 
 const POLL_INTERVAL = 3000; // 3 seconds
@@ -331,14 +347,19 @@ export default function ReportBuilder() {
           : msg
       ));
       
-      // If the response includes updates to the report, apply them
-      if (data.updatedReport && data.updatedReport.sections) {
+      // Safely handle the report update to avoid TypeScript errors
+      const updatedReport = data.updatedReport;
+      if (updatedReport) {
+        // Create a safe reference to sections or empty object
+        const updatedSections = updatedReport.sections || {};
+        
+        // Update the report state
         setReportState(prev => ({
           ...prev,
-          ...data.updatedReport,
+          ...updatedReport,
           sections: {
             ...prev.sections,
-            ...(data.updatedReport.sections || {})
+            ...updatedSections
           },
           metadata: {
             ...prev.metadata,
@@ -346,19 +367,22 @@ export default function ReportBuilder() {
           }
         }));
         
-        // Add a message about the report update
-        const updatedSection = Object.keys(data.updatedReport.sections).join(', ');
-        if (updatedSection) {
-          setMessages(prev => [...prev, {
-            id: uuidv4(),
-            role: 'assistant',
-            content: `✅ Updated the ${updatedSection} section of your report.`,
-            timestamp: Date.now(),
-            metadata: {
-              type: 'report-update',
-              section: updatedSection as ReportSectionKey
-            }
-          }]);
+        // Only proceed if we have sections
+        if (Object.keys(updatedSections).length > 0) {
+          // Add a message about the report update
+          const updatedSectionKeys = Object.keys(updatedSections).join(', ');
+          if (updatedSectionKeys) {
+            setMessages(prev => [...prev, {
+              id: uuidv4(),
+              role: 'assistant',
+              content: `✅ Updated the ${updatedSectionKeys} section of your report.`,
+              timestamp: Date.now(),
+              metadata: {
+                type: 'report-update',
+                section: updatedSectionKeys as ReportSectionKey
+              }
+            }]);
+          }
         }
       }
       
