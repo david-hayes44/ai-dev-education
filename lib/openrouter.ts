@@ -213,7 +213,7 @@ export function createEnhancedConceptSchema(options?: { knowledgeLevel?: string,
 }
 
 /**
- * Send a chat completion request to OpenRouter API
+ * Send a chat completion request to OpenRouter API with enhanced streaming support
  * 
  * @param request The chat completion request parameters
  * @returns A promise with the chat completion response or a readable stream for streaming responses
@@ -252,32 +252,65 @@ export async function sendChatCompletion(
         if (message.content.includes('data:')) {
           dataUrls++;
         }
-        
-        if (message.content.match(/https?:\/\//)) {
+        if (message.content.includes('http')) {
           httpUrls++;
         }
-        
-        // Look for text mentions of files
-        if (message.content.includes('text file') || 
-            message.content.includes('code file') || 
-            message.content.includes('document file')) {
+        if (message.content.includes('PLAINTEXT_ATTACHMENT')) {
           plainTextAttachments++;
         }
       }
     }
   }
   
-  console.log(`OpenRouter request stats: model=${request.model}, message_count=${request.messages.length}, total_content_length=${totalContentLength}`);
-  
   if (hasAttachments) {
     console.log(`Request contains file references: data_urls=${dataUrls}, http_urls=${httpUrls}, plaintext_attachments=${plainTextAttachments}`);
   }
   
-  // For very large requests, add additional logging
-  if (totalContentLength > 50000) {
-    console.warn(`Request content is very large (${totalContentLength} chars). This might cause issues with some models.`);
+  console.log(`Sending OpenRouter request to model: ${request.model}`);
+  if (hasAttachments) {
+    console.log("Request includes file attachments");
   }
   
+  // Track message count for debugging
+  console.log(`OpenRouter request stats: model=${request.model}, message_count=${request.messages.length}, total_content_length=${totalContentLength}`);
+  
+  // If streaming is requested, handle it differently
+  if (request.stream === true) {
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY}`,
+          "HTTP-Referer": `${process.env.NEXT_PUBLIC_SITE_URL || ""}`,
+        },
+        body: JSON.stringify({
+          model: request.model,
+          messages: request.messages,
+          stream: true,
+          temperature: request.temperature,
+          max_tokens: request.max_tokens,
+          top_p: request.top_p,
+          response_format: request.response_format,
+          safe_mode: request.safe_mode,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error?.message || `HTTP error ${response.status}`;
+        console.error("Error from OpenRouter API:", errorMessage);
+        throw new Error(`API error: ${errorMessage}`);
+      }
+      
+      return response.body!;
+    } catch (error) {
+      console.error("Error calling OpenRouter API for streaming:", error);
+      throw new Error(`Error calling OpenRouter API for streaming: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+  
+  // For non-streaming requests, use the existing implementation with retries
   while (true) {
     try {
       console.log(`Sending OpenRouter request to model: ${request.model}`);
@@ -440,162 +473,153 @@ export async function sendChatCompletion(
 }
 
 /**
- * Process a streaming response from OpenRouter API with improved error handling
+ * Enhanced function to process documents in smaller chunks
  * 
- * @param stream The streaming response from OpenRouter API
- * @param onChunk Callback function for each chunk of data
- * @param onComplete Callback function when streaming is complete
- * @param onError Callback function for errors
+ * @param document The document to process in chunks
+ * @param chunkSize The maximum size of each chunk in characters
+ * @param chunkOverlap How much overlap between chunks (for context preservation)
+ * @returns An array of document chunks
+ */
+export function chunkDocumentEnhanced(
+  text: string, 
+  chunkSize: number = 4000, 
+  chunkOverlap: number = 200
+): string[] {
+  if (!text || text.length <= chunkSize) {
+    return [text];
+  }
+  
+  const chunks: string[] = [];
+  let startPos = 0;
+  
+  while (startPos < text.length) {
+    // Calculate end position with consideration for natural breaks
+    let endPos = startPos + chunkSize;
+    
+    // If we're not at the end of the text
+    if (endPos < text.length) {
+      // Look for a natural break point (paragraph, sentence, or word boundary)
+      // First try to find paragraph breaks
+      const paragraphBreak = text.lastIndexOf('\n\n', endPos);
+      if (paragraphBreak > startPos && paragraphBreak > endPos - 500) {
+        endPos = paragraphBreak;
+      } else {
+        // Then try sentence breaks
+        const sentenceBreak = text.lastIndexOf('. ', endPos);
+        if (sentenceBreak > startPos && sentenceBreak > endPos - 200) {
+          endPos = sentenceBreak + 1; // Include the period
+        } else {
+          // Finally, at least break on word boundaries
+          const spaceBreak = text.lastIndexOf(' ', endPos);
+          if (spaceBreak > startPos) {
+            endPos = spaceBreak;
+          }
+        }
+      }
+    } else {
+      endPos = text.length;
+    }
+    
+    // Extract the chunk
+    chunks.push(text.substring(startPos, endPos));
+    
+    // Calculate next starting position with overlap
+    startPos = endPos - chunkOverlap;
+    
+    // Ensure we're making forward progress
+    if (startPos <= 0 || startPos >= endPos) {
+      startPos = endPos;
+    }
+  }
+  
+  return chunks;
+}
+
+/**
+ * Process a streaming response with typed chunks
+ * 
+ * @param stream The ReadableStream from OpenRouter API
+ * @param onChunk Callback function to process each chunk
+ * @param onComplete Optional callback when stream is complete
+ * @param onError Optional callback for error handling
  */
 export async function processStreamingResponse(
   stream: ReadableStream,
-  onChunk: (chunk: ChatCompletionChunk) => void,
+  onChunk: (chunk: ChatCompletionChunk, text: string, isDone: boolean) => void,
   onComplete?: () => void,
   onError?: (error: Error) => void
 ): Promise<void> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  let isFirstChunk = true;
-  let lastActivityTime = Date.now();
-  const TIMEOUT_DURATION = 30000; // 30 seconds timeout
-  let chunkCount = 0;
-  
-  // Log stream start for debugging
-  console.log("Starting to process streaming response");
   
   try {
-    // Set up a timeout monitor
-    const timeoutId = setInterval(() => {
-      const inactiveTime = Date.now() - lastActivityTime;
-      console.log(`Stream activity check: ${inactiveTime}ms since last activity (${chunkCount} chunks received)`);
-      
-      if (inactiveTime > TIMEOUT_DURATION) {
-        console.warn(`Stream timeout after ${inactiveTime}ms of inactivity`);
-        clearInterval(timeoutId);
-        reader.cancel('Stream timeout due to inactivity').catch(console.error);
-        if (onError) onError(new Error('Stream timeout: No data received for 30 seconds'));
-      }
-    }, 5000); // Check every 5 seconds
-    
     while (true) {
-      let readResult;
-      try {
-        readResult = await reader.read();
-      } catch (readError) {
-        console.error("Error reading from stream:", readError);
-        if (onError) onError(new Error(`Stream read error: ${readError instanceof Error ? readError.message : String(readError)}`));
-        clearInterval(timeoutId);
-        break;
-      }
-      
-      const { done, value } = readResult;
+      const { value, done } = await reader.read();
       
       if (done) {
-        console.log(`Stream completed after ${chunkCount} chunks`);
-        clearInterval(timeoutId);
+        // Process any remaining data in the buffer
+        if (buffer.trim()) {
+          try {
+            const lines = buffer.split('\n').filter(line => line.trim() !== '');
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const jsonStr = line.slice(6).trim();
+                if (jsonStr === '[DONE]') continue;
+                
+                try {
+                  const chunk = JSON.parse(jsonStr) as ChatCompletionChunk;
+                  const text = chunk.choices[0]?.delta?.content || '';
+                  onChunk(chunk, text, true);
+                } catch (err) {
+                  console.warn('Error parsing final chunk JSON:', err);
+                }
+              }
+            }
+          } catch (parseError) {
+            console.warn('Error processing final buffer:', parseError);
+          }
+        }
+        
+        if (onComplete) onComplete();
         break;
       }
       
-      // Update activity timestamp
-      lastActivityTime = Date.now();
+      // Decode the chunk and add it to our buffer
+      const decodedChunk = decoder.decode(value, { stream: true });
+      buffer += decodedChunk;
       
-      // Decode the chunk
-      let textChunk;
-      try {
-        textChunk = decoder.decode(value, { stream: true });
-        chunkCount++;
-      } catch (decodeError) {
-        console.error("Error decoding chunk:", decodeError);
-        continue; // Try to continue with next chunk
-      }
+      // Split the buffer on newlines to find complete server-sent events
+      const lines = buffer.split('\n');
       
-      if (isFirstChunk) {
-        console.log("Received first chunk from stream");
-        isFirstChunk = false;
-      }
+      // Keep the last (potentially incomplete) line in the buffer
+      buffer = lines.pop() || '';
       
-      buffer += textChunk;
-      
-      // Split the buffer on double newlines which separate SSE events
-      const lines = buffer.split('\n\n');
-      
-      // Process all complete events
-      for (let i = 0; i < lines.length - 1; i++) {
-        const line = lines[i].trim();
-        
+      // Process all complete lines
+      for (const line of lines) {
         if (line.startsWith('data: ')) {
-          const data = line.substring(6);
-          
-          // Skip [DONE] event
-          if (data === '[DONE]') {
-            console.log("Received [DONE] event");
-            continue;
-          }
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === '[DONE]') continue;
           
           try {
-            const chunk: ChatCompletionChunk = JSON.parse(data);
-            
-            // Special handling for first chunk to validate the response format
-            if (chunkCount <= 2) {
-              console.log("Processing early chunk:", JSON.stringify(chunk).substring(0, 100) + "...");
-              
-              // Check if the first chunk indicates an error
-              if (chunk.choices?.[0]?.delta?.content?.includes('error') || 
-                  chunk.choices?.[0]?.delta?.content?.includes('I apologize')) {
-                console.warn('First chunk indicates a potential error response:', chunk);
-              }
-            }
-            
-            onChunk(chunk);
-          } catch (e) {
-            console.error('Error parsing SSE chunk:', e, 'Raw data:', line);
-            if (onError) onError(new Error(`Failed to parse streaming response: ${e}`));
-          }
-        } else if (line.includes('error') || line.includes('Error')) {
-          // Handle error messages that might come in a non-standard format
-          console.error('Stream contained error message:', line);
-          if (onError) onError(new Error(`Stream error: ${line}`));
-        }
-      }
-      
-      // Keep the last incomplete event in the buffer
-      buffer = lines[lines.length - 1];
-    }
-    
-    // Decode any remaining content
-    const remaining = decoder.decode();
-    if (remaining && remaining.trim()) {
-      console.log("Processing remaining content after stream end");
-      const remainingLines = remaining.trim().split('\n\n');
-      
-      for (const line of remainingLines) {
-        if (line.trim().startsWith('data: ')) {
-          const data = line.trim().substring(6);
-          if (data && data !== '[DONE]') {
-            try {
-              const chunk = JSON.parse(data);
-              onChunk(chunk);
-            } catch (e) {
-              console.error('Error parsing final SSE chunk:', e);
-            }
+            const chunk = JSON.parse(jsonStr) as ChatCompletionChunk;
+            const text = chunk.choices[0]?.delta?.content || '';
+            onChunk(chunk, text, false);
+          } catch (err) {
+            console.warn('Error parsing chunk JSON:', err);
           }
         }
       }
     }
-    
-    console.log("Stream processing complete, calling onComplete callback");
-    if (onComplete) onComplete();
   } catch (error) {
-    console.error('Error processing streaming response:', error);
-    if (onError) onError(error as Error);
+    console.error('Error processing stream:', error);
+    if (onError) onError(error instanceof Error ? error : new Error(String(error)));
   } finally {
-    // Ensure reader is released even if there was an error
+    // Always release the reader
     try {
       await reader.cancel();
-      console.log("Stream reader cancelled");
     } catch (e) {
-      console.error('Error cancelling reader:', e);
+      console.warn('Error cancelling reader:', e);
     }
   }
 }

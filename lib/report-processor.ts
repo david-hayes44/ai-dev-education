@@ -1,5 +1,5 @@
 import { UploadedDocument, ReportState } from "@/components/report-builder/types";
-import { sendChatCompletion, ChatMessage } from "@/lib/openrouter";
+import { sendChatCompletion, ChatMessage, chunkDocumentEnhanced, processStreamingResponse } from "@/lib/openrouter";
 import { supabaseReportStorage } from "@/lib/supabase-report-storage";
 
 // Type definitions
@@ -246,38 +246,280 @@ async function processReportAsync(reportId: string): Promise<void> {
     const validDocuments = report.documents.filter(doc => doc.textContent && doc.textContent.trim() !== '');
     console.log(`[report-processor] Processing ${validDocuments.length} valid documents with text content`);
     
-    // Process the documents to get summaries
-    const summaries = await processDocumentsSequentially(validDocuments);
+    // Process the documents to get summaries - using improved chunking
+    const summaries = await processDocumentsWithImprovedChunking(validDocuments);
     
     if (summaries.length === 0) {
-      throw new Error(`Failed to generate summaries for report ${reportId}`);
+      throw new Error('Failed to generate any document summaries');
     }
     
     console.log(`[report-processor] Generated ${summaries.length} summaries, generating report`);
     
     // Generate the report from summaries
-    const reportState = await generateReportFromSummaries(
+    const reportState = await generateReportFromSummariesWithStreaming(
       summaries, 
-      report.projectContext || ""
+      report.projectContext || "",
+      reportId
     );
     
-    // Save the completed report
+    // Store the completed report
     report.status = 'completed';
-    report.result = reportState;
     report.updatedAt = Date.now();
+    report.result = reportState;
+    
     await storage.set(reportId, report);
     
     console.log(`[report-processor] Successfully completed processing report ${reportId}`);
+    
   } catch (error) {
-    console.error(`[report-processor] Error processing report ${reportId}:`, error);
+    // Handle errors gracefully
+    console.error(`[report-processor] Error processing report:`, error);
     
     // Update the report with error status
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Unknown error during report processing';
+    
     try {
-      const errorMessage = error instanceof Error ? error.message : String(error);
       await updateReportError(reportId, errorMessage);
     } catch (updateError) {
-      console.error(`[report-processor] Failed to update report error status:`, updateError);
+      console.error(`[report-processor] Failed to update report with error status:`, updateError);
     }
+    
+    // Rethrow the error for upstream handling
+    throw error;
+  }
+}
+
+/**
+ * Process documents with enhanced chunking strategy to prevent timeouts
+ */
+async function processDocumentsWithImprovedChunking(documents: UploadedDocument[]): Promise<string[]> {
+  const summaries: string[] = [];
+  
+  // Process one document at a time
+  for (const doc of documents) {
+    if (!doc.textContent || doc.textContent.trim() === '') {
+      continue;
+    }
+    
+    try {
+      // Use the enhanced chunking function with better natural breaks
+      const chunks = chunkDocumentEnhanced(doc.textContent, 4000, 200);
+      console.log(`Document "${doc.name}" split into ${chunks.length} chunks`);
+      
+      // Process each chunk with a concurrency limit to prevent overwhelming the API
+      const CONCURRENCY_LIMIT = 2;
+      for (let i = 0; i < chunks.length; i += CONCURRENCY_LIMIT) {
+        const chunkBatch = chunks.slice(i, i + CONCURRENCY_LIMIT);
+        const chunkPromises = chunkBatch.map((chunk, batchIndex) => 
+          summarizeChunk(chunk, doc.name, i + batchIndex + 1, chunks.length)
+        );
+        
+        const batchSummaries = await Promise.all(chunkPromises);
+        for (const summary of batchSummaries) {
+          if (summary && summary.trim() !== '') {
+            summaries.push(summary);
+          }
+        }
+        
+        // Brief pause between batches to prevent rate limiting
+        if (i + CONCURRENCY_LIMIT < chunks.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+    } catch (error) {
+      console.error(`Error processing document "${doc.name}":`, error);
+      // Continue with other documents even if one fails
+    }
+  }
+  
+  return summaries;
+}
+
+/**
+ * Generate a report from summaries using streaming API responses
+ */
+async function generateReportFromSummariesWithStreaming(
+  summaries: string[], 
+  projectContext: string,
+  reportId: string
+): Promise<ReportState> {
+  const reportState: ReportState = createEmptyReport();
+  
+  // Update report date
+  const now = new Date();
+  reportState.date = createFormattedDate();
+  
+  if (projectContext) {
+    reportState.title = `Status Report: ${projectContext}`;
+  } else {
+    reportState.title = "Status Report";
+  }
+  
+  // Create a prompt that includes all summaries
+  const summaryText = summaries.join("\n\n");
+  
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: `You are the 4-Box Report Builder, an assistant designed to help professionals create concise, informative status reports.
+
+Your task is to analyze the provided document summaries and generate content for a 4-box report with these sections:
+
+1. Accomplishments Since Last Update: List completed tasks, milestones reached, and successes.
+2. Insights / Learnings: Highlight important discoveries, lessons learned, and "aha moments".
+3. Decisions / Risks / Resources Required: Note decisions needed, potential issues, and resource requirements.
+4. Next Steps / Upcoming Tasks: Outline immediate future work and upcoming deliverables.
+
+When generating the report:
+- Be concise and factual
+- Organize information in bullet points
+- Prioritize recent information over older content
+- Focus on actionable items and clear status updates
+- Maintain professional language suitable for stakeholders
+
+Structure your response with section headers and bullet points for each section.`
+    },
+    {
+      role: "user",
+      content: `Here are the document summaries to analyze:\n\n${summaryText}\n\n${
+        projectContext ? `Project Context: ${projectContext}\n\n` : ''
+      }Based on these summaries, generate content for each section of the 4-box report.`
+    }
+  ];
+  
+  try {
+    console.log('OpenRouter request stats: model=google/gemini-2.0-flash-001, message_count=2, total_content_length=' + (messages[0].content.length + messages[1].content.length));
+    
+    // Request streaming response
+    const stream = await sendChatCompletion({
+      messages,
+      model: "google/gemini-2.0-flash-001",
+      stream: true,
+      temperature: 0.2
+    }) as ReadableStream;
+    
+    // Store partial results for each section
+    const partialSections = {
+      accomplishments: '',
+      insights: '',
+      decisions: '',
+      nextSteps: ''
+    };
+    
+    let currentSection: keyof typeof partialSections | null = null;
+    let fullReport = '';
+    
+    await new Promise<void>((resolve, reject) => {
+      processStreamingResponse(
+        stream,
+        (chunk, text, isDone) => {
+          // Add text to full report for later extraction
+          fullReport += text;
+          
+          // Try to determine which section this chunk belongs to
+          if (text.includes('Accomplishments') || text.includes('1.')) {
+            currentSection = 'accomplishments';
+          } else if (text.includes('Insights') || text.includes('Learnings') || text.includes('2.')) {
+            currentSection = 'insights';
+          } else if (text.includes('Decisions') || text.includes('Risks') || text.includes('3.')) {
+            currentSection = 'decisions';
+          } else if (text.includes('Next Steps') || text.includes('Upcoming') || text.includes('4.')) {
+            currentSection = 'nextSteps';
+          }
+          
+          // If we have a current section, add the text to it
+          if (currentSection) {
+            partialSections[currentSection] += text;
+            
+            // Update the report state with the latest section content
+            reportState.sections[currentSection] = partialSections[currentSection];
+            
+            // Update the report in storage to show progress
+            updateReportWithPartialResults(reportId, reportState).catch(console.error);
+          }
+        },
+        () => {
+          // On stream completion, process the full report to extract sections properly
+          try {
+            const result = processResponseForReportGeneration(fullReport);
+            
+            // Update the report with final sections
+            reportState.sections = result.sections || reportState.sections;
+            if (result.title) reportState.title = result.title;
+            
+            resolve();
+          } catch (error) {
+            console.error('Error processing full report:', error);
+            reject(error);
+          }
+        },
+        (error) => {
+          console.error('Stream error:', error);
+          reject(error);
+        }
+      );
+    });
+    
+    // Log final output
+    console.log('Final extracted report state sections:', {
+      accomplishments: reportState.sections.accomplishments.length,
+      insights: reportState.sections.insights.length,
+      decisions: reportState.sections.decisions.length,
+      nextSteps: reportState.sections.nextSteps.length
+    });
+    
+    return reportState;
+    
+  } catch (error) {
+    console.error('Error generating report from summaries:', error);
+    
+    // Return whatever partial content we have instead of failing completely
+    if (reportState.sections.accomplishments || 
+        reportState.sections.insights || 
+        reportState.sections.decisions || 
+        reportState.sections.nextSteps) {
+      
+      console.log('Returning partial report despite error');
+      return reportState;
+    }
+    
+    // If we have no content at all, create a minimal report indicating the error
+    reportState.sections.accomplishments = '* Error generating report content';
+    reportState.sections.insights = '* Please try again with different documents';
+    reportState.sections.decisions = '* Consider breaking larger documents into smaller pieces';
+    reportState.sections.nextSteps = '* Contact support if the issue persists';
+    
+    throw error;
+  }
+}
+
+/**
+ * Update a report with partial results during streaming
+ */
+async function updateReportWithPartialResults(reportId: string, partialState: Partial<ReportState>): Promise<void> {
+  try {
+    const report = await storage.get(reportId);
+    if (report) {
+      // Create an interim state that shows processing is ongoing but with partial results
+      report.status = 'processing';
+      report.result = {
+        ...createEmptyReport(),
+        ...partialState,
+        metadata: {
+          ...partialState.metadata,
+          lastUpdated: Date.now(),
+          isPartialResult: true
+        }
+      };
+      report.updatedAt = Date.now();
+      
+      await storage.set(reportId, report);
+    }
+  } catch (error) {
+    console.error('Error updating report with partial results:', error);
+    // Don't throw here - we want streaming to continue even if updates fail
   }
 }
 

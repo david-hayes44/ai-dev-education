@@ -47,6 +47,7 @@ export interface ReportState {
     relatedDocuments?: string[]; // IDs of documents used to generate this report
     fullReport?: string; // Store the complete AI-generated report for reference
     error?: string; // Error message if report generation failed
+    isPartialResult?: boolean; // Flag indicating if this is a partial result during streaming
   };
 }
 
