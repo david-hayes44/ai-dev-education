@@ -370,15 +370,15 @@ export default function ReportBuilderPage() {
         
         // Update report state with verified content
         if (data.reportState) {
-          // Verify that all required fields are present
+          // Verify that all required fields are present and provide fallbacks
           const validatedReportState: ReportState = {
             title: data.reportState.title || "Status Report",
             date: data.reportState.date || formatDate(),
             sections: {
-              accomplishments: data.reportState.sections?.accomplishments || "",
-              insights: data.reportState.sections?.insights || "",
-              decisions: data.reportState.sections?.decisions || "",
-              nextSteps: data.reportState.sections?.nextSteps || ""
+              accomplishments: data.reportState.sections?.accomplishments || "* No accomplishments detected",
+              insights: data.reportState.sections?.insights || "* No insights detected",
+              decisions: data.reportState.sections?.decisions || "* No decisions detected",
+              nextSteps: data.reportState.sections?.nextSteps || "* No next steps detected"
             },
             metadata: {
               lastUpdated: Date.now(),
@@ -394,6 +394,22 @@ export default function ReportBuilderPage() {
           
           // Check if we got a partial (error) report
           const hasError = data.error && data.reportState.title === "Partial Report";
+          
+          // Show a helpful message if there's no meaningful content
+          const isEmpty = !validatedReportState.sections.accomplishments.includes("*") &&
+                        !validatedReportState.sections.insights.includes("*") &&
+                        !validatedReportState.sections.decisions.includes("*") &&
+                        !validatedReportState.sections.nextSteps.includes("*");
+                          
+          if (isEmpty) {
+            console.warn("Report appears empty, adding guidance for user");
+            // Add guidance for empty reports
+            validatedReportState.sections.accomplishments = "* No specific accomplishments found in your documents";
+            validatedReportState.sections.insights = "* Try asking in chat: 'What insights can you find in my documents?'";
+            validatedReportState.sections.decisions = "* Try asking in chat: 'What decisions need to be made based on my documents?'";
+            validatedReportState.sections.nextSteps = "* Try asking in chat: 'What next steps are mentioned in my documents?'";
+            setReportState(validatedReportState);
+          }
           
           // Update system message based on success or partial success
           setMessages(prev => prev.map(msg => 
@@ -420,14 +436,18 @@ export default function ReportBuilderPage() {
       } catch (error) {
         console.error('Error generating report:', error);
         
-        // If we've exhausted our retries, show error message
+        // If we've exhausted our retries, show error message with better guidance
         if (attempts >= maxAttempts) {
-          // Update system message with error
+          // Update system message with error and troubleshooting steps
           setMessages(prev => prev.map(msg => 
             msg.id === systemMessage.id
               ? {
                   ...msg,
-                  content: "❌ **Error generating report**. The server is taking too long to respond. Try with smaller or fewer documents.",
+                  content: "❌ **Error generating report**. This could be due to:\n\n" +
+                           "1. The OpenRouter service may be experiencing issues\n" + 
+                           "2. The account may have insufficient credits\n" +
+                           "3. The request may have timed out\n\n" +
+                           "Try with smaller or fewer documents, or build your report using the chat.",
                   isStreaming: false,
                   metadata: { type: 'error' },
                   timestamp: Date.now()
@@ -435,12 +455,17 @@ export default function ReportBuilderPage() {
               : msg
           ));
           
-          // Create fallback report with error messaging
+          // Create fallback report with error messaging and clear guidance
           const fallbackReport = createEmptyReport();
+          fallbackReport.title = "Error Generating Report";
           fallbackReport.sections.accomplishments = "* Error generating report - try uploading smaller documents";
+          fallbackReport.sections.accomplishments += "\n* Or try one document at a time";
           fallbackReport.sections.insights = "* You can still add content using the chat interface";
+          fallbackReport.sections.insights += "\n* Try asking: 'What are the key insights from my documents?'";
           fallbackReport.sections.decisions = "* Try asking specific questions to build your report section by section";
+          fallbackReport.sections.decisions += "\n* For example: 'What decisions are mentioned in my documents?'";
           fallbackReport.sections.nextSteps = "* Use 'add X to next steps' to build this section";
+          fallbackReport.sections.nextSteps += "\n* Or try: 'What next steps should I take based on these documents?'";
           
           setReportState(fallbackReport);
         } else {

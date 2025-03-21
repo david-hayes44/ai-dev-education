@@ -248,15 +248,17 @@ export async function POST(request: NextRequest) {
       `* Document "${doc.name}" received (${Math.round(doc.size / 1024)} KB)`
     ).join('\n');
     
-    // Add instructions for using chat
-    emptyReport.sections.insights = "* Use the chat to analyze your documents";
-    emptyReport.sections.insights += "\n* Try asking: 'What are the key insights from my documents?'";
+    // Add instructions for using chat with clearer guidance
+    emptyReport.sections.insights = "* Processing your documents...";
+    emptyReport.sections.insights += "\n* Please wait while AI analyzes your content";
+    emptyReport.sections.insights += "\n* You can ask in chat: 'What are the key insights from my documents?'";
     
-    emptyReport.sections.decisions = "* Use the chat to identify decisions needed";
-    emptyReport.sections.decisions += "\n* Try asking: 'What decisions or risks are mentioned in my documents?'";
+    emptyReport.sections.decisions = "* If this message remains after 10 seconds:";
+    emptyReport.sections.decisions += "\n* Try the 'Regenerate Report' button below";
+    emptyReport.sections.decisions += "\n* Or use the chat to identify decisions and risks";
     
-    emptyReport.sections.nextSteps = "* Use the chat to extract next steps";
-    emptyReport.sections.nextSteps += "\n* Try asking: 'What are the upcoming tasks mentioned in my documents?'";
+    emptyReport.sections.nextSteps = "* When analysis completes, this section will update";
+    emptyReport.sections.nextSteps += "\n* You can also try: 'What are the next steps in my documents?'";
     
     // Ensure the report structure is valid and complete
     const reportToReturn: ReportState = {
@@ -284,13 +286,16 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error generating report:', error);
     
-    // Create a proper error report
+    // Create a proper error report with helpful troubleshooting information
     const errorReport = createEmptyReport();
     errorReport.title = "Error Report";
-    errorReport.sections.accomplishments = "* Error generating report - server error occurred";
-    errorReport.sections.insights = "* You can still add content using the chat interface";
-    errorReport.sections.decisions = "* Try asking specific questions about your documents";
-    errorReport.sections.nextSteps = "* Try uploading smaller documents if you're seeing timeout errors";
+    errorReport.sections.accomplishments = "* Error generating report - please check console for details";
+    errorReport.sections.insights = "* This may be due to rate limits or insufficient credits";
+    errorReport.sections.insights += "\n* See: https://openrouter.ai/docs/api-reference/limits";
+    errorReport.sections.decisions = "* Try using the chat interface instead";
+    errorReport.sections.decisions += "\n* Or try uploading a smaller document";
+    errorReport.sections.nextSteps = "* Use the 'Regenerate Report' button below";
+    errorReport.sections.nextSteps += "\n* Or try asking specific questions in the chat";
     
     return NextResponse.json(
       { 
@@ -574,7 +579,7 @@ function createEmptyReport(): ReportState {
     }
   };
   
-  // Ensure all required fields are present
+  // Ensure all required fields are present with proper structure
   return {
     title: "Status Report",
     date: `${month} ${day}${getOrdinalSuffix(day)} ${year}`,

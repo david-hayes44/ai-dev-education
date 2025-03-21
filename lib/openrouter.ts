@@ -658,4 +658,79 @@ export function enrichMessagesWithContext(
   
   // Create a new array with the system context at the beginning
   return [systemContext, ...messages];
+}
+
+/**
+ * Send a streaming chat completion request to OpenRouter API
+ * 
+ * @param request The chat completion request parameters
+ * @returns A readable stream for streaming responses
+ */
+export async function sendStreamingChatCompletion(
+  request: ChatCompletionRequest
+): Promise<ReadableStream> {
+  if (!hasApiKey) {
+    console.error("OpenRouter API key is not available")
+    throw new Error("OpenRouter API key is not available")
+  }
+  
+  // Create a streaming request with explicit timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+    console.warn('Aborting OpenRouter streaming request due to timeout (10s)');
+  }, 10000); // Shorter 10-second timeout for better UX
+  
+  try {
+    console.log(`Starting streaming OpenRouter request to model: ${request.model}`);
+    
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.NEXT_PUBLIC_OPENROUTER_API_KEY}`,
+        'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_BASE_URL || 'https://ai-dev-education.com'),
+        'X-Title': 'AI-Dev Education Platform',
+      },
+      body: JSON.stringify({
+        model: request.model || 'openai/gpt-3.5-turbo',
+        messages: request.messages,
+        temperature: request.temperature || 0.7,
+        max_tokens: request.max_tokens || 1000,
+        stream: true,
+        response_format: request.response_format,
+        safe_mode: request.safe_mode || 'standard'
+      }),
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`OpenRouter API streaming request failed: ${response.status} ${response.statusText}`, errorText);
+      
+      if (response.status === 402) {
+        throw new Error('Insufficient credits: Your OpenRouter account needs more credits');
+      } else if (response.status === 429) {
+        throw new Error('Rate limited: Too many requests in a short time period');
+      } else if (response.status === 408) {
+        throw new Error('Request timeout: The model took too long to respond');
+      } else if (response.status === 502 || response.status === 503) {
+        throw new Error('Service unavailable: The AI service is currently experiencing issues');
+      }
+      
+      throw new Error(`OpenRouter API request failed with status ${response.status}`);
+    }
+    
+    if (!response.body) {
+      throw new Error("OpenRouter API returned an empty stream");
+    }
+    
+    return response.body;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    console.error('Streaming request failed:', error);
+    throw error;
+  }
 } 
