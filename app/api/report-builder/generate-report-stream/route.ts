@@ -86,21 +86,37 @@ export async function POST(request: NextRequest) {
         role: "system",
         content: `You are the 4-Box Report Builder, an assistant designed to help professionals create concise, informative status reports.
 
-Your task is to analyze the provided document and generate content for a 4-box report with these sections:
+Your task is to analyze the provided document and generate content for a 4-box report with these clearly separated sections:
 
-1. Accomplishments Since Last Update: List completed tasks, milestones reached, and successes.
-2. Insights / Learnings: Highlight important discoveries, lessons learned, and "aha moments".
-3. Decisions / Risks / Resources Required: Note decisions needed, potential issues, and resource requirements.
-4. Next Steps / Upcoming Tasks: Outline immediate future work and upcoming deliverables.
+1. Accomplishments Since Last Update
+- List completed tasks, milestones reached, and successes
+- Format as bullet points with each point starting with "*" or "-"
+- Focus on tangible achievements and completed work
+
+2. Insights / Learnings
+- Highlight important discoveries, lessons learned, and "aha moments"
+- Format as bullet points with each point starting with "*" or "-"
+- Include unexpected findings or realizations
+
+3. Decisions / Risks / Resources Required
+- Note decisions needed, potential issues, and resource requirements
+- Format as bullet points with each point starting with "*" or "-"
+- Be specific about blockers, open questions, and needs
+
+4. Next Steps / Upcoming Tasks
+- Outline immediate future work and upcoming deliverables
+- Format as bullet points with each point starting with "*" or "-"
+- Include timelines or deadlines where relevant
 
 When generating the report:
-- Be concise and factual
-- Organize information in bullet points
+- Always use the exact section headers as specified above (numbered 1-4)
+- Make a clear separation between sections with a blank line
+- Be concise and factual - use bullet points for all items
 - Prioritize recent information over older content
 - Focus on actionable items and clear status updates
 - Maintain professional language suitable for stakeholders
 
-Structure your response with section headers and bullet points for each section.`
+Always structure your response following this exact format, with each section clearly labeled with its number and title.`
       },
       {
         role: "user",
@@ -170,6 +186,9 @@ function transformOpenRouterStream(inputStream: ReadableStream): ReadableStream 
     nextSteps: ''
   };
   
+  // Keep track of the entire content to better parse sections
+  let fullContent = '';
+  
   // Create a transformed stream
   const transformStream = new TransformStream({
     async transform(chunk, controller) {
@@ -198,20 +217,87 @@ function transformOpenRouterStream(inputStream: ReadableStream): ReadableStream 
             const content = parsed.choices?.[0]?.delta?.content || '';
             
             if (content) {
-              // Try to determine which section this chunk belongs to
-              if (content.includes('Accomplishments') || content.includes('1.')) {
+              // Add to full content
+              fullContent += content;
+              
+              // More robust section detection based on headers and numbering patterns
+              if (content.match(/(?:Accomplishments|1\.)\s*(?:Since\s+Last\s+Update)?/i) || 
+                  fullContent.match(/(?:Accomplishments|1\.)\s*(?:Since\s+Last\s+Update)?[^:]*:?\s*\n/i)) {
                 currentSection = 'accomplishments';
-              } else if (content.includes('Insights') || content.includes('Learnings') || content.includes('2.')) {
+              } else if (content.match(/(?:Insights|Learnings|2\.)/i) || 
+                         fullContent.match(/(?:Insights|Learnings|2\.)[^:]*:?\s*\n/i)) {
                 currentSection = 'insights';
-              } else if (content.includes('Decisions') || content.includes('Risks') || content.includes('3.')) {
+              } else if (content.match(/(?:Decisions|Risks|Resources|3\.)/i) || 
+                         fullContent.match(/(?:Decisions|Risks|Resources|3\.)[^:]*:?\s*\n/i)) {
                 currentSection = 'decisions';
-              } else if (content.includes('Next Steps') || content.includes('Upcoming') || content.includes('4.')) {
+              } else if (content.match(/(?:Next\s+Steps|Upcoming|4\.)/i) || 
+                         fullContent.match(/(?:Next\s+Steps|Upcoming|4\.)[^:]*:?\s*\n/i)) {
                 currentSection = 'nextSteps';
               }
               
               // If we have a current section, add the text to it
               if (currentSection) {
                 partialSections[currentSection] += content;
+              }
+              
+              // Check if we've moved to a new section based on the full content
+              // This helps capture section transitions more accurately
+              const accomplishmentsMatch = fullContent.match(/(?:1\.|Accomplishments)[^:]*(?::|\n)/i);
+              const insightsMatch = fullContent.match(/(?:2\.|Insights|Learnings)[^:]*(?::|\n)/i);
+              const decisionsMatch = fullContent.match(/(?:3\.|Decisions|Risks|Resources)[^:]*(?::|\n)/i);
+              const nextStepsMatch = fullContent.match(/(?:4\.|Next\s+Steps|Upcoming)[^:]*(?::|\n)/i);
+              
+              // Get the positions of each section header in the full content
+              const positions = {
+                accomplishments: accomplishmentsMatch ? accomplishmentsMatch.index || Infinity : Infinity,
+                insights: insightsMatch ? insightsMatch.index || Infinity : Infinity,
+                decisions: decisionsMatch ? decisionsMatch.index || Infinity : Infinity,
+                nextSteps: nextStepsMatch ? nextStepsMatch.index || Infinity : Infinity
+              };
+              
+              // If we have at least two section headers, we can clean up the content
+              // by ensuring each section only contains content that belongs to it
+              if (Object.values(positions).filter(p => p !== Infinity).length >= 2) {
+                // Rebuild the sections based on their positions in the full text
+                const sections = ['accomplishments', 'insights', 'decisions', 'nextSteps'] as SectionKey[];
+                
+                // Sort sections by their position in the full content
+                const sortedSections = sections
+                  .filter(s => positions[s] !== Infinity)
+                  .sort((a, b) => positions[a] - positions[b]);
+                
+                // Extract content for each section based on its position and the position of the next section
+                if (sortedSections.length >= 2) {
+                  for (let i = 0; i < sortedSections.length; i++) {
+                    const section = sortedSections[i];
+                    const nextSection = sortedSections[i + 1];
+                    const startPos = positions[section];
+                    const endPos = nextSection ? positions[nextSection] : fullContent.length;
+                    
+                    if (startPos !== Infinity && endPos !== Infinity) {
+                      // Extract the section content from the full content
+                      let sectionContent = fullContent.substring(startPos, endPos);
+                      
+                      // Remove the section header
+                      sectionContent = sectionContent.replace(/^(?:\d\.|[A-Za-z\s\/]+)[^:]*(?::|\n)/i, '');
+                      
+                      // Clean up the content
+                      sectionContent = sectionContent.trim();
+                      
+                      // Update the section content
+                      partialSections[section] = sectionContent;
+                    }
+                  }
+                }
+              }
+              
+              // Periodically clean up section content by removing section headers from the content
+              for (const section of Object.keys(partialSections) as SectionKey[]) {
+                partialSections[section] = partialSections[section]
+                  .replace(/^(?:1\.|Accomplishments)[^:]*:?\s*\n/m, '')
+                  .replace(/^(?:2\.|Insights|Learnings)[^:]*:?\s*\n/m, '')
+                  .replace(/^(?:3\.|Decisions|Risks|Resources)[^:]*:?\s*\n/m, '')
+                  .replace(/^(?:4\.|Next\s+Steps|Upcoming)[^:]*:?\s*\n/m, '');
               }
               
               // Create an enhanced chunk with report structure information
