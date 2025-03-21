@@ -547,22 +547,31 @@ export default function ReportBuilderPage() {
         description="Generate professional 4-box status reports from your documents, emails, and project materials."
       />
 
+      <div className="bg-orange-100 border-l-4 border-orange-500 p-4 mb-6 rounded shadow">
+        <p className="text-orange-700 font-medium">This is an external facing tool for testing only.</p>
+      </div>
+
       <p className="mb-8 text-muted-foreground max-w-3xl">
         Upload documents, chat with the AI, and create polished status reports in minutes. Perfect for weekly updates, project summaries, and team communications.
       </p>
 
       <div className="grid lg:grid-cols-2 gap-6 min-h-[700px]">
-        <ChatInterface 
-          messages={messages}
-          isProcessing={isProcessing}
-          onSendMessage={handleSendMessage}
-          uploadedDocuments={uploadedDocuments}
-          onDocumentUploaded={handleDocumentUploaded}
-          onDocumentRemoved={handleDocumentRemoved}
-          initialLoad={initialLoad}
-          regenerating={regenerating}
-          onRegenerateClick={forceRegenerateReport}
-        />
+        <div className="relative">
+          <div className="absolute -bottom-7 left-0 right-0 text-center bg-orange-100 border-orange-500 border p-1 rounded shadow z-10">
+            <p className="text-orange-700 font-medium text-sm">This is an external facing tool for testing only.</p>
+          </div>
+          <ChatInterface 
+            messages={messages}
+            isProcessing={isProcessing}
+            onSendMessage={handleSendMessage}
+            uploadedDocuments={uploadedDocuments}
+            onDocumentUploaded={handleDocumentUploaded}
+            onDocumentRemoved={handleDocumentRemoved}
+            initialLoad={initialLoad}
+            regenerating={regenerating}
+            onRegenerateClick={forceRegenerateReport}
+          />
+        </div>
         
         <ReportEditor 
           reportState={reportState}
